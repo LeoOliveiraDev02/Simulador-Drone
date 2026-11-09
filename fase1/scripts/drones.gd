@@ -168,7 +168,7 @@ func exportar(id: String, pasta_abs: String) -> void:
 					ph.albedo_color = Color(0.05, 0.05, 0.05)
 				var receita: String = m.resource_name if m else "cor|0.7,0.7,0.7|0.5|0|0"
 				if not receitas.has(receita):
-					receitas[receita] = "mat%03d" % receitas.size()
+					receitas[receita] = "m%03d_" % receitas.size()
 					materiais[receitas[receita]] = receita
 				ph.resource_name = receitas[receita]
 				malha.surface_set_material(s, ph)
@@ -216,7 +216,7 @@ func montar_final(id: String) -> Node3D:
 		mi.transform = t
 		for s in mi.mesh.get_surface_count():
 			var orig := mi.mesh.surface_get_material(s)
-			var nome_mat := _sem_sufixo(String(orig.resource_name)) if orig else ""
+			var nome_mat := String(orig.resource_name).get_slice("_", 0) + "_" if orig else ""
 			var tabela: Dictionary = meta.get("_materiais", {})
 			var base: Material = kit.de_receita(tabela.get(nome_mat, "")) if tabela.has(nome_mat) else null
 			if base == null:
@@ -232,7 +232,7 @@ func _ajuste_final(id: String, chave: String, m: Material) -> Material:
 	if chave == "helice":
 		var cores := {"quad450": Color(0.07, 0.07, 0.075), "fpv5": Color(0.55, 0.25, 0.95, 1.0), "hexa_agro": Color(0.06, 0.06, 0.065)}
 		if cores.has(id):
-			return kit.plastico(cores[id], 0.34, 0.5)
+			return kit.plastico(cores[id], 0.55, 0.15)
 	if chave == "pixhawk" and m is BaseMaterial3D and (m as BaseMaterial3D).albedo_color.get_luminance() > 0.6:
 		return kit.plastico(Color(0.7, 0.71, 0.72), 0.4, 0.3)
 	if m is BaseMaterial3D and (m as BaseMaterial3D).albedo_color.get_luminance() > 0.8:

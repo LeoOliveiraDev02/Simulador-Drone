@@ -85,6 +85,7 @@ func plastico(c: Color, rug := 0.45, verniz := 0.2) -> StandardMaterial3D:
 		m.clearcoat = verniz
 		m.clearcoat_roughness = 0.35
 	m.detail_enabled = true
+	m.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL  # sem textura de cor: multiplica por branco (não clareia)
 	m.detail_normal = _ruido_normal()
 	m.detail_uv_layer = BaseMaterial3D.DETAIL_UV_1
 	m.uv1_triplanar = true
@@ -110,6 +111,7 @@ func metal_anodizado(c: Color) -> StandardMaterial3D:
 	m.clearcoat = 0.3
 	m.clearcoat_roughness = 0.15
 	m.detail_enabled = true
+	m.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL
 	m.detail_normal = _ruido_normal(true)
 	m.uv1_triplanar = true
 	m.uv1_scale = Vector3.ONE * 120.0

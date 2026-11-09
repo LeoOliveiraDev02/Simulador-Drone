@@ -151,16 +151,16 @@ func _montar_ambiente() -> void:
 	sonda.size = Vector3(4, 2.5, 3)
 	sonda.box_projection = true
 	sonda.update_mode = ReflectionProbe.UPDATE_ONCE
-	sonda.intensity = 1.0
+	sonda.intensity = 0.6
 	sonda.ambient_mode = ReflectionProbe.AMBIENT_DISABLED
 	# painel de luz (softbox) que aparece refletido no carbono e nos motores
 	var softbox := MeshInstance3D.new()
 	var plano := QuadMesh.new()
-	plano.size = Vector2(1.2, 0.6)
+	plano.size = Vector2(0.7, 0.35)
 	softbox.mesh = plano
 	var emis := StandardMaterial3D.new()
 	emis.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	emis.albedo_color = Color(1.0, 0.97, 0.92) * 1.6
+	emis.albedo_color = Color(0.55, 0.53, 0.5)
 	softbox.material_override = emis
 	softbox.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(softbox)
