@@ -55,6 +55,7 @@ var btn_explodir: Button
 var modo_prints := false
 var leve := false
 var quadros_espera := 90
+var so_drone := ""
 
 
 func _ready() -> void:
@@ -72,6 +73,8 @@ func _ready() -> void:
 				print("exportado ", info["id"])
 			get_tree().quit()
 			return
+		elif a.begins_with("--so="):
+			so_drone = a.split("=")[1]
 		elif a == "--cad":
 			montador.usar_final = false
 		elif a.begins_with("--esperar="):
@@ -680,6 +683,8 @@ func _esperar(q: int) -> void:
 
 func _tirar_prints() -> void:
 	for i in dados_drones.size():
+		if so_drone != "" and dados_drones[i]["id"] != so_drone:
+			continue
 		_mostrar_drone(i)
 		yaw = 0.75
 		pitch = -0.42

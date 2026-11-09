@@ -146,6 +146,8 @@ func _melhorar_material(id: String, chave: String, mi: MeshInstance3D) -> void:
 func exportar(id: String, pasta_abs: String) -> void:
 	var d := montar_cad(id)
 	var meta := {}
+	var materiais := {}
+	var receitas := {}
 	var i := 0
 	for p in d.get_children():
 		if not p.has_meta("peca"):
@@ -164,7 +166,11 @@ func exportar(id: String, pasta_abs: String) -> void:
 					ph = (m as BaseMaterial3D).duplicate()
 				elif m is ShaderMaterial:
 					ph.albedo_color = Color(0.05, 0.05, 0.05)
-				ph.resource_name = m.resource_name if m else "cor|0.7,0.7,0.7|0.5|0|0"
+				var receita: String = m.resource_name if m else "cor|0.7,0.7,0.7|0.5|0|0"
+				if not receitas.has(receita):
+					receitas[receita] = "mat%03d" % receitas.size()
+					materiais[receitas[receita]] = receita
+				ph.resource_name = receitas[receita]
 				malha.surface_set_material(s, ph)
 				mi.set_surface_override_material(s, null)
 			mi.mesh = malha
@@ -172,6 +178,7 @@ func exportar(id: String, pasta_abs: String) -> void:
 	var st := GLTFState.new()
 	doc.append_from_scene(d, st)
 	doc.write_to_filesystem(st, pasta_abs.path_join(id + "_src.glb"))
+	meta["_materiais"] = materiais
 	var f := FileAccess.open(pasta_abs.path_join(id + ".json"), FileAccess.WRITE)
 	f.store_string(JSON.stringify(meta, "\t"))
 	d.free()
@@ -193,7 +200,7 @@ func montar_final(id: String) -> Node3D:
 		var n: Node = mi
 		var nome_peca := ""
 		while n and n != modelo:
-			var limpo := String(n.name).get_slice(".", 0)
+			var limpo := _sem_sufixo(String(n.name))
 			if meta.has(limpo):
 				nome_peca = limpo
 				break
@@ -209,13 +216,20 @@ func montar_final(id: String) -> Node3D:
 		mi.transform = t
 		for s in mi.mesh.get_surface_count():
 			var orig := mi.mesh.surface_get_material(s)
-			var receita := String(orig.resource_name).get_slice(".", 0) if orig else ""
-			var base := kit.de_receita(receita)
+			var nome_mat := _sem_sufixo(String(orig.resource_name)) if orig else ""
+			var tabela: Dictionary = meta.get("_materiais", {})
+			var base: Material = kit.de_receita(tabela.get(nome_mat, "")) if tabela.has(nome_mat) else null
 			if base == null:
 				base = orig if orig else kit.cor(Color(0.7, 0.7, 0.7))
 			mi.set_surface_override_material(s, _com_ao(base, ao, cache_ao))
 	modelo.free()
 	return raiz
+
+
+## Tira o ".001" que o Blender põe em nomes repetidos.
+func _sem_sufixo(t: String) -> String:
+	var re := RegEx.create_from_string("\\.\\d{3}$")
+	return re.sub(t, "")
 
 
 func _com_ao(base: Material, ao: Texture2D, cache_ao: Dictionary) -> Material:

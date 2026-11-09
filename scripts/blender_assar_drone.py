@@ -87,16 +87,34 @@ for o in meshes:
 
 grupos = sorted({peca_de(o) for o in meshes})
 log('assando', SIZE, 'px,', SAMPLES, 'amostras,', len(grupos), 'peças')
-for gi, g in enumerate(grupos):
-    minhas = [o for o in meshes if peca_de(o) == g]
+
+def assar_tudo(tag):
+    for gi, g in enumerate(grupos):
+        minhas = [o for o in meshes if peca_de(o) == g]
+        for o in meshes:
+            o.hide_render = peca_de(o) != g
+        bpy.ops.object.select_all(action='DESELECT')
+        for o in minhas: o.select_set(True)
+        bpy.context.view_layer.objects.active = minhas[0]
+        bpy.ops.object.bake(type='AO', margin=8, margin_type='EXTEND', use_clear=(gi == 0), target='IMAGE_TEXTURES')
+    for o in meshes: o.hide_render = False
+    log(tag, 'pronto')
+
+def inverter():
     for o in meshes:
-        o.hide_render = peca_de(o) != g
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in minhas: o.select_set(True)
-    bpy.context.view_layer.objects.active = minhas[0]
-    bpy.ops.object.bake(type='AO', margin=8, margin_type='EXTEND', use_clear=(gi == 0), target='IMAGE_TEXTURES')
-    log('  ', g, len(minhas), 'malhas')
-for o in meshes: o.hide_render = False
+        bpy.ops.object.select_all(action='DESELECT'); o.select_set(True); bpy.context.view_layer.objects.active = o
+        bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT'); bpy.ops.mesh.flip_normals(); bpy.ops.object.mode_set(mode='OBJECT')
+
+# CAD costuma ter faces com a normal virada para dentro: assa dos dois lados e fica com o mais claro
+import numpy as np
+assar_tudo('frente')
+frente = np.array(img.pixels[:], dtype=np.float32)
+inverter()
+assar_tudo('avesso')
+avesso = np.array(img.pixels[:], dtype=np.float32)
+inverter()
+img.pixels[:] = np.maximum(frente, avesso)
+img.update()
 img.filepath_raw = AO_PNG; img.file_format = 'PNG'; img.save()
 
 for o in meshes:
