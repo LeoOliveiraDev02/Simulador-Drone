@@ -1,0 +1,45 @@
+SIMULADOR DE DRONE — ONDE PARAMOS
+=================================
+Atualizado: 09/11/2026
+
+IDEIA
+Simulador 3D (Godot 4.7, programa baixável) que ensina a montar drones peça
+por peça (o que é, para que serve, com o que conecta, compatibilidades) e
+depois voar em um campo aberto grande, com física de voo, pouso, vento e
+colisão. Sem intérprete de Libras. Controles: teclado, gamepad e rádio via USB.
+
+FASES
+1. Escolher os drones e mostrar cada um na bancada (FEITA — aguardando retorno)
+2. Montagem peça por peça + campo de teste com a física de voo
+3. Refinamento gráfico (se precisar)
+4. Mapa grande em campo aberto (teste já feito em pesquisa/teste-mapa)
+5. Menu
+
+DRONES ESCOLHIDOS (modelos CAD do GrabCAD, convertidos)
+- Quad 450 + Pixhawk ......... grabcad: f450-quadcopter-frame-with-pixhawk-2-4-8-flight-controller-1
+  (Pixhawk, GPS, bateria, ESCs, receptor, telemetria, buzzer e módulo de energia feitos por código)
+- FPV 5" (TBS Source One V6) . grabcad: tbs-source-one-v6-assembly-example-drone-1
+- Tiny Whoop 65 mm ........... grabcad: josh-gore-works-p1-tiny-whoop-carbon-reinforced-drone-1
+  (hélices, placa AIO, câmera/capota e bateria feitas por código)
+- Hexacóptero agrícola ....... grabcad: hexacopter-agriculture-drone-1
+  (controladora e radar feitos por código)
+
+PASTAS
+fase1/                projeto Godot da Fase 1 (abrir com Godot 4.7)
+  cenas/bancada.tscn  cena principal
+  scripts/kit.gd      peças feitas por código (motor, hélice, bateria, cabos...)
+  scripts/drones.gd   monta cada drone a partir do CAD + peças extras
+  scripts/bancada.gd  bancada, luzes, câmera, clique nas peças, interface
+  dados/pecas.json    textos de cada peça (o que é, função, conexões, dica)
+  dados/drones.json   ficha de cada drone
+  modelos/*.glb       drones convertidos do CAD
+pesquisa/teste-mapa/  cena de teste do campo aberto (aprovada: "era isso que eu queria")
+scripts/              conversores: step_para_glb.py (STEP -> GLB) e preparar_drone.py
+                      (agrupa o CAD em peças nomeadas "chave__N")
+
+COMO CONTINUAR
+1. Clonar o repositório e abrir fase1 no Godot 4.7.2 (ou rodar fase1/rodar.bat no PC)
+2. Prints de teste sem placa de vídeo:
+   godot --path fase1 -- --prints --leve   (salva em fase1/prints)
+3. Novo modelo do GrabCAD: baixar pelo navegador do app (logado), pegar o .step
+   em Downloads, rodar step_para_glb.py e preparar_drone.py (adicionar regras)

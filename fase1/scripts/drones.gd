@@ -81,7 +81,10 @@ func _melhorar_material(id: String, chave: String, mi: MeshInstance3D) -> void:
 		var novo: Material = null
 		match chave:
 			"frame_carbono", "braco":
-				if id == "fpv5" or (id == "hexa_agro" and lum < 0.2):
+				if id == "quad450" and chave == "braco":
+					var frente := String(mi.name).begins_with("braco__1") or String(mi.name).begins_with("braco__4")
+					novo = kit.cor(Color(0.72, 0.06, 0.05) if frente else Color(0.9, 0.9, 0.88), 0.38, 0.0, 0.5)
+				elif id == "fpv5" or (id == "hexa_agro" and lum < 0.2):
 					novo = kit.carbono(320.0 if id == "fpv5" else 140.0)
 				elif id == "quad450":
 					novo = kit.cor(c, 0.38, 0.0, 0.5)
@@ -146,14 +149,14 @@ func _definir_explosao(raiz: Node3D) -> void:
 		var chave: String = p.get_meta("peca")
 		var sobe := 0.0
 		match chave:
-			"helice": sobe = 0.55
-			"motor": sobe = 0.3
-			"gps", "gps_rtk", "pixhawk", "fc_stack", "placa_aio", "controladora_agro", "antena_vtx", "receptor", "telemetria", "camera_fpv", "vtx": sobe = 0.45
-			"bateria", "tanque", "bomba", "trem_pouso", "pdb", "esc_4em1": sobe = -0.35
+			"helice": sobe = 0.32
+			"motor": sobe = 0.16
+			"gps", "gps_rtk", "pixhawk", "fc_stack", "placa_aio", "controladora_agro", "antena_vtx", "receptor", "telemetria", "camera_fpv", "vtx": sobe = 0.28
+			"bateria", "tanque", "bomba", "trem_pouso", "pdb", "esc_4em1": sobe = -0.12
 			"frame", "frame_carbono", "frame_agro", "frame_dutos": sobe = 0.0
 			_: sobe = 0.15
 		var horiz := Vector3(d.x, 0, d.z)
-		var fator := 0.35 if chave in ["helice", "motor", "braco", "bico", "esc"] else 0.15
+		var fator := 0.18 if chave in ["helice", "motor", "braco", "bico", "esc"] else 0.08
 		p.set_meta("explodir", horiz * fator + Vector3(0, sobe * tam * 0.35, 0))
 
 
@@ -262,14 +265,20 @@ func _completar_fpv5(r: Node3D) -> void:
 func _completar_whoop(r: Node3D) -> void:
 	var placa := _aabb(_pecas(r, "placa_aio")[0])
 	var c := placa.get_center()
-	# motores 0702 embaixo de cada hélice
-	var helices := _pecas(r, "helice")
-	for h in helices:
-		var hb := _aabb(h)
-		var hc := hb.get_center()
-		var num := int(h.name.get_slice("__", 1)) if h.name.contains("__") else helices.find(h) + 1
-		var m := kit.motor(r, _rotulo("whoop65", "motor", helices.find(h) + 1), Vector3(hc.x, hb.position.y - 0.0105, hc.z), 0.0082, 0.0105, Color(0.75, 0.6, 0.15), helices.find(h) % 2 == 1)
-		m.set_meta("numero", num)
+	# o CAD traz as hélices como discos: troca por hélices de 3 pás em cima de cada motor
+	for h in _pecas(r, "helice"):
+		h.queue_free()
+		r.remove_child(h)
+	var motores := _pecas(r, "motor")
+	for i in motores.size():
+		var mb := _aabb(motores[i])
+		var mc := mb.get_center()
+		var ang := atan2(mc.x - c.x, -(mc.z - c.z))
+		var idx := int(posmod(ang, TAU) / (PI / 2.0))
+		motores[i].set_meta("rotulo", _rotulo("whoop65", "motor", idx + 1))
+		var cw := idx % 2 == 1
+		var mat := kit.cor(Color(0.85, 0.85, 0.82) if cw else Color(0.1, 0.1, 0.1), 0.45)
+		kit.helice(r, _rotulo("whoop65", "helice", idx + 1), Vector3(mc.x, mb.end.y + 0.0006, mc.z), 0.031, 0.022, 3, mat, cw, Vector3.ZERO, 0.2)
 	# placa AIO de verdade em cima da placa do CAD
 	var aio := kit.peca(r, "placa_aio", "Placa AIO (FC + ESC + receptor + VTX)")
 	aio.position = Vector3(c.x, placa.end.y + 0.0045, c.z)

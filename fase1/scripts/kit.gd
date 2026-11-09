@@ -222,7 +222,6 @@ func malha_tubo(r_ext: float, r_int: float, alt: float, lados := 32) -> ArrayMes
 		# tampas
 		_quad(st, d0 * r_int + Vector3(0, h, 0), d0 * r_ext + Vector3(0, h, 0), d1 * r_ext + Vector3(0, h, 0), d1 * r_int + Vector3(0, h, 0), Vector3.UP, Vector3.UP)
 		_quad(st, d1 * r_int + Vector3(0, -h, 0), d1 * r_ext + Vector3(0, -h, 0), d0 * r_ext + Vector3(0, -h, 0), d0 * r_int + Vector3(0, -h, 0), Vector3.DOWN, Vector3.DOWN)
-	st.generate_tangents()
 	return st.commit()
 
 

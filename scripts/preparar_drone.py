@@ -57,7 +57,7 @@ REGRAS = {
 }
 
 # Giro para ficar com Y para cima (graus no eixo X)
-GIRO_X = {"quad450": 0.0, "fpv5": 0.0, "whoop65": -90.0, "hexa_agro": -90.0}
+GIRO_X = {"quad450": 0.0, "fpv5": 0.0, "whoop65": 90.0, "hexa_agro": 90.0}
 LIMITE_TRIS = {"fpv5": 60000, "hexa_agro": 60000, "quad450": 80000, "whoop65": 80000}
 
 
@@ -113,6 +113,8 @@ def main():
             elif c[0] > 100 and c[1] < 20:
                 p[0] = "frame_dutos"
             elif abs(c[0] - c[2]) < 30 and 120 < c[0] < 160:
+                p[0], p[3] = "motor", "quadrante"
+            elif c[0] > 140 and c[2] > 180:
                 p[0], p[3] = "helice", "quadrante"
             elif c[0] < 30:
                 p[0] = "frame_dutos"

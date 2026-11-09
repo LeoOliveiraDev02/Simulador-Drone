@@ -190,11 +190,11 @@ func _montar_bancada() -> void:
 	kit.caixa(b, Vector3(L, esp, P), madeira, Vector3(0, ALTURA_BANCADA - esp / 2, 0))
 	# tapete de borracha escuro com marcações (onde o drone fica)
 	var tapete := StandardMaterial3D.new()
-	tapete.albedo_color = Color(0.045, 0.05, 0.055)
+	tapete.albedo_color = Color(0.022, 0.025, 0.028)
 	tapete.roughness = 0.85
 	kit.caixa(b, Vector3(1.9, 0.003, 1.15), tapete, Vector3(0, ALTURA_BANCADA + 0.0015, 0.0))
 	var linha := StandardMaterial3D.new()
-	linha.albedo_color = Color(0.16, 0.2, 0.26)
+	linha.albedo_color = Color(0.075, 0.09, 0.11)
 	linha.roughness = 0.8
 	for i in range(-9, 10):
 		kit.caixa(b, Vector3(0.0015, 0.0005, 1.12), linha, Vector3(i * 0.1, ALTURA_BANCADA + 0.0032, 0))
