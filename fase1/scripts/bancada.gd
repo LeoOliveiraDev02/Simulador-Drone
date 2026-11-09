@@ -68,7 +68,13 @@ func _ready() -> void:
 			var pasta := ProjectSettings.globalize_path("res://modelos/final")
 			DirAccess.make_dir_recursive_absolute(pasta)
 			var dd: Array = JSON.parse_string(FileAccess.get_file_as_string("res://dados/drones.json"))["drones"]
+			var filtro := ""
+			for b2 in OS.get_cmdline_user_args():
+				if b2.begins_with("--so="):
+					filtro = b2.split("=")[1]
 			for info in dd:
+				if filtro != "" and info["id"] != filtro:
+					continue
 				montador.exportar(info["id"], pasta)
 				print("exportado ", info["id"])
 			get_tree().quit()
@@ -108,7 +114,7 @@ func _montar_ambiente() -> void:
 	env.ambient_light_color = Color(0.32, 0.36, 0.45)
 	env.ambient_light_energy = 0.35
 	env.tonemap_mode = Environment.TONE_MAPPER_AGX
-	env.tonemap_exposure = 1.1
+	env.tonemap_exposure = 0.95
 	env.ssao_enabled = true
 	env.ssao_radius = 0.25
 	env.ssao_intensity = 2.0
@@ -117,8 +123,9 @@ func _montar_ambiente() -> void:
 	env.ssil_radius = 1.0
 	env.ssr_enabled = not leve
 	env.glow_enabled = true
-	env.glow_intensity = 0.4
-	env.glow_bloom = 0.03
+	env.glow_intensity = 0.2
+	env.glow_bloom = 0.0
+	env.glow_hdr_threshold = 1.5
 	env.adjustment_enabled = true
 	env.adjustment_contrast = 1.05
 	env.adjustment_saturation = 1.05
@@ -163,7 +170,7 @@ func _montar_ambiente() -> void:
 	var lum := SpotLight3D.new()
 	add_child(lum)
 	lum.look_at_from_position(Vector3(0.35, ALTURA_BANCADA + 1.6, 0.55), Vector3(0, ALTURA_BANCADA, 0), Vector3.UP)
-	lum.light_energy = 7.0
+	lum.light_energy = 5.5
 	lum.light_color = Color(1.0, 0.93, 0.84)
 	lum.spot_range = 4.0
 	lum.spot_angle = 38.0

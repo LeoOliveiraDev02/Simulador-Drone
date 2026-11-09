@@ -221,9 +221,24 @@ func montar_final(id: String) -> Node3D:
 			var base: Material = kit.de_receita(tabela.get(nome_mat, "")) if tabela.has(nome_mat) else null
 			if base == null:
 				base = orig if orig else kit.cor(Color(0.7, 0.7, 0.7))
+			base = _ajuste_final(id, meta[nome_peca]["peca"], base)
 			mi.set_surface_override_material(s, _com_ao(base, ao, cache_ao))
 	modelo.free()
 	return raiz
+
+
+## Correções de cor aplicadas ao carregar o modelo assado.
+func _ajuste_final(id: String, chave: String, m: Material) -> Material:
+	if chave == "helice":
+		var cores := {"quad450": Color(0.07, 0.07, 0.075), "fpv5": Color(0.55, 0.25, 0.95, 1.0), "hexa_agro": Color(0.06, 0.06, 0.065)}
+		if cores.has(id):
+			return kit.plastico(cores[id], 0.34, 0.5)
+	if chave == "pixhawk" and m is BaseMaterial3D and (m as BaseMaterial3D).albedo_color.get_luminance() > 0.6:
+		return kit.plastico(Color(0.7, 0.71, 0.72), 0.4, 0.3)
+	if m is BaseMaterial3D and (m as BaseMaterial3D).albedo_color.get_luminance() > 0.8:
+		var b := m as BaseMaterial3D
+		return kit.plastico(b.albedo_color.darkened(0.18), maxf(b.roughness, 0.4), 0.2)
+	return m
 
 
 ## Tira o ".001" que o Blender põe em nomes repetidos.
@@ -329,6 +344,12 @@ func _definir_explosao(raiz: Node3D) -> void:
 func _completar_quad450(r: Node3D) -> void:
 	var topo := _aabb(_pecas(r, "frame")[0])
 	var baixo := _aabb(_pecas(r, "pdb")[0])
+	for bb in _pecas(r, "braco"):
+		var frente := _aabb(bb).get_center().z < topo.get_center().z
+		for f in bb.find_children("*", "MeshInstance3D", true, false):
+			var mi := f as MeshInstance3D
+			for k in mi.mesh.get_surface_count():
+				mi.set_surface_override_material(k, kit.plastico(Color(0.62, 0.05, 0.04) if frente else Color(0.82, 0.82, 0.8), 0.42))
 	var y_topo := topo.end.y
 	var c := topo.get_center()
 	var branco := kit.cor(Color(0.88, 0.88, 0.86), 0.45)
@@ -357,11 +378,15 @@ func _completar_quad450(r: Node3D) -> void:
 	for i in motores.size():
 		var m := _aabb(motores[i]).get_center()
 		var dir := Vector3(m.x - c.x, 0, m.z - c.z)
-		var p := Vector3(c.x, 0, c.z) + dir * 0.5
+		var p := Vector3(c.x, 0, c.z) + dir * 0.42
 		var esc := kit.peca(r, "esc", "ESC %d (30 A)" % (i + 1))
-		esc.position = Vector3(p.x, _aabb(_pecas(r, "braco")[i]).position.y + 0.004, p.z)
+		var braco_mais_perto := _pecas(r, "braco")[0]
+		for bb in _pecas(r, "braco"):
+			if _aabb(bb).get_center().distance_to(m) < _aabb(braco_mais_perto).get_center().distance_to(m):
+				braco_mais_perto = bb
+		esc.position = Vector3(p.x, topo.position.y + 0.002, p.z)
 		esc.rotation.y = atan2(dir.x, dir.z)
-		_cad(esc, "esc30", "esc", Vector3(0, -0.018, 0))
+		_cad(esc, "esc30", "esc", Vector3(0, 0, 0))
 	# receptor e rádio de telemetria
 	var rx := kit.peca(r, "receptor", "Receptor de rádio (FlySky iA6B)")
 	rx.position = Vector3(c.x + 0.045, y_topo, c.z + 0.03)
@@ -384,7 +409,6 @@ func _completar_quad450(r: Node3D) -> void:
 	var me := kit.peca(r, "modulo_energia", "Módulo de energia")
 	me.position = Vector3(c.x, baixo.position.y + 0.001, c.z + 0.085)
 	kit.placa(me, Vector3(0.022, 0.0016, 0.025), Color(0.05, 0.25, 0.1), 21.0, Vector3(0, -0.004, 0), Vector3.ZERO, 5)
-	kit.xt60(me, Vector3(0, -0.005, 0.02), Vector3(PI / 2, 0, 0))
 
 
 func _completar_fpv5(r: Node3D) -> void:
