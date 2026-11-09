@@ -127,7 +127,7 @@ func _montar_ambiente() -> void:
 	var lum := SpotLight3D.new()
 	add_child(lum)
 	lum.look_at_from_position(Vector3(0.35, ALTURA_BANCADA + 1.6, 0.55), Vector3(0, ALTURA_BANCADA, 0), Vector3.UP)
-	lum.light_energy = 9.0
+	lum.light_energy = 7.0
 	lum.light_color = Color(1.0, 0.93, 0.84)
 	lum.spot_range = 4.0
 	lum.spot_angle = 38.0
