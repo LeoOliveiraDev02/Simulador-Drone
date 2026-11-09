@@ -1,0 +1,219 @@
+{
+  "frame": {
+    "nome": "Frame (estrutura)",
+    "oque": "O esqueleto do drone: placas e braços onde todas as peças são presas.",
+    "funcao": "Segura motores, eletrônica e bateria na posição certa e aguenta as vibrações e quedas.",
+    "conecta": "Motores nas pontas dos braços; controladora, ESCs e bateria no centro.",
+    "dica": "O tamanho do frame define o tamanho máximo da hélice. Hélice grande demais bate no frame ou na outra hélice."
+  },
+  "frame_carbono": {
+    "nome": "Frame de fibra de carbono",
+    "oque": "Placas e braços cortados em fibra de carbono, leves e muito rígidos.",
+    "funcao": "Aguenta batidas fortes do freestyle sem entortar e não vibra.",
+    "conecta": "Motores parafusados nos braços; stack (FC + ESC) entre as placas.",
+    "dica": "Fibra de carbono conduz eletricidade: nenhum fio desencapado pode encostar nela, senão dá curto."
+  },
+  "frame_dutos": {
+    "nome": "Frame com dutos",
+    "oque": "Peça única de plástico com um anel (duto) em volta de cada hélice.",
+    "funcao": "Protege a hélice, as pessoas e os móveis. Também melhora um pouco o empuxo em baixa velocidade.",
+    "conecta": "Motores encaixados no centro de cada duto; placa AIO presa no meio com parafusos ou borrachinhas.",
+    "dica": "É feito para flexionar em batidas. Se rachar, troque: duto torto faz a hélice raspar."
+  },
+  "frame_agro": {
+    "nome": "Frame agrícola dobrável",
+    "oque": "Corpo central fechado com braços de tubo de carbono que dobram para o transporte.",
+    "funcao": "Carrega tanque e baterias pesadas e protege a eletrônica da calda e da poeira.",
+    "conecta": "Braços com travas de dobradiça; tanque embaixo do corpo; trem de pouso de tubos.",
+    "dica": "Antes de decolar confira se todas as travas dos braços estão fechadas. Braço solto em voo derruba o drone."
+  },
+  "braco": {
+    "nome": "Braço",
+    "oque": "A parte que vai do centro do drone até o motor.",
+    "funcao": "Afasta os motores do centro para as hélices não se tocarem e dá estabilidade.",
+    "conecta": "Centro do frame de um lado e o motor do outro. Por dentro (ou por baixo) passam os fios do motor.",
+    "dica": "Braços vermelhos/coloridos costumam marcar a frente do drone, para o piloto saber a orientação no ar."
+  },
+  "motor": {
+    "nome": "Motor brushless",
+    "oque": "Motor elétrico sem escovas. A parte de fora (o sino) gira junto com a hélice.",
+    "funcao": "Gira a hélice para gerar empuxo. O número de KV diz quantas RPM ele dá por volt: KV alto = rápido e para hélice pequena; KV baixo = forte e para hélice grande.",
+    "conecta": "3 fios vão para o ESC; a base é parafusada no braço; a hélice vai presa no eixo.",
+    "dica": "Trocar quaisquer 2 dos 3 fios inverte o sentido de giro. Cada motor tem que girar no sentido certo (horário/anti-horário), senão o drone capota na decolagem."
+  },
+  "helice": {
+    "nome": "Hélice",
+    "oque": "As pás que empurram o ar para baixo. O nome indica diâmetro × passo em polegadas (ex.: 10×4,5).",
+    "funcao": "Transforma o giro do motor em empuxo. Diâmetro maior e passo maior = mais empuxo, mas exigem mais do motor e da bateria.",
+    "conecta": "Encaixada no eixo do motor e presa com porca ou parafusos.",
+    "dica": "Existem hélices horárias (CW) e anti-horárias (CCW). Metade do drone usa cada uma; montar invertida faz a hélice empurrar o ar para cima."
+  },
+  "esc": {
+    "nome": "ESC (controlador de velocidade)",
+    "oque": "Placa que recebe a energia da bateria e alimenta o motor nas 3 fases, na velocidade pedida.",
+    "funcao": "Controla a rotação de cada motor milhares de vezes por segundo, seguindo o sinal da controladora.",
+    "conecta": "Entrada: bateria (via PDB). Saída: 3 fios do motor. Sinal: cabinho fino vindo da controladora.",
+    "dica": "A corrente do ESC (ex.: 30 A) tem que ser maior que a corrente máxima do motor com aquela hélice. ESC fraco esquenta e queima."
+  },
+  "esc_4em1": {
+    "nome": "ESC 4 em 1",
+    "oque": "Os quatro ESCs juntos numa placa só, montada embaixo da controladora (stack).",
+    "funcao": "Controla os 4 motores ocupando pouco espaço e com menos fios.",
+    "conecta": "Bateria pelo XT60 com capacitor; motores soldados nos 4 cantos; cabo de 8 vias até a controladora.",
+    "dica": "O capacitor grande perto da entrada da bateria filtra picos de tensão que podem queimar o ESC. Não tire."
+  },
+  "pdb": {
+    "nome": "PDB (placa de distribuição)",
+    "oque": "Placa que divide a energia da bateria para todos os ESCs. No F450 ela já vem embutida na placa de baixo do frame.",
+    "funcao": "Leva a corrente da bateria até os 4 ESCs com trilhas grossas de cobre.",
+    "conecta": "Cabo da bateria (XT60) e os fios de energia de cada ESC.",
+    "dica": "Solda fria aqui faz o drone desligar no ar. Use bastante estanho e confira com o multímetro."
+  },
+  "pixhawk": {
+    "nome": "Controladora Pixhawk",
+    "oque": "O cérebro do drone. Tem sensores (giroscópio, acelerômetro, barômetro) e roda o ArduPilot.",
+    "funcao": "Lê os sensores e o rádio e calcula, centenas de vezes por segundo, quanto cada motor deve girar para o drone ficar estável ou seguir uma missão.",
+    "conecta": "Saídas MAIN OUT para os ESCs, porta GPS, entrada RC do receptor, módulo de energia, buzzer e botão de segurança.",
+    "dica": "A seta em cima da Pixhawk tem que apontar para a frente do drone. Se montar torta, calibre de novo e ajuste a orientação no Mission Planner."
+  },
+  "fc_stack": {
+    "nome": "Controladora de voo (FC)",
+    "oque": "Placa pequena com processador e giroscópio que roda o Betaflight.",
+    "funcao": "Estabiliza o drone e transforma os comandos do rádio em velocidade de cada motor. Mostra informações no vídeo (OSD).",
+    "conecta": "Em cima do ESC 4 em 1 (stack 30×30), receptor, câmera, VTX e porta USB para configurar.",
+    "dica": "A placa fica sobre borrachinhas (soft mounts) que isolam a vibração dos motores. Sem elas o giroscópio fica \"tremido\"."
+  },
+  "placa_aio": {
+    "nome": "Placa AIO",
+    "oque": "\"All in one\": controladora, 4 ESCs, receptor e transmissor de vídeo numa placa do tamanho de uma moeda.",
+    "funcao": "Faz tudo que o drone precisa ocupando quase nada de espaço e peso.",
+    "conecta": "Conector da bateria 1S, 4 motores (plugues pequenos), câmera e antena.",
+    "dica": "Por ser tudo junto, se um ESC queimar normalmente troca a placa inteira."
+  },
+  "controladora_agro": {
+    "nome": "Controladora agrícola",
+    "oque": "Controladora de voo industrial, dentro do corpo fechado do drone.",
+    "funcao": "Faz voo automático sobre a lavoura, controla a bomba e a vazão dos bicos e mantém a altura sobre as plantas.",
+    "conecta": "GPS RTK, radar de terreno, bomba, sensores do tanque, ESCs e o rádio de controle.",
+    "dica": "Na pulverização a altura de voo e a velocidade definem quanta calda cai por hectare: é tudo calculado pela controladora."
+  },
+  "gps": {
+    "nome": "GPS + bússola",
+    "oque": "Módulo redondo com antena de GPS e uma bússola (magnetômetro) dentro.",
+    "funcao": "Diz onde o drone está e para onde ele aponta. Permite segurar posição (Loiter), voltar para casa (RTL) e voar missões.",
+    "conecta": "Cabo até a porta GPS/I2C da controladora.",
+    "dica": "Fica no alto de um mastro para se afastar dos fios de energia, que atrapalham a bússola. A seta também aponta para a frente."
+  },
+  "gps_rtk": {
+    "nome": "GPS RTK",
+    "oque": "GPS de alta precisão que recebe correções de uma base em terra.",
+    "funcao": "Posição com erro de 1 a 2 centímetros, para as faixas de pulverização não sobreporem nem deixarem falhas.",
+    "conecta": "Controladora agrícola e a base RTK (pelo rádio).",
+    "dica": "Sem correção RTK ele funciona como um GPS comum, com erro de 1 a 3 metros."
+  },
+  "receptor": {
+    "nome": "Receptor de rádio",
+    "oque": "Pequeno rádio que recebe os comandos do controle remoto do piloto.",
+    "funcao": "Passa para a controladora a posição dos manches e das chaves do rádio.",
+    "conecta": "Entrada RC/SBUS ou UART da controladora; antenas para fora do frame.",
+    "dica": "As antenas devem ficar em ângulo de 90° entre si e longe da fibra de carbono para não perder sinal."
+  },
+  "telemetria": {
+    "nome": "Rádio de telemetria",
+    "oque": "Rádio de 915 MHz que conversa com o computador em terra.",
+    "funcao": "Manda bateria, posição e altitude para o Mission Planner e recebe missões novas durante o voo.",
+    "conecta": "Porta TELEM1 da Pixhawk; o par fica no USB do computador.",
+    "dica": "Os dois rádios têm que estar na mesma frequência e velocidade (baud rate) para conversarem."
+  },
+  "bateria": {
+    "nome": "Bateria LiPo",
+    "oque": "Bateria de lítio-polímero. \"S\" é o número de células em série (cada uma tem 3,7 V); mAh é a capacidade; C é quanta corrente ela aguenta soltar.",
+    "funcao": "Dá energia para tudo. Mais S = mais tensão e motores mais rápidos; mais mAh = mais tempo de voo, porém mais peso.",
+    "conecta": "Cabo grosso (XT60/XT90/AS150) no drone e cabo fino de balanceamento no carregador.",
+    "dica": "Nunca descarregue abaixo de 3,5 V por célula e não use bateria estufada: LiPo danificada pode pegar fogo."
+  },
+  "modulo_energia": {
+    "nome": "Módulo de energia",
+    "oque": "Plaquinha entre a bateria e o drone.",
+    "funcao": "Mede tensão e corrente da bateria e alimenta a Pixhawk com 5 V limpos.",
+    "conecta": "Bateria de um lado, PDB do outro e cabo de 6 vias para a porta POWER da Pixhawk.",
+    "dica": "É ele que permite o drone voltar para casa sozinho quando a bateria fica fraca (failsafe de bateria)."
+  },
+  "camera_fpv": {
+    "nome": "Câmera FPV",
+    "oque": "Câmera pequena de vídeo com atraso baixíssimo.",
+    "funcao": "Mostra para o piloto, ao vivo nos óculos, o que o drone está vendo.",
+    "conecta": "Cabo até a controladora (que põe o OSD) e daí ao VTX.",
+    "dica": "No freestyle a câmera fica inclinada para cima (25° a 40°): quanto mais rápido você voa, mais inclinação."
+  },
+  "vtx": {
+    "nome": "VTX (transmissor de vídeo)",
+    "oque": "Transmissor que envia o vídeo da câmera para os óculos em 5,8 GHz.",
+    "funcao": "Leva a imagem até o piloto a centenas de metros.",
+    "conecta": "Recebe vídeo e energia da controladora; antena na traseira do drone.",
+    "dica": "Nunca ligue o VTX sem a antena: ele esquenta e queima em segundos."
+  },
+  "antena_vtx": {
+    "nome": "Antena de vídeo",
+    "oque": "Antena circular (\"pirulito\") para o sinal de vídeo de 5,8 GHz.",
+    "funcao": "Irradia o sinal do VTX em todas as direções, com menos interferência de reflexos.",
+    "conecta": "Conector do VTX (MMCX/U.FL ou SMA).",
+    "dica": "A antena do drone e a dos óculos têm que ter a mesma polarização (as duas RHCP ou as duas LHCP)."
+  },
+  "trem_pouso": {
+    "nome": "Trem de pouso",
+    "oque": "As pernas onde o drone se apoia no chão.",
+    "funcao": "Protege hélices, câmera e bateria no pouso e dá espaço embaixo do drone.",
+    "conecta": "Parafusado na placa de baixo do frame.",
+    "dica": "Pernas mais altas permitem pendurar bateria, gimbal ou tanque embaixo do drone."
+  },
+  "buzzer": {
+    "nome": "Buzzer e botão de segurança",
+    "oque": "Bipador e botão com luz que vêm com a Pixhawk.",
+    "funcao": "O buzzer avisa com bipes (calibração, erro, bateria fraca). O botão tem que ser apertado antes de armar os motores.",
+    "conecta": "Portas BUZZER e SWITCH da Pixhawk.",
+    "dica": "Luz piscando no botão = seguro (motores travados). Luz fixa = pronto para armar."
+  },
+  "capacitor": {
+    "nome": "Capacitor de baixa ESR",
+    "oque": "Cilindro preto soldado na entrada da bateria.",
+    "funcao": "Absorve picos de tensão gerados pelos motores freando e acelerando rápido.",
+    "conecta": "Nos mesmos fios do XT60, bem perto do ESC.",
+    "dica": "Escolha um com tensão acima da bateria cheia (6S cheia = 25,2 V → capacitor de 35 V)."
+  },
+  "tanque": {
+    "nome": "Tanque de calda",
+    "oque": "Reservatório de 10 litros para o defensivo ou adubo líquido.",
+    "funcao": "Guarda o líquido que será pulverizado. Tem sensor de nível e é o maior peso do drone.",
+    "conecta": "Bomba por mangueira, que leva aos bicos; tampa por cima para encher.",
+    "dica": "O tanque fica bem embaixo do centro do drone: assim o equilíbrio muda pouco enquanto ele esvazia."
+  },
+  "bomba": {
+    "nome": "Bomba de pulverização",
+    "oque": "Bomba elétrica de diafragma.",
+    "funcao": "Puxa a calda do tanque e manda com pressão para os bicos.",
+    "conecta": "Tanque, mangueiras dos bicos e a controladora (que define a vazão).",
+    "dica": "Lave a bomba com água limpa depois de cada uso, senão o produto resseca e entope."
+  },
+  "bico": {
+    "nome": "Bico pulverizador",
+    "oque": "Ponta que transforma o líquido em gotas, presa embaixo dos motores.",
+    "funcao": "Espalha a calda. O vento das hélices empurra as gotas para dentro da plantação.",
+    "conecta": "Mangueira vinda da bomba.",
+    "dica": "Bico embaixo do motor aproveita o vento da hélice para as gotas não ficarem flutuando e irem embora com o vento."
+  },
+  "radar": {
+    "nome": "Radar de terreno",
+    "oque": "Sensor que mede a distância até o chão ou até as plantas.",
+    "funcao": "Mantém o drone sempre na mesma altura sobre a lavoura, mesmo em terreno com morro.",
+    "conecta": "Controladora agrícola.",
+    "dica": "Sem ele o drone usaria a altitude do GPS e poderia bater num morro ou subir demais."
+  },
+  "trava": {
+    "nome": "Trava do braço",
+    "oque": "Dobradiça com trava rosqueada no meio do braço.",
+    "funcao": "Deixa dobrar os braços para o transporte e trava firme para o voo.",
+    "conecta": "Liga a parte de dentro e a de fora do braço de carbono.",
+    "dica": "Tem que dar volta completa na rosca até o final; meia volta solta com a vibração."
+  }
+}

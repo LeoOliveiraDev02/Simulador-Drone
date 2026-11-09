@@ -1,0 +1,30 @@
+SIMULADOR DE DRONE - CENA DE TESTE GRAFICO (Godot 4.7.2)
+=========================================================
+
+O que e: o campo aberto do simulador montado por codigo, para ver o nivel
+grafico real do Godot. Tem terreno de ~4 km com morros, pasto com capim
+balancando no vento, estrada de terra vermelha, acude, base de pouso com H,
+galpao com telhado de telha, cercas com arame, postes com fios, biruta,
+2 portais de treino, arvores, arbustos, pedras e um drone pairando.
+
+COMO RODAR NO PC (Windows)
+1. Descompacte esta pasta onde quiser.
+2. Duplo clique em rodar_no_pc.bat. Ele:
+   - baixa o Godot 4.7.2 (so na primeira vez)
+   - baixa texturas, modelos e o ceu do Poly Haven (gratis, CC0, ~400 MB)
+   - importa tudo (alguns minutos na primeira vez)
+   - tira 3 prints em 1920x1080 na qualidade maxima e abre a pasta godot\prints
+   - abre a cena para voce explorar
+
+CONTROLES NA CENA
+  Botao direito + mouse: olhar     WASD: andar    Q/E: descer/subir
+  Shift: correr     1/2/3: vistas prontas     F12: salvar print
+
+ARQUIVOS
+  godot\cenas\teste_grafico.tscn   cena principal
+  godot\scripts\teste_grafico.gd   monta tudo (terreno, objetos, luz, camera)
+  godot\shaders\                   terreno, capim, agua, base de pouso, biruta
+  scripts\baixar_recursos.py       baixa os recursos do Poly Haven
+  prints_previa\                   prints feitos sem placa de video (qualidade baixa)
+
+Creditos: texturas, modelos e ceu de Poly Haven (polyhaven.com), licenca CC0.

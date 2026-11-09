@@ -1,0 +1,64 @@
+{
+  "drones": [
+    {
+      "id": "quad450",
+      "nome": "Quad 450 + Pixhawk",
+      "categoria": "Quadricóptero com GPS",
+      "resumo": "Drone de 450 mm (distância entre motores opostos) com controladora Pixhawk, GPS e bússola. É o tipo usado para aprender voo autônomo: segura posição, volta para casa sozinho e voa missões.",
+      "ficha": {
+        "Tamanho": "450 mm (motor a motor)",
+        "Motores": "4 × 2212 920 KV",
+        "Hélices": "10 × 4,5 pol., 2 pás",
+        "Bateria": "LiPo 3S 11,1 V 5000 mAh",
+        "Peso": "≈ 1,4 kg",
+        "Tempo de voo": "≈ 15 min",
+        "Controladora": "Pixhawk 2.4.8 (ArduPilot)"
+      }
+    },
+    {
+      "id": "fpv5",
+      "nome": "FPV 5\" Freestyle",
+      "categoria": "Drone de corrida/freestyle",
+      "resumo": "Drone leve e muito potente, pilotado por óculos de vídeo (FPV = visão em primeira pessoa). Não tem GPS nem estabilização de posição: o piloto controla tudo no modo Acro.",
+      "ficha": {
+        "Tamanho": "5 pol. (hélice) / 225 mm",
+        "Motores": "4 × 2207 1950 KV",
+        "Hélices": "5,1 × 4,6 pol., 3 pás",
+        "Bateria": "LiPo 6S 22,2 V 1100 mAh",
+        "Peso": "≈ 650 g com bateria",
+        "Tempo de voo": "≈ 4 min",
+        "Controladora": "Stack 30×30 (FC F7 + ESC 4 em 1, Betaflight)"
+      }
+    },
+    {
+      "id": "whoop65",
+      "nome": "Tiny Whoop 65 mm",
+      "categoria": "Micro drone",
+      "resumo": "Drone minúsculo com as hélices protegidas por dutos. Pesa menos que um ovo e pode voar dentro de casa sem perigo — o melhor para começar.",
+      "ficha": {
+        "Tamanho": "65 mm (motor a motor)",
+        "Motores": "4 × 0702 23000 KV",
+        "Hélices": "31 mm, 3 pás",
+        "Bateria": "LiPo 1S 3,8 V 300 mAh",
+        "Peso": "≈ 30 g com bateria",
+        "Tempo de voo": "≈ 3 min",
+        "Controladora": "Placa AIO (FC + ESC + receptor + VTX numa placa só)"
+      }
+    },
+    {
+      "id": "hexa_agro",
+      "nome": "Hexacóptero Agrícola",
+      "categoria": "Drone de pulverização",
+      "resumo": "Drone grande de 6 motores que carrega um tanque e pulveriza a lavoura. Tem braços dobráveis, GPS de precisão e voa missões automáticas sobre a plantação.",
+      "ficha": {
+        "Tamanho": "1600 mm (motor a motor)",
+        "Motores": "6 × 8120 100 KV",
+        "Hélices": "30 pol., 2 pás dobráveis",
+        "Bateria": "LiPo 12S 44,4 V 16000 mAh (2 em paralelo)",
+        "Peso": "≈ 24 kg (vazio) / 34 kg cheio",
+        "Tempo de voo": "≈ 10 min carregado",
+        "Controladora": "Controladora agrícola + GPS RTK"
+      }
+    }
+  ]
+}
