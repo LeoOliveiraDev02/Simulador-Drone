@@ -1,0 +1,62 @@
+{
+	"p00__frame_dutos": {
+		"explodir": "Vector3(0, 0, 0)",
+		"peca": "frame_dutos",
+		"rotulo": "Frame Meteor65 Pro (dutos)"
+	},
+	"p01__motor": {
+		"explodir": "Vector3(0.004158, 0.004888666, -0.004158)",
+		"peca": "motor",
+		"rotulo": "Motor 1 (frente direita) — gira anti-horário (CCW)"
+	},
+	"p02__helice": {
+		"explodir": "Vector3(0.004158, 0.009777332, -0.00360746)",
+		"peca": "helice",
+		"rotulo": "Hélice 1 (frente direita) — gira anti-horário (CCW)"
+	},
+	"p03__motor": {
+		"explodir": "Vector3(0.004158, 0.004888666, 0.004158)",
+		"peca": "motor",
+		"rotulo": "Motor 2 (trás direita) — gira horário (CW)"
+	},
+	"p04__helice": {
+		"explodir": "Vector3(0.004158, 0.009777332, 0.00470854)",
+		"peca": "helice",
+		"rotulo": "Hélice 2 (trás direita) — gira horário (CW)"
+	},
+	"p05__motor": {
+		"explodir": "Vector3(-0.004158, 0.004888666, 0.004158)",
+		"peca": "motor",
+		"rotulo": "Motor 3 (trás esquerda) — gira anti-horário (CCW)"
+	},
+	"p06__helice": {
+		"explodir": "Vector3(-0.004158, 0.009777332, 0.00470854)",
+		"peca": "helice",
+		"rotulo": "Hélice 3 (trás esquerda) — gira anti-horário (CCW)"
+	},
+	"p07__motor": {
+		"explodir": "Vector3(-0.004158, 0.004888666, -0.004158)",
+		"peca": "motor",
+		"rotulo": "Motor 4 (frente esquerda) — gira horário (CW)"
+	},
+	"p08__helice": {
+		"explodir": "Vector3(-0.004158, 0.009777332, -0.00360746)",
+		"peca": "helice",
+		"rotulo": "Hélice 4 (frente esquerda) — gira horário (CW)"
+	},
+	"p09__placa_aio": {
+		"explodir": "Vector3(0, 0.0085551655, -6.0000046e-05)",
+		"peca": "placa_aio",
+		"rotulo": "Placa AIO (FC + 4 ESC + receptor ELRS + VTX)"
+	},
+	"p10__camera_fpv": {
+		"explodir": "Vector3(0, 0.0085551655, -0.00047157763)",
+		"peca": "camera_fpv",
+		"rotulo": "Câmera FPV nano + capota"
+	},
+	"p11__bateria": {
+		"explodir": "Vector3(0, -0.0036664994, 0.00055780006)",
+		"peca": "bateria",
+		"rotulo": "Bateria LiPo 1S 300 mAh"
+	}
+}

@@ -1,0 +1,162 @@
+{
+	"p00__bateria": {
+		"explodir": "Vector3(-0.005207886, -0.054045167, 0.007959884)",
+		"peca": "bateria",
+		"rotulo": ""
+	},
+	"p01__bico": {
+		"explodir": "Vector3(0.024242712, 0.067556456, 2.4703147e-06)",
+		"peca": "bico",
+		"rotulo": "Bico 1 (posição 1)"
+	},
+	"p02__bico": {
+		"explodir": "Vector3(0.054025345, 0.067556456, -4.3036883e-07)",
+		"peca": "bico",
+		"rotulo": "Bico 2 (posição 2)"
+	},
+	"p03__bico": {
+		"explodir": "Vector3(0.08614269, 0.067556456, -4.3032693e-07)",
+		"peca": "bico",
+		"rotulo": "Bico 3 (posição 3)"
+	},
+	"p04__bico": {
+		"explodir": "Vector3(-0.08611732, 0.067556456, -4.3032693e-07)",
+		"peca": "bico",
+		"rotulo": "Bico 4 (posição 4)"
+	},
+	"p05__bico": {
+		"explodir": "Vector3(-0.053974662, 0.067556456, -4.3036883e-07)",
+		"peca": "bico",
+		"rotulo": "Bico 5 (posição 5)"
+	},
+	"p06__bico": {
+		"explodir": "Vector3(-0.024217375, 0.067556456, -8.750707e-05)",
+		"peca": "bico",
+		"rotulo": "Bico 6 (posição 6)"
+	},
+	"p07__bomba": {
+		"explodir": "Vector3(9.536743e-09, -0.054045167, -1.9129365e-07)",
+		"peca": "bomba",
+		"rotulo": ""
+	},
+	"p08__braco": {
+		"explodir": "Vector3(0.028593237, 0.067556456, -0.049894866)",
+		"peca": "braco",
+		"rotulo": "Braço 1 (posição 1)"
+	},
+	"p09__braco": {
+		"explodir": "Vector3(0.057613067, 0.067556456, -1.3803319e-06)",
+		"peca": "braco",
+		"rotulo": "Braço 2 (posição 2)"
+	},
+	"p10__braco": {
+		"explodir": "Vector3(0.028576525, 0.067556456, 0.0498939)",
+		"peca": "braco",
+		"rotulo": "Braço 3 (posição 3)"
+	},
+	"p11__braco": {
+		"explodir": "Vector3(-0.028593237, 0.067556456, 0.049893923)",
+		"peca": "braco",
+		"rotulo": "Braço 4 (posição 4)"
+	},
+	"p12__braco": {
+		"explodir": "Vector3(-0.057613075, 0.067556456, -7.067621e-07)",
+		"peca": "braco",
+		"rotulo": "Braço 5 (posição 5)"
+	},
+	"p13__braco": {
+		"explodir": "Vector3(-0.028576525, 0.067556456, -0.04989484)",
+		"peca": "braco",
+		"rotulo": "Braço 6 (posição 6)"
+	},
+	"p14__frame_agro": {
+		"explodir": "Vector3(2.3841857e-09, 0, -0.00029752016)",
+		"peca": "frame_agro",
+		"rotulo": ""
+	},
+	"p15__gps_rtk": {
+		"explodir": "Vector3(2.6226044e-07, 0.12610538, 0.0126217455)",
+		"peca": "gps_rtk",
+		"rotulo": ""
+	},
+	"p16__helice": {
+		"explodir": "Vector3(0.050946895, 0.14412044, -0.08824202)",
+		"peca": "helice",
+		"rotulo": "Hélice 1 (posição 1) — gira anti-horário (CCW)"
+	},
+	"p17__helice": {
+		"explodir": "Vector3(0.10189214, 0.14412044, -5.1498415e-07)",
+		"peca": "helice",
+		"rotulo": "Hélice 2 (posição 2) — gira horário (CW)"
+	},
+	"p18__helice": {
+		"explodir": "Vector3(0.050946325, 0.14412044, 0.0882434)",
+		"peca": "helice",
+		"rotulo": "Hélice 3 (posição 3) — gira anti-horário (CCW)"
+	},
+	"p19__helice": {
+		"explodir": "Vector3(-0.050946496, 0.14412044, 0.088241674)",
+		"peca": "helice",
+		"rotulo": "Hélice 4 (posição 4) — gira horário (CW)"
+	},
+	"p20__helice": {
+		"explodir": "Vector3(-0.10189214, 0.14412044, -4.2915346e-07)",
+		"peca": "helice",
+		"rotulo": "Hélice 5 (posição 5) — gira anti-horário (CCW)"
+	},
+	"p21__helice": {
+		"explodir": "Vector3(-0.05094658, 0.14412044, -0.08824309)",
+		"peca": "helice",
+		"rotulo": "Hélice 6 (posição 6) — gira horário (CW)"
+	},
+	"p22__motor": {
+		"explodir": "Vector3(0.050946496, 0.07206022, -0.08539068)",
+		"peca": "motor",
+		"rotulo": "Motor 1 (posição 1) — gira anti-horário (CCW)"
+	},
+	"p23__motor": {
+		"explodir": "Vector3(0.09969252, 0.07206022, 0.00012643733)",
+		"peca": "motor",
+		"rotulo": "Motor 2 (posição 2) — gira horário (CW)"
+	},
+	"p24__motor": {
+		"explodir": "Vector3(0.048748452, 0.07206022, 0.088105574)",
+		"peca": "motor",
+		"rotulo": "Motor 3 (posição 3) — gira anti-horário (CCW)"
+	},
+	"p25__motor": {
+		"explodir": "Vector3(-0.050946496, 0.07206022, 0.08538973)",
+		"peca": "motor",
+		"rotulo": "Motor 4 (posição 4) — gira horário (CW)"
+	},
+	"p26__motor": {
+		"explodir": "Vector3(-0.09969252, 0.07206022, -0.00012738147)",
+		"peca": "motor",
+		"rotulo": "Motor 5 (posição 5) — gira anti-horário (CCW)"
+	},
+	"p27__motor": {
+		"explodir": "Vector3(-0.048748452, 0.07206022, -0.08810652)",
+		"peca": "motor",
+		"rotulo": "Motor 6 (posição 6) — gira horário (CW)"
+	},
+	"p28__tanque": {
+		"explodir": "Vector3(8.940696e-09, -0.054045167, 0.004406248)",
+		"peca": "tanque",
+		"rotulo": ""
+	},
+	"p29__trem_pouso": {
+		"explodir": "Vector3(0, -0.054045167, -2.0802021e-07)",
+		"peca": "trem_pouso",
+		"rotulo": ""
+	},
+	"p30__controladora_agro": {
+		"explodir": "Vector3(2.3841857e-09, 0.12610538, -0.00029752016)",
+		"peca": "controladora_agro",
+		"rotulo": "Controladora agrícola"
+	},
+	"p31__radar": {
+		"explodir": "Vector3(2.3841857e-09, 0.067556456, -0.019937525)",
+		"peca": "radar",
+		"rotulo": "Radar de terreno"
+	}
+}

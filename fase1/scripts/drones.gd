@@ -9,7 +9,19 @@ var kit := Kit.new()
 const ROTULOS_POSICAO_4 := ["frente direita", "trás direita", "trás esquerda", "frente esquerda"]
 
 
+const PASTA_FINAL := "res://modelos/final/"
+var usar_final := true
+
+
 func montar(id: String) -> Node3D:
+	if usar_final and ResourceLoader.exists(PASTA_FINAL + id + ".glb"):
+		return montar_final(id)
+	return montar_cad(id)
+
+
+func montar_cad(id: String) -> Node3D:
+	if id == "whoop65":
+		return _montar_whoop()
 	var raiz := Node3D.new()
 	raiz.name = id
 	var cena: PackedScene = load("res://modelos/%s.glb" % id)
@@ -35,7 +47,6 @@ func montar(id: String) -> Node3D:
 	match id:
 		"quad450": _completar_quad450(raiz)
 		"fpv5": _completar_fpv5(raiz)
-		"whoop65": _completar_whoop(raiz)
 		"hexa_agro": _completar_hexa(raiz)
 	_definir_explosao(raiz)
 	return raiz
@@ -77,40 +88,179 @@ func _melhorar_material(id: String, chave: String, mi: MeshInstance3D) -> void:
 		var c := Color(0.7, 0.7, 0.7)
 		if orig is BaseMaterial3D:
 			c = (orig as BaseMaterial3D).albedo_color
+		elif orig is ShaderMaterial:
+			mi.set_surface_override_material(s, orig)
+			continue
+		# branco puro estoura na luz: puxa para um branco de plástico real
+		if c.get_luminance() > 0.85:
+			c = c.darkened(0.12)
 		var lum := c.get_luminance()
+		var sat := c.s
 		var novo: Material = null
 		match chave:
 			"frame_carbono", "braco":
 				if id == "quad450" and chave == "braco":
 					var frente := String(mi.name).begins_with("braco__1") or String(mi.name).begins_with("braco__4")
-					novo = kit.cor(Color(0.72, 0.06, 0.05) if frente else Color(0.9, 0.9, 0.88), 0.38, 0.0, 0.5)
+					novo = kit.plastico(Color(0.62, 0.05, 0.04) if frente else Color(0.82, 0.82, 0.8), 0.42)
 				elif id == "fpv5" or (id == "hexa_agro" and lum < 0.2):
 					novo = kit.carbono(320.0 if id == "fpv5" else 140.0)
-				elif id == "quad450":
-					novo = kit.cor(c, 0.38, 0.0, 0.5)
 			"frame", "pdb":
 				if id == "quad450":
 					novo = kit.pcb(Color(0.05, 0.06, 0.07) if chave == "frame" else Color(0.06, 0.07, 0.08), Color(0.12, 0.13, 0.15), 1.0 if chave == "frame" else 2.0)
 			"motor":
-				novo = kit.cor(c, 0.3, 0.85) if lum > 0.08 else kit.cor(c, 0.35, 0.6)
+				if lum < 0.05:
+					novo = kit.metal_anodizado(Color(0.08, 0.08, 0.09))
+				elif sat > 0.25 or lum > 0.08:
+					novo = kit.metal_anodizado(c)
 			"helice":
-				novo = kit.cor(c, 0.42, 0.0, 0.3)
-			"placa_aio", "fc_stack", "esc_4em1":
-				if c.g > c.r * 1.5:
+				novo = kit.plastico(c, 0.36, 0.45)
+			"placa_aio", "fc_stack", "esc_4em1", "vtx":
+				if c.g > c.r * 1.5 and c.g > c.b:
 					novo = kit.pcb(Color(0.03, 0.14, 0.06), Color(0.06, 0.24, 0.1), 3.0)
-				elif lum < 0.12:
-					novo = kit.pcb(Color(0.03, 0.03, 0.035), Color(0.08, 0.08, 0.09), 4.0)
+				elif lum < 0.06:
+					novo = kit.pcb(Color(0.025, 0.025, 0.03), Color(0.07, 0.07, 0.08), 4.0)
+				elif c.r > 0.6 and c.g > 0.35 and c.b < 0.3:
+					novo = kit.ouro()
 			"frame_dutos":
+				novo = kit.plastico(Color(0.1, 0.45, 0.85) if id == "" else c, 0.48, 0.2)
+			"bateria":
+				if lum < 0.05:
+					novo = kit.plastico(Color(0.035, 0.035, 0.04), 0.55, 0.6)
+			"pixhawk":
 				if lum < 0.1:
-					novo = kit.carbono(900.0)
-				else:
-					novo = kit.cor(c, 0.4, 0.0, 0.25)
+					novo = kit.plastico(Color(0.07, 0.07, 0.075), 0.5, 0.25)
 		if novo == null:
-			novo = kit.cor(c, 0.45, 0.0)
+			if lum < 0.04:
+				novo = kit.plastico(c.lightened(0.03), 0.5, 0.2)
+			elif sat < 0.08 and lum > 0.25 and lum < 0.7:
+				novo = kit.cor(c, 0.32, 0.9)   # cinza médio do CAD costuma ser metal (parafusos, eixos)
+			else:
+				novo = kit.plastico(c, 0.45, 0.2)
 		mi.set_surface_override_material(s, novo)
 
 
+# ------------------------------------------------------------------ acabamento do Blender
+
+## Grava o drone montado em .glb (para o Blender assar a sombra de ambiente)
+## e um .json com os dados de cada peça.
+func exportar(id: String, pasta_abs: String) -> void:
+	var d := montar_cad(id)
+	var meta := {}
+	var i := 0
+	for p in d.get_children():
+		if not p.has_meta("peca"):
+			continue
+		var nome := "p%02d__%s" % [i, p.get_meta("peca")]
+		i += 1
+		meta[nome] = {"peca": p.get_meta("peca"), "rotulo": p.get_meta("rotulo", ""), "explodir": var_to_str(p.get_meta("explodir", Vector3.ZERO))}
+		p.name = nome
+		for f in p.find_children("*", "MeshInstance3D", true, false):
+			var mi := f as MeshInstance3D
+			var malha := mi.mesh.duplicate() as Mesh
+			for s in malha.get_surface_count():
+				var m := mi.get_active_material(s)
+				var ph := StandardMaterial3D.new()
+				if m is BaseMaterial3D:
+					ph = (m as BaseMaterial3D).duplicate()
+				elif m is ShaderMaterial:
+					ph.albedo_color = Color(0.05, 0.05, 0.05)
+				ph.resource_name = m.resource_name if m else "cor|0.7,0.7,0.7|0.5|0|0"
+				malha.surface_set_material(s, ph)
+				mi.set_surface_override_material(s, null)
+			mi.mesh = malha
+	var doc := GLTFDocument.new()
+	var st := GLTFState.new()
+	doc.append_from_scene(d, st)
+	doc.write_to_filesystem(st, pasta_abs.path_join(id + "_src.glb"))
+	var f := FileAccess.open(pasta_abs.path_join(id + ".json"), FileAccess.WRITE)
+	f.store_string(JSON.stringify(meta, "\t"))
+	d.free()
+
+
+## Monta o drone a partir do .glb já assado no Blender (normais boas + AO no UV2).
+func montar_final(id: String) -> Node3D:
+	var raiz := Node3D.new()
+	raiz.name = id
+	var meta: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(PASTA_FINAL + id + ".json"))
+	var ao: Texture2D = load(PASTA_FINAL + id + "_ao.png") if ResourceLoader.exists(PASTA_FINAL + id + "_ao.png") else null
+	var cena: PackedScene = load(PASTA_FINAL + id + ".glb")
+	var modelo := cena.instantiate()
+	var pecas := {}
+	var cache_ao := {}
+	for filho in modelo.find_children("*", "MeshInstance3D", true, false):
+		var mi := filho as MeshInstance3D
+		# sobe até o nó da peça (nome "pNN__chave")
+		var n: Node = mi
+		var nome_peca := ""
+		while n and n != modelo:
+			var limpo := String(n.name).get_slice(".", 0)
+			if meta.has(limpo):
+				nome_peca = limpo
+				break
+			n = n.get_parent()
+		if nome_peca == "":
+			continue
+		if not pecas.has(nome_peca):
+			var info: Dictionary = meta[nome_peca]
+			pecas[nome_peca] = kit.peca(raiz, info["peca"], info["rotulo"], str_to_var(info["explodir"]))
+		var t := _transform_global(mi)
+		mi.get_parent().remove_child(mi)
+		(pecas[nome_peca] as Node3D).add_child(mi)
+		mi.transform = t
+		for s in mi.mesh.get_surface_count():
+			var orig := mi.mesh.surface_get_material(s)
+			var receita := String(orig.resource_name).get_slice(".", 0) if orig else ""
+			var base := kit.de_receita(receita)
+			if base == null:
+				base = orig if orig else kit.cor(Color(0.7, 0.7, 0.7))
+			mi.set_surface_override_material(s, _com_ao(base, ao, cache_ao))
+	modelo.free()
+	return raiz
+
+
+func _com_ao(base: Material, ao: Texture2D, cache_ao: Dictionary) -> Material:
+	if ao == null:
+		return base
+	if cache_ao.has(base):
+		return cache_ao[base]
+	var m := base.duplicate()
+	if m is BaseMaterial3D:
+		var bm := m as BaseMaterial3D
+		if bm.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED:
+			bm.ao_enabled = true
+			bm.ao_texture = ao
+			bm.ao_on_uv2 = true
+			bm.ao_light_affect = 0.35
+			bm.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	elif m is ShaderMaterial:
+		(m as ShaderMaterial).set_shader_parameter("ao_tex", ao)
+		(m as ShaderMaterial).set_shader_parameter("usar_ao", true)
+	cache_ao[base] = m
+	return m
+
+
 # ------------------------------------------------------------------ utilidades
+
+## Coloca uma peça vinda do CAD (modelos/pecas/<arquivo>.glb) dentro do nó `pai`.
+func _cad(pai: Node3D, arquivo: String, chave: String, pos := Vector3.ZERO, rot := Vector3.ZERO, esc := 1.0) -> Node3D:
+	var cena: PackedScene = load("res://modelos/pecas/%s.glb" % arquivo)
+	var inst := cena.instantiate()
+	var n := Node3D.new()
+	n.name = arquivo
+	pai.add_child(n)
+	n.position = pos
+	n.rotation = rot
+	n.scale = Vector3.ONE * esc
+	for f in inst.find_children("*", "MeshInstance3D", true, false):
+		var mi := f as MeshInstance3D
+		var t := _transform_global(mi)
+		mi.get_parent().remove_child(mi)
+		n.add_child(mi)
+		mi.transform = t
+		_melhorar_material("", chave, mi)
+	inst.free()
+	return n
+
 
 func _aabb(n: Node3D) -> AABB:
 	var r := AABB()
@@ -168,49 +318,36 @@ func _completar_quad450(r: Node3D) -> void:
 	var y_topo := topo.end.y
 	var c := topo.get_center()
 	var branco := kit.cor(Color(0.88, 0.88, 0.86), 0.45)
-	# Pixhawk 2.4.8 sobre amortecedor
+	# Pixhawk 2.4.8 (CAD) sobre a placa amortecedora
 	var px := kit.peca(r, "pixhawk", "Controladora Pixhawk 2.4.8")
-	px.position = Vector3(c.x, y_topo, c.z - 0.005)
-	kit.caixa(px, Vector3(0.05, 0.004, 0.05), kit.cor(Color(0.1, 0.1, 0.1), 0.8), Vector3(0, 0.002, 0))
+	px.position = Vector3(c.x, y_topo, c.z - 0.004)
+	kit.caixa(px, Vector3(0.052, 0.003, 0.052), kit.cor(Color(0.06, 0.06, 0.065), 0.85), Vector3(0, 0.0015, 0))
 	for sx: float in [-1.0, 1.0]:
 		for sz: float in [-1.0, 1.0]:
-			kit.esfera(px, 0.0045, kit.cor(Color(0.15, 0.15, 0.17), 0.7), Vector3(sx * 0.019, 0.007, sz * 0.019))
-	kit.caixa_redonda(px, Vector3(0.05, 0.016, 0.082), 0.004, branco, Vector3(0, 0.019, 0))
-	kit.caixa(px, Vector3(0.042, 0.002, 0.07), kit.cor(Color(0.2, 0.2, 0.22), 0.5), Vector3(0, 0.0275, 0))
-	kit.caixa(px, Vector3(0.01, 0.0025, 0.022), kit.cor(Color(0.9, 0.5, 0.1), 0.4), Vector3(0, 0.029, 0.012))  # seta de orientação
-	kit.caixa(px, Vector3(0.006, 0.0025, 0.01), kit.cor(Color(0.9, 0.5, 0.1), 0.4), Vector3(0, 0.029, 0.026), Vector3(0, PI / 4, 0))
-	for i in 8:
-		kit.caixa(px, Vector3(0.004, 0.005, 0.004), kit.cor(Color(0.95, 0.95, 0.93), 0.5), Vector3(-0.018 + i * 0.005, 0.016, -0.042))
-	# mastro com GPS
+			kit.esfera(px, 0.0042, kit.cor(Color(0.12, 0.12, 0.13), 0.75), Vector3(sx * 0.02, 0.0055, sz * 0.02))
+	kit.caixa(px, Vector3(0.05, 0.002, 0.075), kit.cor(Color(0.07, 0.07, 0.075), 0.8), Vector3(0, 0.0095, 0))
+	_cad(px, "pixhawk", "pixhawk", Vector3(0, 0.0105, 0))
+	# mastro dobrável com GPS M8N (CAD)
 	var gps := kit.peca(r, "gps", "GPS + bússola (M8N)")
-	gps.position = Vector3(c.x, y_topo, c.z - 0.065)
-	kit.cil(gps, 0.012, 0.004, kit.preto_fosco(), Vector3(0, 0.002, 0))
-	kit.cil(gps, 0.003, 0.11, kit.carbono(400.0), Vector3(0, 0.058, 0), Vector3.ZERO, 12)
-	kit.cil(gps, 0.03, 0.014, kit.cor(Color(0.08, 0.08, 0.09), 0.35, 0.0, 0.5), Vector3(0, 0.12, 0), Vector3.ZERO, 40)
-	kit.cil(gps, 0.026, 0.002, kit.cor(Color(0.12, 0.12, 0.13), 0.3), Vector3(0, 0.128, 0), Vector3.ZERO, 40)
-	kit.caixa(gps, Vector3(0.006, 0.0015, 0.016), kit.cor(Color(0.9, 0.9, 0.9), 0.4), Vector3(0, 0.1295, 0.004))
-	kit.cabo(gps, [Vector3(0, 0.115, 0.005), Vector3(0.006, 0.06, 0.01), Vector3(0.0, 0.02, 0.03)], 0.0012, kit.cor(Color(0.85, 0.85, 0.85), 0.5))
-	# bateria 3S 5000 mAh embaixo do frame, presa com fita
-	var altura_bat := 0.027
-	var y_bat := baixo.position.y - altura_bat / 2 - 0.002
-	var bat := kit.bateria(r, "Bateria LiPo 3S 5000 mAh", Vector3(c.x, y_bat, c.z), Vector3(0.048, altura_bat, 0.14), Color(0.12, 0.12, 0.14), Color(0.85, 0.1, 0.1), Vector3.ZERO, 1.0)
-	kit.fita(bat, Vector3(0, 0, -0.03), 0.02, Vector2(0.048, altura_bat))
-	kit.fita(bat, Vector3(0, 0, 0.035), 0.02, Vector2(0.048, altura_bat))
-	# 4 ESCs presos nos braços
+	gps.position = Vector3(c.x, y_topo, c.z + 0.07)
+	_cad(gps, "gps", "gps", Vector3.ZERO, Vector3(0, PI, 0))
+	# bateria 3S 5000 mAh (CAD) embaixo do frame, presa com duas fitas
+	var bat := kit.peca(r, "bateria", "Bateria LiPo 3S 5000 mAh")
+	var bat_h := 0.027
+	bat.position = Vector3(c.x, baixo.position.y - bat_h - 0.002, c.z)
+	_cad(bat, "bat3s", "bateria")
+	kit.fita(bat, Vector3(0, bat_h / 2, -0.035), 0.02, Vector2(0.0445, bat_h), Color(0.08, 0.08, 0.09))
+	kit.fita(bat, Vector3(0, bat_h / 2, 0.035), 0.02, Vector2(0.0445, bat_h), Color(0.08, 0.08, 0.09))
+	# 4 ESCs 30 A (CAD) presos embaixo dos braços, com os fios indo para o motor
 	var motores := _pecas(r, "motor")
 	for i in motores.size():
 		var m := _aabb(motores[i]).get_center()
 		var dir := Vector3(m.x - c.x, 0, m.z - c.z)
-		var p := Vector3(c.x, 0, c.z) + dir * 0.45
+		var p := Vector3(c.x, 0, c.z) + dir * 0.5
 		var esc := kit.peca(r, "esc", "ESC %d (30 A)" % (i + 1))
-		esc.position = Vector3(p.x, _aabb(_pecas(r, "braco")[i]).end.y - 0.006, p.z)
+		esc.position = Vector3(p.x, _aabb(_pecas(r, "braco")[i]).position.y + 0.004, p.z)
 		esc.rotation.y = atan2(dir.x, dir.z)
-		kit.caixa_redonda(esc, Vector3(0.022, 0.008, 0.05), 0.003, kit.translucido(Color(0.15, 0.35, 0.8, 0.85), 0.3), Vector3(0, 0.004, 0))
-		kit.placa(esc, Vector3(0.019, 0.0012, 0.046), Color(0.05, 0.12, 0.3), 10.0 + i, Vector3(0, 0.003, 0), Vector3.ZERO, 6)
-		for k in 3:
-			kit.cabo(esc, [Vector3(-0.005 + k * 0.005, 0.004, 0.025), Vector3(-0.005 + k * 0.005, 0.006, 0.05), Vector3(-0.004 + k * 0.004, 0.003, 0.075)], 0.0011, kit.cor(Color(0.05, 0.05, 0.05), 0.5))
-		kit.cabo(esc, [Vector3(0.004, 0.004, -0.025), Vector3(0.004, 0.003, -0.05), Vector3(0.0, 0.0, -0.07)], 0.0013, kit.cor(Color(0.75, 0.05, 0.04), 0.45))
-		kit.cabo(esc, [Vector3(-0.004, 0.004, -0.025), Vector3(-0.004, 0.003, -0.05), Vector3(0.0, 0.0, -0.068)], 0.0013, kit.cor(Color(0.04, 0.04, 0.04), 0.45))
+		_cad(esc, "esc30", "esc", Vector3(0, -0.018, 0))
 	# receptor e rádio de telemetria
 	var rx := kit.peca(r, "receptor", "Receptor de rádio (FlySky iA6B)")
 	rx.position = Vector3(c.x + 0.045, y_topo, c.z + 0.03)
@@ -252,9 +389,15 @@ func _completar_fpv5(r: Node3D) -> void:
 	cap.position = Vector3(esc.end.x - 0.004, esc.position.y + 0.004, esc.position.z - 0.006)
 	kit.cil(cap, 0.005, 0.016, kit.cor(Color(0.05, 0.05, 0.06), 0.3, 0.0, 0.6), Vector3.ZERO, Vector3(PI / 2, 0, 0))
 	kit.cil(cap, 0.0051, 0.004, kit.cor(Color(0.5, 0.5, 0.52), 0.35, 0.7), Vector3(0, 0, -0.0085), Vector3(PI / 2, 0, 0))
-	# fita da bateria
+	# a bateria veio de lado no CAD: deita (gira 90° no eixo comprido) e assenta no frame
 	var bat := _pecas(r, "bateria")
 	if bat.size() > 0:
+		var b0 := _aabb(bat[0])
+		var cc := b0.get_center()
+		var giro := Transform3D(Basis(Vector3.BACK, PI / 2), Vector3.ZERO)
+		bat[0].transform = Transform3D(Basis(), cc) * giro * Transform3D(Basis(), -cc) * bat[0].transform
+		var b1 := _aabb(bat[0])
+		bat[0].position.y += b0.position.y - b1.position.y
 		var b := _aabb(bat[0])
 		var fita := Node3D.new()
 		bat[0].add_child(fita)
@@ -262,41 +405,43 @@ func _completar_fpv5(r: Node3D) -> void:
 		kit.fita(fita, b.get_center() + Vector3(0, 0, b.size.z * 0.2), 0.02, Vector2(b.size.x, b.size.y), Color(0.75, 0.15, 0.05))
 
 
-func _completar_whoop(r: Node3D) -> void:
-	var placa := _aabb(_pecas(r, "placa_aio")[0])
-	var c := placa.get_center()
-	# o CAD traz as hélices como discos: troca por hélices de 3 pás em cima de cada motor
-	for h in _pecas(r, "helice"):
-		h.queue_free()
-		r.remove_child(h)
-	var motores := _pecas(r, "motor")
-	for i in motores.size():
-		var mb := _aabb(motores[i])
-		var mc := mb.get_center()
-		var ang := atan2(mc.x - c.x, -(mc.z - c.z))
-		var idx := int(posmod(ang, TAU) / (PI / 2.0))
-		motores[i].set_meta("rotulo", _rotulo("whoop65", "motor", idx + 1))
-		var cw := idx % 2 == 1
-		var mat := kit.cor(Color(0.85, 0.85, 0.82) if cw else Color(0.1, 0.1, 0.1), 0.45)
-		kit.helice(r, _rotulo("whoop65", "helice", idx + 1), Vector3(mc.x, mb.end.y + 0.0006, mc.z), 0.031, 0.022, 3, mat, cw, Vector3.ZERO, 0.2)
-	# placa AIO de verdade em cima da placa do CAD
-	var aio := kit.peca(r, "placa_aio", "Placa AIO (FC + ESC + receptor + VTX)")
-	aio.position = Vector3(c.x, placa.end.y + 0.0045, c.z)
-	kit.placa(aio, Vector3(0.026, 0.0012, 0.026), Color(0.03, 0.03, 0.035), 41.0, Vector3.ZERO, Vector3.ZERO, 18)
-	kit.caixa(aio, Vector3(0.0045, 0.0012, 0.0045), kit.cor(Color(0.06, 0.06, 0.07), 0.3), Vector3(0, 0.0012, 0))
+func _montar_whoop() -> Node3D:
+	var r := Node3D.new()
+	r.name = "whoop65"
+	# frame BetaFPV Meteor65 Pro (CAD)
+	var fr := kit.peca(r, "frame_dutos", "Frame Meteor65 Pro (dutos)")
+	_cad(fr, "meteor65", "frame_dutos")
+	var d := 0.0231   # centro dos motores (65 mm na diagonal)
+	var posicoes := [Vector2(d, -d), Vector2(d, d), Vector2(-d, d), Vector2(-d, -d)]
+	for i in 4:
+		var pz: Vector2 = posicoes[i]
+		var cw := i % 2 == 1
+		var m := kit.motor(r, _rotulo("whoop65", "motor", i + 1), Vector3(pz.x, 0.0024, pz.y), 0.0086, 0.0104, Color(0.82, 0.55, 0.12) if cw else Color(0.1, 0.1, 0.11), cw)
+		m.rotation.y = atan2(pz.x, pz.y) + PI
+		var mat := kit.cor(Color(0.1, 0.1, 0.11) if cw else Color(0.85, 0.85, 0.82), 0.38, 0.0, 0.4)
+		kit.helice(r, _rotulo("whoop65", "helice", i + 1), Vector3(pz.x, 0.0024 + 0.0108, pz.y), 0.031, 0.022, 3, mat, cw, Vector3.ZERO, 0.22)
+	# placa AIO 26x26 sobre borrachinhas
+	var aio := kit.peca(r, "placa_aio", "Placa AIO (FC + 4 ESC + receptor ELRS + VTX)")
+	aio.position = Vector3(0, 0.0085, 0)
+	kit.placa(aio, Vector3(0.026, 0.0012, 0.026), Color(0.03, 0.03, 0.035), 41.0, Vector3.ZERO, Vector3.ZERO, 22)
+	kit.caixa(aio, Vector3(0.005, 0.001, 0.005), kit.cor(Color(0.06, 0.06, 0.07), 0.3), Vector3(0, 0.0011, 0))
 	for sx: float in [-1.0, 1.0]:
 		for sz: float in [-1.0, 1.0]:
-			kit.cil(aio, 0.0012, 0.0045, kit.cor(Color(0.1, 0.1, 0.1), 0.7), Vector3(sx * 0.0105, -0.0022, sz * 0.0105), Vector3.ZERO, 8)
-	# câmera com capota (canopy)
+			kit.cil(aio, 0.0013, 0.003, kit.cor(Color(0.85, 0.2, 0.1), 0.8), Vector3(sx * 0.0105, -0.0015, sz * 0.0105), Vector3.ZERO, 10)
+	kit.caixa(aio, Vector3(0.006, 0.0025, 0.004), kit.cor(Color(0.85, 0.85, 0.82), 0.5), Vector3(0, 0.0013, -0.0125))  # conector da bateria
+	# câmera nano + capota de plástico
 	var cam := kit.peca(r, "camera_fpv", "Câmera FPV nano + capota")
-	cam.position = Vector3(c.x, placa.end.y + 0.006, c.z + 0.004)
-	var capota := kit.esfera(cam, 0.016, kit.translucido(Color(0.9, 0.35, 0.05, 0.55), 0.25), Vector3(0, 0.002, 0), Vector3(0.95, 0.75, 1.1))
+	cam.position = Vector3(0, 0.01, 0.003)
+	var capota := kit.esfera(cam, 0.0145, kit.translucido(Color(0.95, 0.4, 0.08, 0.5), 0.2), Vector3(0, 0.0, 0), Vector3(0.95, 0.62, 1.15))
 	capota.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	kit.caixa(cam, Vector3(0.012, 0.012, 0.01), kit.cor(Color(0.05, 0.05, 0.05), 0.4), Vector3(0, 0.006, 0.006), Vector3(-0.35, 0, 0))
-	kit.cil(cam, 0.0042, 0.006, kit.cor(Color(0.02, 0.02, 0.025), 0.1, 0.4), Vector3(0, 0.008, 0.013), Vector3(PI / 2 - 0.35, 0, 0), 20)
-	kit.antena_fio(cam, Vector3(0, 0.004, -0.01), Vector3(0, 0.6, -1), 0.02, 0.0006)
-	# bateria 1S embaixo
-	kit.bateria(r, "Bateria LiPo 1S 300 mAh", Vector3(c.x, placa.position.y - 0.0055, c.z), Vector3(0.012, 0.0075, 0.046), Color(0.9, 0.85, 0.2), Color(0.1, 0.1, 0.1), Vector3.ZERO, 0.22)
+	kit.caixa(cam, Vector3(0.012, 0.012, 0.009), kit.cor(Color(0.05, 0.05, 0.05), 0.4), Vector3(0, 0.005, 0.007), Vector3(-0.3, 0, 0))
+	kit.cil(cam, 0.004, 0.006, kit.cor(Color(0.02, 0.02, 0.025), 0.08, 0.4), Vector3(0, 0.0065, 0.0135), Vector3(PI / 2 - 0.3, 0, 0), 24)
+	kit.antena_fio(cam, Vector3(0, 0.004, -0.012), Vector3(0, 0.6, -1), 0.02, 0.0006)
+	# bateria 1S presa embaixo
+	var bat := kit.bateria(r, "Bateria LiPo 1S 300 mAh", Vector3(0, -0.004, 0), Vector3(0.012, 0.0072, 0.045), Color(0.95, 0.8, 0.15), Color(0.1, 0.1, 0.1), Vector3.ZERO, 0.22)
+	bat.rotation.y = 0.0
+	_definir_explosao(r)
+	return r
 
 
 func _completar_hexa(r: Node3D) -> void:

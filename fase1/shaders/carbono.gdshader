@@ -4,6 +4,10 @@ uniform float escala = 260.0;   // fios por metro
 uniform vec3 cor : source_color = vec3(0.028, 0.029, 0.032);
 uniform float brilho_fio = 0.045;
 
+uniform sampler2D ao_tex : hint_default_white, filter_linear_mipmap;
+uniform bool usar_ao = false;
+uniform float forca_ao = 1.0;
+
 varying vec3 lp;
 varying vec3 ln;
 
@@ -34,4 +38,8 @@ void fragment() {
 	SPECULAR = 0.55;
 	CLEARCOAT = 0.7;
 	CLEARCOAT_ROUGHNESS = 0.15;
+	if (usar_ao) {
+		AO = mix(1.0, texture(ao_tex, UV2).r, forca_ao);
+		AO_LIGHT_AFFECT = 0.35;
+	}
 }

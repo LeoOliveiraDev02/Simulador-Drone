@@ -5,6 +5,10 @@ uniform vec3 cor_trilha : source_color = vec3(0.05, 0.2, 0.09);
 uniform float escala = 900.0;
 uniform float semente = 0.0;
 
+uniform sampler2D ao_tex : hint_default_white, filter_linear_mipmap;
+uniform bool usar_ao = false;
+uniform float forca_ao = 1.0;
+
 varying vec3 lp;
 varying vec3 ln;
 
@@ -40,4 +44,8 @@ void fragment() {
 	METALLIC = metal;
 	ROUGHNESS = rug;
 	CLEARCOAT = 0.4;
+	if (usar_ao) {
+		AO = mix(1.0, texture(ao_tex, UV2).r, forca_ao);
+		AO_LIGHT_AFFECT = 0.35;
+	}
 }

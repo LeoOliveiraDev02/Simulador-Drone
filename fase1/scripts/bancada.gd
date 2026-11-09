@@ -63,6 +63,17 @@ func _ready() -> void:
 			modo_prints = true
 		elif a == "--leve":
 			leve = true
+		elif a == "--exportar":
+			var pasta := ProjectSettings.globalize_path("res://modelos/final")
+			DirAccess.make_dir_recursive_absolute(pasta)
+			var dd: Array = JSON.parse_string(FileAccess.get_file_as_string("res://dados/drones.json"))["drones"]
+			for info in dd:
+				montador.exportar(info["id"], pasta)
+				print("exportado ", info["id"])
+			get_tree().quit()
+			return
+		elif a == "--cad":
+			montador.usar_final = false
 		elif a.begins_with("--esperar="):
 			quadros_espera = int(a.split("=")[1])
 	if leve:
@@ -123,6 +134,28 @@ func _montar_ambiente() -> void:
 	we.environment = env
 	add_child(we)
 
+	# sonda de reflexo: metais e carbono refletem a bancada e as luzes de verdade
+	var sonda := ReflectionProbe.new()
+	add_child(sonda)
+	sonda.position = Vector3(0, ALTURA_BANCADA + 0.4, 0)
+	sonda.size = Vector3(4, 2.5, 3)
+	sonda.box_projection = true
+	sonda.update_mode = ReflectionProbe.UPDATE_ONCE
+	sonda.intensity = 1.0
+	sonda.ambient_mode = ReflectionProbe.AMBIENT_DISABLED
+	# painel de luz (softbox) que aparece refletido no carbono e nos motores
+	var softbox := MeshInstance3D.new()
+	var plano := QuadMesh.new()
+	plano.size = Vector2(1.2, 0.6)
+	softbox.mesh = plano
+	var emis := StandardMaterial3D.new()
+	emis.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	emis.albedo_color = Color(1.0, 0.97, 0.92) * 1.6
+	softbox.material_override = emis
+	softbox.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(softbox)
+	softbox.look_at_from_position(Vector3(0.4, ALTURA_BANCADA + 1.7, 0.4), Vector3(0, ALTURA_BANCADA, 0), Vector3.UP)
+	softbox.rotate_object_local(Vector3.RIGHT, PI)
 	# luminária em cima da bancada (luz principal, quente)
 	var lum := SpotLight3D.new()
 	add_child(lum)
@@ -323,6 +356,8 @@ func _montar_camera() -> void:
 
 
 func _process(delta: float) -> void:
+	if camera == null:
+		return
 	parado_ha += delta
 	if not modo_prints and parado_ha > 6.0 and peca_sel == null:
 		yaw += delta * 0.12

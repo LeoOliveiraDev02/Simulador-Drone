@@ -1,0 +1,107 @@
+{
+	"p00__antena_vtx": {
+		"explodir": "Vector3(-5.7220458e-08, 0.02906424, -0.005894679)",
+		"peca": "antena_vtx",
+		"rotulo": ""
+	},
+	"p01__bateria": {
+		"explodir": "Vector3(6.794244e-05, -0.012456103, -0.0017739361)",
+		"peca": "bateria",
+		"rotulo": ""
+	},
+	"p02__braco": {
+		"explodir": "Vector3(0.0103636775, 0.015570128, -0.0065041203)",
+		"peca": "braco",
+		"rotulo": "Braço 1 (frente direita)"
+	},
+	"p03__braco": {
+		"explodir": "Vector3(0.010350968, 0.015570128, 0.011534081)",
+		"peca": "braco",
+		"rotulo": "Braço 2 (trás direita)"
+	},
+	"p04__braco": {
+		"explodir": "Vector3(-0.010351222, 0.015570128, 0.011534086)",
+		"peca": "braco",
+		"rotulo": "Braço 3 (trás esquerda)"
+	},
+	"p05__braco": {
+		"explodir": "Vector3(-0.010363938, 0.015570128, -0.0065041124)",
+		"peca": "braco",
+		"rotulo": "Braço 4 (frente esquerda)"
+	},
+	"p06__camera_fpv": {
+		"explodir": "Vector3(8.0302357e-07, 0.02906424, 0.00658956)",
+		"peca": "camera_fpv",
+		"rotulo": ""
+	},
+	"p07__esc_4em1": {
+		"explodir": "Vector3(-5.7220458e-08, -0.012456103, -0.0024198745)",
+		"peca": "esc_4em1",
+		"rotulo": ""
+	},
+	"p08__fc_stack": {
+		"explodir": "Vector3(-2.8533637e-05, 0.02906424, 0.001114076)",
+		"peca": "fc_stack",
+		"rotulo": ""
+	},
+	"p09__frame_carbono": {
+		"explodir": "Vector3(4.2676925e-07, 0, 0.0012655098)",
+		"peca": "frame_carbono",
+		"rotulo": ""
+	},
+	"p10__helice": {
+		"explodir": "Vector3(0.016702566, 0.033216275, -0.013994364)",
+		"peca": "helice",
+		"rotulo": "Hélice 1 (frente direita) — gira anti-horário (CCW)"
+	},
+	"p11__helice": {
+		"explodir": "Vector3(0.01680364, 0.033216275, 0.013886829)",
+		"peca": "helice",
+		"rotulo": "Hélice 2 (trás direita) — gira horário (CW)"
+	},
+	"p12__helice": {
+		"explodir": "Vector3(-0.016803196, 0.033216275, 0.013886393)",
+		"peca": "helice",
+		"rotulo": "Hélice 3 (trás esquerda) — gira anti-horário (CCW)"
+	},
+	"p13__helice": {
+		"explodir": "Vector3(-0.016278243, 0.033216275, -0.01386469)",
+		"peca": "helice",
+		"rotulo": "Hélice 4 (frente esquerda) — gira horário (CW)"
+	},
+	"p14__motor": {
+		"explodir": "Vector3(0.016563315, 0.016608138, -0.011357304)",
+		"peca": "motor",
+		"rotulo": "Motor 1 (frente direita) — gira anti-horário (CCW)"
+	},
+	"p15__motor": {
+		"explodir": "Vector3(0.016533146, 0.016608138, 0.016406368)",
+		"peca": "motor",
+		"rotulo": "Motor 2 (trás direita) — gira horário (CW)"
+	},
+	"p16__motor": {
+		"explodir": "Vector3(-0.01653311, 0.016608138, 0.016407255)",
+		"peca": "motor",
+		"rotulo": "Motor 3 (trás esquerda) — gira anti-horário (CCW)"
+	},
+	"p17__motor": {
+		"explodir": "Vector3(-0.016563034, 0.016608138, -0.011358194)",
+		"peca": "motor",
+		"rotulo": "Motor 4 (frente esquerda) — gira horário (CW)"
+	},
+	"p18__vtx": {
+		"explodir": "Vector3(3.016427e-05, 0.02906424, -0.0032323056)",
+		"peca": "vtx",
+		"rotulo": ""
+	},
+	"p19__receptor": {
+		"explodir": "Vector3(0, 0.02906424, -0.0052177915)",
+		"peca": "receptor",
+		"rotulo": "Receptor ExpressLRS"
+	},
+	"p20__capacitor": {
+		"explodir": "Vector3(0.0011399428, 0.015570128, -0.00871219)",
+		"peca": "capacitor",
+		"rotulo": "Capacitor 35 V 1000 µF"
+	}
+}

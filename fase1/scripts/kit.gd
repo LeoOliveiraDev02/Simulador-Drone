@@ -25,6 +25,7 @@ func cor(c: Color, rug := 0.5, metal := 0.0, verniz := 0.0) -> StandardMaterial3
 		m.clearcoat_enabled = true
 		m.clearcoat = verniz
 		m.clearcoat_roughness = 0.2
+	m.resource_name = "cor|%s|%s|%s|%s" % [_c(c), rug, metal, verniz]
 	cache[k] = m
 	return m
 
@@ -36,6 +37,7 @@ func carbono(escala := 260.0) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = SH_CARBONO
 	m.set_shader_parameter("escala", escala)
+	m.resource_name = "carbono|%s" % escala
 	cache[k] = m
 	return m
 
@@ -49,6 +51,7 @@ func pcb(verniz: Color, trilha: Color, semente := 0.0) -> ShaderMaterial:
 	m.set_shader_parameter("cor_verniz", Vector3(verniz.r, verniz.g, verniz.b))
 	m.set_shader_parameter("cor_trilha", Vector3(trilha.r, trilha.g, trilha.b))
 	m.set_shader_parameter("semente", semente)
+	m.resource_name = "pcb|%s|%s|%s" % [_c(verniz), _c(trilha), semente]
 	cache[k] = m
 	return m
 
@@ -62,8 +65,101 @@ func translucido(c: Color, rug := 0.2) -> StandardMaterial3D:
 	m.roughness = rug
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.resource_name = "tr|%s|%s|%s" % [_c(c), c.a, rug]
 	cache[k] = m
 	return m
+
+
+## Plástico injetado: rugosidade com microtextura e verniz leve.
+func plastico(c: Color, rug := 0.45, verniz := 0.2) -> StandardMaterial3D:
+	var k := "pl_%s_%s_%s" % [c.to_html(), rug, verniz]
+	if cache.has(k):
+		return cache[k]
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c
+	m.roughness = rug
+	m.metallic = 0.0
+	m.specular = 0.45
+	if verniz > 0.0:
+		m.clearcoat_enabled = true
+		m.clearcoat = verniz
+		m.clearcoat_roughness = 0.35
+	m.detail_enabled = true
+	m.detail_normal = _ruido_normal()
+	m.detail_uv_layer = BaseMaterial3D.DETAIL_UV_1
+	m.uv1_triplanar = true
+	m.uv1_world_triplanar = false
+	m.uv1_scale = Vector3.ONE * 180.0
+	m.resource_name = "pl|%s|%s|%s" % [_c(c), rug, verniz]
+	cache[k] = m
+	return m
+
+
+## Alumínio anodizado escovado (sino dos motores): metálico com brilho alongado.
+func metal_anodizado(c: Color) -> StandardMaterial3D:
+	var k := "an_%s" % c.to_html()
+	if cache.has(k):
+		return cache[k]
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c.lightened(0.08)
+	m.metallic = 0.9
+	m.roughness = 0.28
+	m.anisotropy_enabled = true
+	m.anisotropy = 0.65
+	m.clearcoat_enabled = true
+	m.clearcoat = 0.3
+	m.clearcoat_roughness = 0.15
+	m.detail_enabled = true
+	m.detail_normal = _ruido_normal(true)
+	m.uv1_triplanar = true
+	m.uv1_scale = Vector3.ONE * 120.0
+	m.resource_name = "an|%s" % _c(c)
+	cache[k] = m
+	return m
+
+
+func _ruido_normal(escovado := false) -> NoiseTexture2D:
+	var k := "rn_%s" % escovado
+	if cache.has(k):
+		return cache[k]
+	var n := FastNoiseLite.new()
+	n.frequency = 0.08 if not escovado else 0.02
+	n.fractal_octaves = 3
+	var t := NoiseTexture2D.new()
+	t.noise = n
+	t.width = 256
+	t.height = 256 if not escovado else 16
+	t.seamless = true
+	t.as_normal_map = true
+	t.bump_strength = 1.5 if not escovado else 3.0
+	t.generate_mipmaps = true
+	cache[k] = t
+	return t
+
+
+func _c(c: Color) -> String:
+	return "%.4f,%.4f,%.4f" % [c.r, c.g, c.b]
+
+
+func _cor_de(t: String) -> Color:
+	var p := t.split(",")
+	return Color(float(p[0]), float(p[1]), float(p[2]))
+
+
+## Refaz um material a partir do nome (receita) gravado no .glb.
+func de_receita(nome: String) -> Material:
+	var p := nome.split("|")
+	match p[0]:
+		"cor": return cor(_cor_de(p[1]), float(p[2]), float(p[3]), float(p[4]))
+		"carbono": return carbono(float(p[1]))
+		"pcb": return pcb(_cor_de(p[1]), _cor_de(p[2]), float(p[3]))
+		"tr":
+			var c := _cor_de(p[1])
+			c.a = float(p[2])
+			return translucido(c, float(p[3]))
+		"pl": return plastico(_cor_de(p[1]), float(p[2]), float(p[3]))
+		"an": return metal_anodizado(_cor_de(p[1]))
+	return null
 
 
 # Cores comuns

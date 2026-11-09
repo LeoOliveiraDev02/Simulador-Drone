@@ -1,0 +1,127 @@
+{
+	"p00__braco": {
+		"explodir": "Vector3(0.017537866, 0.026383897, -0.017620472)",
+		"peca": "braco",
+		"rotulo": "Braço 1 (frente direita)"
+	},
+	"p01__braco": {
+		"explodir": "Vector3(0.01737383, 0.026383897, 0.01686155)",
+		"peca": "braco",
+		"rotulo": "Braço 2 (trás direita)"
+	},
+	"p02__braco": {
+		"explodir": "Vector3(-0.017195841, 0.026383897, 0.016550906)",
+		"peca": "braco",
+		"rotulo": "Braço 3 (trás esquerda)"
+	},
+	"p03__braco": {
+		"explodir": "Vector3(-0.017181437, 0.026383897, -0.0175777)",
+		"peca": "braco",
+		"rotulo": "Braço 4 (frente esquerda)"
+	},
+	"p04__frame": {
+		"explodir": "Vector3(-1.8671453e-05, 0, -0.00020793319)",
+		"peca": "frame",
+		"rotulo": ""
+	},
+	"p05__helice": {
+		"explodir": "Vector3(0.028954174, 0.056285646, -0.029181425)",
+		"peca": "helice",
+		"rotulo": "Hélice 1 (frente direita) — gira anti-horário (CCW)"
+	},
+	"p06__helice": {
+		"explodir": "Vector3(0.028755782, 0.056285646, 0.028401908)",
+		"peca": "helice",
+		"rotulo": "Hélice 2 (trás direita) — gira horário (CW)"
+	},
+	"p07__helice": {
+		"explodir": "Vector3(-0.028954174, 0.056285646, 0.028024133)",
+		"peca": "helice",
+		"rotulo": "Hélice 3 (trás esquerda) — gira anti-horário (CCW)"
+	},
+	"p08__helice": {
+		"explodir": "Vector3(-0.028852781, 0.056285646, -0.029204732)",
+		"peca": "helice",
+		"rotulo": "Hélice 4 (frente esquerda) — gira horário (CW)"
+	},
+	"p09__motor": {
+		"explodir": "Vector3(0.029090205, 0.028142823, -0.029148038)",
+		"peca": "motor",
+		"rotulo": "Motor 1 (frente direita) — gira anti-horário (CCW)"
+	},
+	"p10__motor": {
+		"explodir": "Vector3(0.028853215, 0.028142823, 0.028438447)",
+		"peca": "motor",
+		"rotulo": "Motor 2 (trás direita) — gira horário (CW)"
+	},
+	"p11__motor": {
+		"explodir": "Vector3(-0.02881814, 0.028142823, 0.02805752)",
+		"peca": "motor",
+		"rotulo": "Motor 3 (trás esquerda) — gira anti-horário (CCW)"
+	},
+	"p12__motor": {
+		"explodir": "Vector3(-0.028730785, 0.028142823, -0.02917555)",
+		"peca": "motor",
+		"rotulo": "Motor 4 (frente esquerda) — gira horário (CW)"
+	},
+	"p13__pdb": {
+		"explodir": "Vector3(0.00014510364, -0.021107119, -0.00018867015)",
+		"peca": "pdb",
+		"rotulo": ""
+	},
+	"p14__pixhawk": {
+		"explodir": "Vector3(-1.8671453e-05, 0.04924994, -0.00052793324)",
+		"peca": "pixhawk",
+		"rotulo": "Controladora Pixhawk 2.4.8"
+	},
+	"p15__gps": {
+		"explodir": "Vector3(-1.8671453e-05, 0.04924994, 0.0053920667)",
+		"peca": "gps",
+		"rotulo": "GPS + bússola (M8N)"
+	},
+	"p16__bateria": {
+		"explodir": "Vector3(-1.8671453e-05, -0.021107119, -0.00020793319)",
+		"peca": "bateria",
+		"rotulo": "Bateria LiPo 3S 5000 mAh"
+	},
+	"p17__esc": {
+		"explodir": "Vector3(0.014465944, 0.026383897, -0.015513974)",
+		"peca": "esc",
+		"rotulo": "ESC 1 (30 A)"
+	},
+	"p18__esc": {
+		"explodir": "Vector3(0.015108718, 0.026383897, 0.013927618)",
+		"peca": "esc",
+		"rotulo": "ESC 2 (30 A)"
+	},
+	"p19__esc": {
+		"explodir": "Vector3(-0.014372135, 0.026383897, 0.0144995535)",
+		"peca": "esc",
+		"rotulo": "ESC 3 (30 A)"
+	},
+	"p20__esc": {
+		"explodir": "Vector3(-0.015089567, 0.026383897, -0.01476401)",
+		"peca": "esc",
+		"rotulo": "ESC 4 (30 A)"
+	},
+	"p21__receptor": {
+		"explodir": "Vector3(0.0027229611, 0.04924994, 0.00061138626)",
+		"peca": "receptor",
+		"rotulo": "Receptor de rádio (FlySky iA6B)"
+	},
+	"p22__telemetria": {
+		"explodir": "Vector3(-0.0036186716, 0.04924994, 0.002832067)",
+		"peca": "telemetria",
+		"rotulo": "Rádio de telemetria 915 MHz"
+	},
+	"p23__buzzer": {
+		"explodir": "Vector3(-1.8671453e-05, 0.026383897, 0.0053920667)",
+		"peca": "buzzer",
+		"rotulo": "Buzzer e botão de segurança"
+	},
+	"p24__modulo_energia": {
+		"explodir": "Vector3(-1.8671453e-05, 0.026383897, 0.007062067)",
+		"peca": "modulo_energia",
+		"rotulo": "Módulo de energia"
+	}
+}
