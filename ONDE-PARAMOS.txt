@@ -1,6 +1,6 @@
 SIMULADOR DE DRONE — ONDE PARAMOS
 =================================
-Atualizado: 10/11/2026 03:00 (trabalho noturno)
+Atualizado: 10/11/2026 04:15 (trabalho noturno)
 
 >>> FOCO ATUAL (decidido por Leonardo em 10/11, 00:18): SÓ O DRONE E88 (dobrável) <<<
 Trabalho noturno autônomo: refinar o E88, fazer toda a física de voo e o mapa.
@@ -41,6 +41,9 @@ TAREFAS DA NOITE (em ordem)
       - eucaliptos finos e altos na fileira do fundo, base com H proporcional ao E88
       - VOAR_E88_LEVE.bat (qualidade baixa), F11 tela cheia, Esc abre a ajuda
       - verniz (clearcoat) nas peças brilhantes do E88 no Godot
+      - folhas das árvores balançam com o vento, primeiro voo guiado (tutorial de 6 passos)
+      - flip testado (sobe, gira 360° e recupera), câmera não vira durante o flip
+      - nota do pouso na base, inclinação no painel, vento começa fraco (1,5 m/s)
       NÃO FEITO: vacas no açude (tentei fazer por código e ficou com cara de desenho; ficou de fora)
 
 =================================
@@ -87,3 +90,8 @@ COMO CONTINUAR
    godot --path fase1 -- --prints --leve   (salva em fase1/prints)
 3. Novo modelo do GrabCAD: baixar pelo navegador do app (logado), pegar o .step
    em Downloads, rodar step_para_glb.py e preparar_drone.py (adicionar regras)
+
+PRÓXIMOS PASSOS (sugestões)
+- Leonardo testar no PC (VOAR_E88.bat) e dizer como ficou a sensação de voo e o desempenho
+- Rádio via USB (aparece como joystick; ajustar eixos/canais do modelo dele)
+- Montagem peça por peça do E88 (Fase 2) usando o mesmo modelo do Blender

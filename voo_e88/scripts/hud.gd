@@ -205,7 +205,8 @@ func atualizar(drone: E88, vento: Vento, camera: Camera3D, controle_nome: String
 	var txt := "Modo: %s%s\n" % [drone.nome_modo(), "  •  SEM CABEÇA" if drone.sem_cabeca else ""]
 	txt += "Motores: %s   (%s)\n" % ["LIGADOS" if drone.armado else "desligados", estado.get(drone.estado, drone.estado)]
 	txt += "Altura: %.1f m      Velocidade: %.1f m/s (%d km/h)\n" % [maxf(h, 0.0), vh, roundi(vh * 3.6)]
-	txt += "Subida: %+.1f m/s    Distância da base: %d m\n" % [v.y, roundi(distancia_base)]
+	var inc := rad_to_deg(acos(clampf(drone.global_transform.basis.y.y, -1.0, 1.0)))
+	txt += "Subida: %+.1f m/s    Inclinação: %d°    Distância da base: %d m\n" % [v.y, roundi(inc), roundi(distancia_base)]
 	txt += "Vento: %s" % vento.texto()
 	if drone.efeito_solo > 1.03 and drone.armado:
 		txt += "\nEfeito solo: +%d%% de força" % roundi((drone.efeito_solo - 1.0) * 100.0)
