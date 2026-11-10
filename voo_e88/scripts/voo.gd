@@ -147,7 +147,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 			JOY_BUTTON_Y: drone.trocar_modo()
 			JOY_BUTTON_X: _recomecar()
 			JOY_BUTTON_B: _emergencia()
-			JOY_BUTTON_START, JOY_BUTTON_BACK: _ajuda()
+			JOY_BUTTON_START: _ajuda()
+			JOY_BUTTON_BACK: drone.trocar_sem_cabeca()
+			JOY_BUTTON_RIGHT_STICK: drone.fazer_flip(Vector2(drone.e_roll, drone.e_pitch))
 			JOY_BUTTON_DPAD_UP: _vento(1.0)
 			JOY_BUTTON_DPAD_DOWN: _vento(-1.0)
 			JOY_BUTTON_DPAD_LEFT: camera.afastar(-0.3)
@@ -158,6 +160,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 		match ev.keycode:
 			KEY_SPACE: drone.decolar_ou_pousar()
 			KEY_M: drone.trocar_modo()
+			KEY_F: drone.fazer_flip(Vector2(drone.e_roll, drone.e_pitch))
+			KEY_K: drone.trocar_sem_cabeca()
 			KEY_R: _recomecar()
 			KEY_B: _emergencia()
 			KEY_H, KEY_F1: _ajuda()
@@ -334,6 +338,20 @@ func _teste_voo() -> void:
 	for i in 8:
 		await _esperar(1.0)
 		_log("pousando %ds" % (i + 1))
+	# flip para frente
+	drone.decolar_ou_pousar()
+	await _esperar(3.0)
+	drone.e_acel = 1.0
+	await _esperar(1.2)
+	drone.e_acel = 0.0
+	await _esperar(1.0)
+	_log("antes do flip")
+	drone.fazer_flip(Vector2(0, 1))
+	for i in 6:
+		await _esperar(0.2)
+		_log("flip %.1fs" % ((i + 1) * 0.2))
+	await _esperar(1.5)
+	_log("depois do flip")
 	# esteira: pairando atrás do galpão com vento forte
 	vento.velocidade = 6.0
 	var dv := Vector2(sin(vento.direcao), cos(vento.direcao))
@@ -404,4 +422,11 @@ func _tirar_prints() -> void:
 	hud.ajuda.visible = true
 	await _quadros(3)
 	_salvar_print("05_ajuda")
+	hud.ajuda.visible = false
+	drone.global_transform = Transform3D(Basis(Vector3.UP, 0.9), Vector3(-60, mapa.altura(-60, -150) + 12.0, -150))
+	camera.distancia = 2.0
+	camera.altura = 0.6
+	camera.posicionar_ja()
+	await _quadros(4)
+	_salvar_print("06_eucaliptos")
 	get_tree().quit()

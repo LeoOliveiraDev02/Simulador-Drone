@@ -833,12 +833,12 @@ func _definir_lod(n: Node, vies: float) -> void:
 		_definir_lod(f, vies)
 
 
-func _plantar(nome: String, x: float, z: float, escala: float, giro := -1.0) -> Node3D:
+func _plantar(nome: String, x: float, z: float, escala: float, giro := -1.0, escala_v := Vector3.ZERO) -> Node3D:
 	var no: Node3D = _cena(nome).instantiate()
 	add_child(no)
 	no.position = Vector3(x, altura(x, z) - 0.05, z)
 	no.rotation.y = rng.randf() * TAU if giro < 0.0 else giro
-	no.scale = Vector3.ONE * escala
+	no.scale = Vector3.ONE * escala if escala_v == Vector3.ZERO else escala_v
 	# folhas são geometria fina: o LOD automático apagava as copas, então
 	# as árvores pedem mais detalhe (mais forte perto da câmera)
 	var vies := 8.0 if Vector2(x, z).length() < 200.0 else 3.0
@@ -880,8 +880,10 @@ func _montar_vegetacao() -> void:
 	while x < -30.0:
 		for fila in 2:
 			var z := -238.0 - fila * 7.0 + rng.randf_range(-2.0, 2.0)
-			var nome := "tree_small_02" if rng.randf() < 0.6 else "island_tree_03"
-			_plantar(nome, x + rng.randf_range(-1.5, 1.5) + fila * 3.0, z, rng.randf_range(2.8, 3.5))
+			# eucalipto: árvore fina e bem alta (o modelo é esticado na vertical)
+			var esc := rng.randf_range(2.4, 3.0)
+			_plantar("tree_small_02", x + rng.randf_range(-1.5, 1.5) + fila * 3.0, z, esc, -1.0,
+				Vector3(esc * 0.75, esc * rng.randf_range(1.9, 2.3), esc * 0.75))
 		x += passo
 
 	# árvores espalhadas pelo pasto até o horizonte

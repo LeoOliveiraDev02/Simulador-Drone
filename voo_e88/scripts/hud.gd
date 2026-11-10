@@ -116,10 +116,13 @@ CONTROLE (modo 2, igual ao rádio do E88)
   X ......... recomeçar na base                 B ........ desligar motores (emergência)
   Setas ↑↓ .. vento mais forte / mais fraco     Setas ←→ . câmera mais perto / longe
   LB ........ liga/desliga as rajadas            RB ....... muda a direção do vento
+  Apertar o analógico direito ... FLIP 360° (para o lado em que ele estiver empurrado)
+  Back/Select ... modo sem cabeça (a frente fica fixa, não importa para onde o drone aponta)
 
 TECLADO
   W/S subir/descer   A/D girar   ↑↓←→ frente/trás/lados   Espaço decolar/pousar
   M modo   R recomeçar   B desligar   +/- vento   PgUp/PgDn câmera   G rajadas   H ajuda
+  F flip   K modo sem cabeça   V direção do vento
 
 MODOS
   ESTABILIZADO: o drone se nivela sozinho e trava a altura. Soltou o controle, ele freia e para.
@@ -187,7 +190,7 @@ func atualizar(drone: E88, vento: Vento, camera: Camera3D, controle_nome: String
 	var vh := Vector2(v.x, v.z).length()
 	var h := drone.global_position.y - 0.026 - drone.chao_y
 	var estado := {"pousado": "no chão", "decolando": "decolando", "voando": "voando", "pousando": "pousando", "caido": "CAÍDO"}
-	var txt := "Modo: %s\n" % drone.nome_modo()
+	var txt := "Modo: %s%s\n" % [drone.nome_modo(), "  •  SEM CABEÇA" if drone.sem_cabeca else ""]
 	txt += "Motores: %s   (%s)\n" % ["LIGADOS" if drone.armado else "desligados", estado.get(drone.estado, drone.estado)]
 	txt += "Altura: %.1f m      Velocidade: %.1f m/s (%d km/h)\n" % [maxf(h, 0.0), vh, roundi(vh * 3.6)]
 	txt += "Subida: %+.1f m/s    Distância da base: %d m\n" % [v.y, roundi(distancia_base)]

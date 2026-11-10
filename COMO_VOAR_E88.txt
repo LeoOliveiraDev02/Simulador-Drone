@@ -15,12 +15,14 @@ CONTROLE (modo 2, igual ao rádio do E88)
   X  recomeçar na base               B  desligar motores (emergência)
   Setas ↑↓ vento mais forte/fraco    Setas ←→ câmera mais perto/longe
   LB rajadas liga/desliga            RB muda a direção do vento
+  Apertar o analógico direito  FLIP 360° (para o lado em que estiver empurrado)
+  Back/Select  modo sem cabeça (a frente fica fixa)
   Start  ajuda na tela
 
 TECLADO (reserva)
   W/S subir/descer  A/D girar  setas frente/trás/lados  Espaço decolar/pousar
   M modo  R recomeçar  B desligar  +/- vento  PgUp/PgDn câmera  G rajadas
-  V direção do vento  H ajuda  F12 print  Esc sair
+  V direção do vento  F flip  K sem cabeça  H/Esc ajuda  F12 print  Q sai (com a ajuda aberta)
 
 O QUE TEM NA FÍSICA
   - 4 motores independentes, com atraso de rotação e torque de reação (é o que faz girar)
@@ -32,6 +34,10 @@ O QUE TEM NA FÍSICA
   - Colisão em tudo: terreno, galpão, cercas, fios da rede elétrica, árvores, portais
   - Hélice que bate girando quebra e voa longe; pouso brusco também quebra
   - Cair no açude derruba o drone
+  - Esteira de vento: atrás do galpão e das árvores o vento cai e vira turbulência
+  - Flip 360° e modo sem cabeça, como no E88 de verdade
+  - Poeira levantada pelas hélices perto do chão; capim deita com o vento das hélices
+  - Diagrama ao vivo da força de cada motor, explicando o que está acontecendo
   - Portais de treino com cronômetro
   - Som dos motores gerado pela rotação de cada hélice
 

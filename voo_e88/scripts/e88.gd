@@ -34,6 +34,12 @@ var modo := Modo.ESTABILIZADO
 var armado := false
 var estado := "pousado"     # pousado, decolando, voando, pousando, caido
 var auto_alvo_altura := 1.3  # m acima do chão na decolagem automática
+var sem_cabeca := false      # modo "sem cabeça" do E88: frente = frente do piloto, não do drone
+var frente_piloto := Vector3.FORWARD
+var flip_fase := 0           # 0 parado, 1 sobe, 2 gira, 3 recupera
+var flip_t := 0.0
+var flip_giro := 0.0
+var flip_eixo := Vector3.RIGHT
 
 # entradas (-1..1), já com zona morta e expo
 var e_acel := 0.0
@@ -356,6 +362,8 @@ func recomecar(pos: Vector3, yaw := 0.0) -> void:
 	armado = false
 	estado = "pousado"
 	modo = Modo.ESTABILIZADO
+	flip_fase = 0
+	sem_cabeca = false
 	for k in 4:
 		empuxo[k] = 0.0
 		travada[k] = 0.0
@@ -430,7 +438,10 @@ func _integrate_forces(st: PhysicsDirectBodyState3D) -> void:
 	if armado:
 		var total := 0.0
 		var tq := Vector3.ZERO
-		if modo == Modo.ESTABILIZADO:
+		if flip_fase > 0:
+			var r := _controle_flip(b, cima, w_b, dt)
+			total = r[0]; tq = r[1]
+		elif modo == Modo.ESTABILIZADO:
 			var r := _controle_estabilizado(b, cima, v, w_b, pos, h, dt)
 			total = r[0]; tq = r[1]
 		else:
@@ -501,6 +512,8 @@ func _controle_estabilizado(b: Basis, cima: Vector3, v: Vector3, w_b: Vector3, p
 		if frente.length() < 0.01:
 			frente = Vector3.FORWARD
 	frente = frente.normalized()
+	if sem_cabeca:
+		frente = frente_piloto
 	var direita := frente.cross(Vector3.UP)
 
 	# velocidade horizontal desejada pelo controle; soltou = freia até parar
@@ -549,6 +562,68 @@ func _controle_estabilizado(b: Basis, cima: Vector3, v: Vector3, w_b: Vector3, p
 	var alfa := Vector3(kp * erro_b.x - kd * w_b.x, 9.0 * (yaw_alvo - w_b.y), kp * erro_b.z - kd * w_b.z)
 	var tq := alfa * inercia
 	return [total, tq]
+
+
+func fazer_flip(direcao: Vector2) -> void:
+	# cambalhota de 360° do E88 (botão de flip): precisa estar voando e com altura
+	if not armado or estado != "voando" or flip_fase > 0:
+		return
+	if global_position.y - chao_y < 1.5:
+		mensagem.emit("Suba mais para dar o flip (mínimo 1,5 m)", 1.5)
+		return
+	if direcao.length() < 0.3:
+		direcao = Vector2(0, 1)
+	# para frente = gira em volta do eixo X (nariz para baixo); para o lado = eixo Z
+	if absf(direcao.y) >= absf(direcao.x):
+		flip_eixo = Vector3(-signf(direcao.y), 0, 0)
+	else:
+		flip_eixo = Vector3(0, 0, -signf(direcao.x))
+	flip_fase = 1
+	flip_t = 0.0
+	flip_giro = 0.0
+	mensagem.emit("Flip!", 1.0)
+
+
+func _controle_flip(b: Basis, cima: Vector3, w_b: Vector3, dt: float) -> Array:
+	flip_t += dt
+	var paira := MASSA * G
+	match flip_fase:
+		1:
+			# sobe forte e nivelado para ganhar altura antes de girar
+			var erro_b := b.inverse() * cima.cross(Vector3.UP)
+			var alfa := Vector3(300.0 * erro_b.x - 26.0 * w_b.x, -9.0 * w_b.y, 300.0 * erro_b.z - 26.0 * w_b.z)
+			if flip_t > 0.22:
+				flip_fase = 2
+				flip_t = 0.0
+			return [T_MAX * 3.6, alfa * inercia]
+		2:
+			# perfil de giro: acelera até 1500°/s e freia a tempo de parar nos 360°
+			flip_giro += w_b.dot(flip_eixo) * dt
+			var falta := TAU - flip_giro
+			var w_mod := minf(deg_to_rad(1500.0), sqrt(2.0 * 200.0 * maxf(falta, 0.0)))
+			var w_alvo := flip_eixo * w_mod
+			if falta < deg_to_rad(12.0) or flip_t > 0.9:
+				flip_fase = 3
+				flip_t = 0.0
+			# gira com toda a diferença de força: um par de motores forte, o outro fraco
+			return [T_MAX * 2.0, (w_alvo - w_b) * 60.0 * inercia]
+		_:
+			# recupera: o modo estabilizado nivela; aqui só dá força para não perder altura
+			if flip_t > 0.25:
+				flip_fase = 0
+				altura_ref = global_position.y
+				int_vz = 0.0
+			var erro_b := b.inverse() * cima.cross(Vector3.UP)
+			var alfa := Vector3(300.0 * erro_b.x - 26.0 * w_b.x, -9.0 * w_b.y, 300.0 * erro_b.z - 26.0 * w_b.z)
+			return [paira * 1.5 / maxf(cima.y, 0.4), alfa * inercia]
+
+
+func trocar_sem_cabeca() -> void:
+	sem_cabeca = not sem_cabeca
+	var f := -global_transform.basis.z
+	f.y = 0.0
+	frente_piloto = f.normalized() if f.length() > 0.1 else Vector3.FORWARD
+	mensagem.emit("Modo sem cabeça LIGADO: a frente agora é a direção para onde o drone apontava" if sem_cabeca else "Modo sem cabeça desligado", 2.5)
 
 
 func _controle_acro(w_b: Vector3) -> Array:
