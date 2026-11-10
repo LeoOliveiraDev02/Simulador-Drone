@@ -808,22 +808,29 @@ func _cena(nome: String) -> PackedScene:
 	return c
 
 
-func _ajustar_folhas(n: Node) -> void:
+var mats_folhas: Array[ShaderMaterial] = []
+
+
+func _ajustar_folhas(n: Node, alt_ref := 4.0) -> void:
+	# folhas viram um shader que balança com o vento (mesmo visual: textura, recorte, luz por trás)
 	if n is MeshInstance3D:
 		var mi := n as MeshInstance3D
 		for s in mi.mesh.get_surface_count():
 			var m := mi.mesh.surface_get_material(s)
 			if m is BaseMaterial3D:
 				var bm := m as BaseMaterial3D
-				if bm.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
-					bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-					bm.alpha_scissor_threshold = 0.3
-					bm.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE
-					bm.cull_mode = BaseMaterial3D.CULL_DISABLED
-					bm.backlight_enabled = true
-					bm.backlight = Color(0.22, 0.28, 0.1)
+				if bm.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED and bm.albedo_texture != null:
+					var sm := ShaderMaterial.new()
+					sm.shader = load("res://shaders/folhas.gdshader")
+					sm.set_shader_parameter("alb", bm.albedo_texture)
+					sm.set_shader_parameter("tom", bm.albedo_color)
+					if bm.normal_enabled and bm.normal_texture:
+						sm.set_shader_parameter("nor", bm.normal_texture)
+					sm.set_shader_parameter("altura_ref", alt_ref)
+					mi.mesh.surface_set_material(s, sm)
+					mats_folhas.append(sm)
 	for f in n.get_children():
-		_ajustar_folhas(f)
+		_ajustar_folhas(f, alt_ref)
 
 
 func _definir_lod(n: Node, vies: float) -> void:
@@ -844,7 +851,7 @@ func _plantar(nome: String, x: float, z: float, escala: float, giro := -1.0, esc
 	var vies := 8.0 if Vector2(x, z).length() < 200.0 else 3.0
 	_definir_lod(no, vies)
 	if not cache_cena.has(nome + "_ok"):
-		_ajustar_folhas(no)
+		_ajustar_folhas(no, 4.0 if nome.contains("tree") else 1.2)
 		cache_cena[nome + "_ok"] = true
 	if absf(x) < LIMITE + 80.0 and absf(z) < LIMITE + 80.0:
 		_colidir_planta(no, nome)
@@ -1077,6 +1084,10 @@ func ponto_partida() -> Vector3:
 ## vento na grama e na biruta (direção em radianos, para onde o vento vai)
 func aplicar_vento(dir_rad: float, velocidade: float, rajada: float) -> void:
 	var d := Vector2(sin(dir_rad), cos(dir_rad))
+	var forca_folha := 0.02 + velocidade * 0.03 * (0.7 + 0.6 * rajada)
+	for m in mats_folhas:
+		m.set_shader_parameter("vento_dir", d)
+		m.set_shader_parameter("vento_forca", forca_folha)
 	if mat_grama:
 		mat_grama.set_shader_parameter("vento_dir", d)
 		mat_grama.set_shader_parameter("vento_forca", 0.05 + velocidade * 0.035 * (0.7 + 0.6 * rajada))

@@ -441,6 +441,14 @@ func _teste_voo() -> void:
 	drone.e_pitch = 0.0
 	await _esperar(3.0)
 	_log("depois da batida")
+	# pouso no pasto (terreno de verdade, longe da base)
+	for pt: Vector2 in [Vector2(60, -20), Vector2(-150, 120), Vector2(300, -300)]:
+		drone.recomecar(Vector3(pt.x, mapa.altura(pt.x, pt.y) + 3.0, pt.y), 0.0)
+		drone.armar()
+		drone.estado = "pousando"
+		await _esperar(9.0)
+		_log("pouso no pasto %s" % str(pt))
+		print("   terreno=%.2f  drone_y=%.2f  chão medido=%.2f" % [mapa.altura(pt.x, pt.y), drone.global_position.y, drone.chao_y])
 	print("TESTE FIM")
 	get_tree().quit()
 
