@@ -27,6 +27,8 @@ var tutorial_ligado := true
 var tutorial_t := 0.0
 var yaw_inicio := 0.0
 var pos_inicio := Vector3.ZERO
+var estado_antes := "pousado"
+var ja_voou := false
 
 
 func _ready() -> void:
@@ -251,6 +253,7 @@ func _physics_process(delta: float) -> void:
 	mapa.set_drone_na_grama(p, forca)
 	_checar_portais(p, delta)
 	_tutorial(p, delta)
+	_avaliar_pouso(p)
 	# limite da área de voo: depois de 60 m além do limite o drone volta pousando
 	var dist := Vector2(p.x, p.z).length()
 	if dist > Mapa.LIMITE + 60.0 and drone.armado and drone.estado != "pousando":
@@ -316,6 +319,18 @@ func _proximo_passo(p: Vector3, yaw: float) -> void:
 	pos_inicio = p
 	yaw_inicio = yaw
 	_vibrar(0.25, 0.12)
+
+
+func _avaliar_pouso(p: Vector3) -> void:
+	if drone.estado == "voando":
+		ja_voou = true
+	if estado_antes != "pousado" and drone.estado == "pousado" and ja_voou:
+		var d := Vector2(p.x, p.z).length()
+		if d < 4.5:
+			var nota := "PERFEITO" if d < 0.3 else ("ótimo" if d < 0.8 else ("bom" if d < 2.0 else "dentro da base"))
+			hud.mostrar("Pouso na base: %s — %d cm do centro do H" % [nota, roundi(d * 100.0)], 4.0)
+		ja_voou = false
+	estado_antes = drone.estado
 
 
 func _checar_portais(p: Vector3, delta: float) -> void:
