@@ -172,6 +172,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 			KEY_G: _rajadas()
 			KEY_V: _girar_vento()
 			KEY_F12: _salvar_print("print_%d" % Time.get_unix_time_from_system())
+			KEY_F11:
+				var w := get_window()
+				w.mode = Window.MODE_MAXIMIZED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
 			KEY_ESCAPE: _ajuda()
 			KEY_Q:
 				if hud.ajuda.visible:

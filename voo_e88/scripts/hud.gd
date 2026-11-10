@@ -122,7 +122,7 @@ CONTROLE (modo 2, igual ao rádio do E88)
 TECLADO
   W/S subir/descer   A/D girar   ↑↓←→ frente/trás/lados   Espaço decolar/pousar
   M modo   R recomeçar   B desligar   +/- vento   PgUp/PgDn câmera   G rajadas   H ajuda
-  F flip   K modo sem cabeça   V direção do vento
+  F flip   K modo sem cabeça   V direção do vento   F11 tela cheia   F12 print
 
 MODOS
   ESTABILIZADO: o drone se nivela sozinho e trava a altura. Soltou o controle, ele freia e para.
