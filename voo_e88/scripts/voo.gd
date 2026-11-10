@@ -22,6 +22,11 @@ var pausado_ajuda := false
 var lado_portal: Array[float] = []
 var portais_feitos := 0
 var tempo_volta := -1.0
+var passo_tutorial := 0      # primeiro voo guiado (T liga/desliga)
+var tutorial_ligado := true
+var tutorial_t := 0.0
+var yaw_inicio := 0.0
+var pos_inicio := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -77,7 +82,7 @@ func _ready() -> void:
 	add_child(hud)
 	drone.mensagem.connect(hud.mostrar)
 	drone.helice_quebrou.connect(func(_k): _vibrar(0.9, 0.5))
-	hud.mostrar("Aperte A (ou Espaço) para decolar  •  Start/H: ajuda", 6.0)
+	hud.mostrar("Start ou H: ajuda dos controles", 5.0)
 
 	if modo_teste:
 		_teste_voo()
@@ -172,6 +177,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 			KEY_G: _rajadas()
 			KEY_V: _girar_vento()
 			KEY_F12: _salvar_print("print_%d" % Time.get_unix_time_from_system())
+			KEY_T:
+				tutorial_ligado = not tutorial_ligado
+				passo_tutorial = 0
+				tutorial_t = 0.0
 			KEY_F11:
 				var w := get_window()
 				w.mode = Window.MODE_MAXIMIZED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
@@ -241,6 +250,7 @@ func _physics_process(delta: float) -> void:
 		forca = clampf(soma / (E88.MASSA * E88.G), 0.0, 1.6) * 0.55
 	mapa.set_drone_na_grama(p, forca)
 	_checar_portais(p, delta)
+	_tutorial(p, delta)
 	# limite da área de voo: depois de 60 m além do limite o drone volta pousando
 	var dist := Vector2(p.x, p.z).length()
 	if dist > Mapa.LIMITE + 60.0 and drone.armado and drone.estado != "pousando":
@@ -255,6 +265,57 @@ func _process(_delta: float) -> void:
 		var nome := "Controle: " + Input.get_joy_name(Input.get_connected_joypads()[0]) if Input.get_connected_joypads().size() > 0 else "Sem controle conectado — usando o teclado"
 		hud.atualizar(drone, vento, camera, nome, dist, Mapa.LIMITE)
 		mapa.aplicar_vento(vento.direcao, vento.velocidade, vento.rajada_atual)
+
+
+const TUTORIAL := [
+	"Primeiro voo (1/6): aperte A (ou Espaço) para decolar",
+	"(2/6) Muito bem! Empurre o analógico DIREITO para frente e voe uns 10 metros",
+	"(3/6) Agora gire o drone: analógico ESQUERDO para os lados (dê meia volta)",
+	"(4/6) Suba e desça com o analógico ESQUERDO para cima e para baixo",
+	"(5/6) Voe até um dos portais laranja e passe por dentro dele",
+	"(6/6) Volte para a base com o H e aperte A para pousar sozinho",
+	"Primeiro voo completo! Agora é com você. (T mostra o tutorial de novo)",
+]
+
+
+func _tutorial(p: Vector3, delta: float) -> void:
+	if not tutorial_ligado or modo_teste or modo_prints:
+		hud.missao.text = ""
+		return
+	tutorial_t += delta
+	var f := -drone.global_transform.basis.z
+	var yaw := atan2(f.x, f.z)
+	match passo_tutorial:
+		0:
+			if drone.estado == "voando":
+				_proximo_passo(p, yaw)
+		1:
+			if Vector2(p.x - pos_inicio.x, p.z - pos_inicio.z).length() > 10.0:
+				_proximo_passo(p, yaw)
+		2:
+			if absf(angle_difference(yaw, yaw_inicio)) > 2.6:
+				_proximo_passo(p, yaw)
+		3:
+			if absf(p.y - pos_inicio.y) > 2.0:
+				_proximo_passo(p, yaw)
+		4:
+			if portais_feitos > 0:
+				_proximo_passo(p, yaw)
+		5:
+			if drone.estado == "pousado" and Vector2(p.x, p.z).length() < 5.0:
+				_proximo_passo(p, yaw)
+		6:
+			if tutorial_t > 8.0:
+				tutorial_ligado = false
+	hud.missao.text = TUTORIAL[passo_tutorial] if passo_tutorial < TUTORIAL.size() else ""
+
+
+func _proximo_passo(p: Vector3, yaw: float) -> void:
+	passo_tutorial += 1
+	tutorial_t = 0.0
+	pos_inicio = p
+	yaw_inicio = yaw
+	_vibrar(0.25, 0.12)
 
 
 func _checar_portais(p: Vector3, delta: float) -> void:

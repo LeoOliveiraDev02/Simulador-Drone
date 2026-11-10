@@ -13,6 +13,7 @@ var ang_vento := 0.0
 var controle_txt: Label
 var diagrama: Control
 var explica: Label
+var missao: Label
 var _empuxo: Array = [0.0, 0.0, 0.0, 0.0]
 var _ok: Array = [true, true, true, true]
 var _sentido: Array = [1.0, -1.0, 1.0, -1.0]
@@ -99,6 +100,17 @@ func _ready() -> void:
 	aviso.size = Vector2(1000, 60)
 	add_child(aviso)
 
+	missao = Label.new()
+	missao.add_theme_font_size_override("font_size", 24)
+	missao.add_theme_color_override("font_color", Color(1.0, 0.92, 0.6))
+	missao.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	missao.add_theme_constant_override("outline_size", 7)
+	missao.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	missao.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	missao.position = Vector2(-600, -110)
+	missao.size = Vector2(1200, 80)
+	add_child(missao)
+
 	ajuda = PanelContainer.new()
 	ajuda.add_theme_stylebox_override("panel", _fundo(Color(0.02, 0.03, 0.04, 0.78)))
 	ajuda.set_anchors_preset(Control.PRESET_CENTER)
@@ -122,7 +134,7 @@ CONTROLE (modo 2, igual ao rádio do E88)
 TECLADO
   W/S subir/descer   A/D girar   ↑↓←→ frente/trás/lados   Espaço decolar/pousar
   M modo   R recomeçar   B desligar   +/- vento   PgUp/PgDn câmera   G rajadas   H ajuda
-  F flip   K modo sem cabeça   V direção do vento   F11 tela cheia   F12 print
+  F flip   K modo sem cabeça   V direção do vento   F11 tela cheia   F12 print   T tutorial
 
 MODOS
   ESTABILIZADO: o drone se nivela sozinho e trava a altura. Soltou o controle, ele freia e para.
