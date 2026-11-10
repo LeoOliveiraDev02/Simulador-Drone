@@ -10,6 +10,7 @@ so = argv[3].split(',') if len(argv) > 3 and argv[3] else None
 scn = bpy.context.scene
 os.makedirs(saida, exist_ok=True)
 
+scn.render.engine = 'CYCLES'
 scn.cycles.device = 'CPU'
 try:
     prefs = bpy.context.preferences.addons['cycles'].preferences

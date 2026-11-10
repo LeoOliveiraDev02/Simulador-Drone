@@ -21,8 +21,25 @@ def ligar_gpu():
     scn.cycles.preview_samples = 64
     scn.cycles.use_preview_denoising = True
 
+def modo_tempo_real():
+    # EEVEE: motor em tempo real da placa de vídeo (60 fps), com reflexos por raytracing.
+    # As fotos finais continuam no Cycles (RENDERIZAR_NA_GPU.bat).
+    scn = bpy.context.scene
+    scn.render.engine = 'BLENDER_EEVEE'
+    ee = scn.eevee
+    for nome, valor in (('use_raytracing', True), ('use_shadows', True), ('taa_samples', 32),
+                        ('use_gtao', True), ('shadow_ray_count', 2), ('shadow_step_count', 8)):
+        if hasattr(ee, nome):
+            setattr(ee, nome, valor)
+    try:
+        ee.ray_tracing_options.resolution_scale = '2'
+        ee.ray_tracing_options.use_denoise = True
+    except Exception:
+        pass
+
 def preparar_tela():
     ligar_gpu()
+    modo_tempo_real()
     for janela in bpy.context.window_manager.windows:
         for area in janela.screen.areas:
             if area.type == 'VIEW_3D':

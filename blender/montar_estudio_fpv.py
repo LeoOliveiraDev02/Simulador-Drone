@@ -204,6 +204,37 @@ for o in malhas:
     except Exception:
         pass
 
+# ------------------------------------------------------------------ otimização
+# Os parafusos do CAD têm a rosca modelada (quase 1 milhão de polígonos que não
+# aparecem nem no close). Reduz só o que é pesado e pequeno; carenagens, placas e
+# motores continuam com a malha original.
+def reduzir(o, alvo):
+    n = len(o.data.polygons)
+    if n <= alvo:
+        return
+    if o.data.users > 1:
+        o.data = o.data.copy()
+    mod = o.modifiers.new('reduzir', 'DECIMATE')
+    mod.decimate_type = 'COLLAPSE'
+    mod.ratio = max(alvo / n, 0.02)
+    mod.use_collapse_triangulate = False
+    bpy.context.view_layer.objects.active = o
+    with bpy.context.temp_override(object=o, active_object=o):
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+
+antes = sum(len(o.data.polygons) for o in malhas)
+for o in malhas:
+    mat = o.material_slots[0].material.name if o.material_slots and o.material_slots[0].material else ''
+    d = max(o.dimensions)
+    if mat.startswith('Aço') or mat.startswith('Metal') or mat.startswith('Alumínio polido'):
+        reduzir(o, 1200 if d < 0.02 else 4000)
+    elif d < 0.015:
+        reduzir(o, 4000)
+    else:
+        reduzir(o, 12000)
+depois = sum(len(o.data.polygons) for o in malhas)
+print('poligonos:', antes, '->', depois)
+
 # bateria = maior peça branca: ganha a etiqueta
 def volume(o):
     d = o.dimensions
