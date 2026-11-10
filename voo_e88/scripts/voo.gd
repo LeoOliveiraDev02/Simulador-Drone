@@ -46,6 +46,7 @@ func _ready() -> void:
 
 	vento = Vento.new()
 	vento.name = "Vento"
+	vento.mapa = mapa
 	add_child(vento)
 
 	drone = E88.new()
@@ -167,7 +168,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 			KEY_G: _rajadas()
 			KEY_V: _girar_vento()
 			KEY_F12: _salvar_print("print_%d" % Time.get_unix_time_from_system())
-			KEY_ESCAPE: get_tree().quit()
+			KEY_ESCAPE: _ajuda()
+			KEY_Q:
+				if hud.ajuda.visible:
+					get_tree().quit()
 
 
 func _bateu(v: float) -> void:
@@ -330,6 +334,19 @@ func _teste_voo() -> void:
 	for i in 8:
 		await _esperar(1.0)
 		_log("pousando %ds" % (i + 1))
+	# esteira: pairando atrás do galpão com vento forte
+	vento.velocidade = 6.0
+	var dv := Vector2(sin(vento.direcao), cos(vento.direcao))
+	var atras := Mapa.GALPAO_C + dv * 14.0
+	drone.recomecar(Vector3(atras.x, mapa.altura(atras.x, atras.y) + 1.6, atras.y), 0.0)
+	drone.armar()
+	drone.estado = "voando"
+	drone.altura_ref = drone.global_position.y
+	for i in 3:
+		await _esperar(1.0)
+		_log("atrás do galpão %ds" % (i + 1))
+		print("   esteira=%.2f turbulência=%.2f" % [vento.esteira(drone.global_position), drone.turb_nivel])
+	vento.velocidade = 0.0
 	# batida: voa rápido contra o galpão
 	drone.recomecar(Vector3(Mapa.GALPAO_C.x + 0.0, mapa.altura(Mapa.GALPAO_C.x, Mapa.GALPAO_C.y) + 1.5, Mapa.GALPAO_C.y + 12.0), 0.0)
 	drone.armar()

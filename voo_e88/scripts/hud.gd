@@ -105,7 +105,7 @@ func _ready() -> void:
 	add_child(ajuda)
 	var la := Label.new()
 	la.add_theme_font_size_override("font_size", 19)
-	la.text = """COMO PILOTAR O E88   (Start ou H fecha esta ajuda)
+	la.text = """COMO PILOTAR O E88   (Start, H ou Esc fecha esta ajuda  •  Q sai do jogo)
 
 CONTROLE (modo 2, igual ao rádio do E88)
   Analógico esquerdo ↑↓ ....... subir / descer (no meio = trava a altura)
@@ -125,6 +125,7 @@ MODOS
   ESTABILIZADO: o drone se nivela sozinho e trava a altura. Soltou o controle, ele freia e para.
   ACRO: você comanda o giro direto; ele NÃO se nivela sozinho e o acelerador é manual.
 
+VENTO: atrás do galpão e das árvores o ar fica turbulento (o drone balança).
 CUIDADO: bater a hélice girando quebra ela; pouso muito forte também. Água derruba o drone.
 """
 	ajuda.add_child(la)

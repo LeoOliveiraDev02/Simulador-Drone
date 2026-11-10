@@ -615,10 +615,13 @@ func _turbulencia(st: PhysicsDirectBodyState3D, b: Basis, pos: Vector3, h: float
 	# no chão o vento das hélices bate e volta
 	if h < 0.35 and armado:
 		nivel = maxf(nivel, (1.0 - h / 0.35) * 0.45)
+	# atrás do galpão e das árvores o vento vira redemoinho
+	if vento and vento.has_method("esteira"):
+		nivel = maxf(nivel, vento.esteira(pos) * clampf(vento.velocidade / 5.0, 0.0, 1.0) * 1.2)
 	# descendo rápido dentro do próprio vento (anel de vórtice)
 	if v.y < -1.5 and rotor > 0.5:
 		nivel = maxf(nivel, clampf((-v.y - 1.5) / 1.5, 0.0, 1.0) * 0.8)
-	turb_nivel = nivel * rotor
+	turb_nivel = nivel * maxf(rotor, 0.6)
 	# ruído suavizado (não treme quadro a quadro, balança)
 	var s := 1.0 - exp(-dt * 9.0)
 	turb_f = turb_f.lerp(Vector3(rng.randfn(), rng.randfn() * 0.5, rng.randfn()) * 0.09 * turb_nivel, s)

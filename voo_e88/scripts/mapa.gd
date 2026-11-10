@@ -41,6 +41,7 @@ var mat_grama: ShaderMaterial
 var biruta_pano: MeshInstance3D
 var pos_portais: Array[Vector2] = []
 var portais: Array = []   # [centro, normal] de cada aro
+var obstaculos: Array = []  # [centro xz, raio, altura do topo] — fazem sombra de vento
 
 
 func montar(baixa := false) -> void:
@@ -590,6 +591,7 @@ func _montar_galpao() -> void:
 	for i in 3:
 		_filho(g, _caixa(Vector3(1.1, 0.5, 0.8)), madeira, Vector3(L / 2 - 1.5 - i * 1.3, 0.45, -2.6))
 	_colidir_filhos(g)
+	obstaculos.append([GALPAO_C, 9.0, g.position.y + 4.8])
 
 
 func _prisma(base: float, alt: float) -> ArrayMesh:
@@ -1052,6 +1054,7 @@ func _colidir_planta(no: Node3D, nome: String) -> void:
 		# copa: duas esferas (a de cima menor), parecido com o volume das folhas
 		_col_esfera(r_copa, Transform3D(Basis(), Vector3(centro.x, y_copa, centro.z)))
 		_col_esfera(r_copa * 0.7, Transform3D(Basis(), Vector3(centro.x, y_copa + r_copa * 0.6, centro.z)))
+		obstaculos.append([Vector2(centro.x, centro.z), r_copa, c.end.y])
 	else:
 		var r := minf(minf(c.size.x, c.size.z), c.size.y * 2.0) * 0.45
 		if r < 0.12:
