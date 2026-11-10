@@ -362,6 +362,7 @@ func recomecar(pos: Vector3, yaw := 0.0) -> void:
 		no_helice[k].visible = true
 	v_anterior = Vector3.ZERO
 	int_vz = 0.0
+	reset_physics_interpolation()
 
 
 func quebrar_helice(k: int, motivo: String) -> void:

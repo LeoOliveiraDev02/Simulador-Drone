@@ -11,6 +11,12 @@ var tempo_aviso := 0.0
 var seta_vento: Control
 var ang_vento := 0.0
 var controle_txt: Label
+var diagrama: Control
+var explica: Label
+var _empuxo: Array = [0.0, 0.0, 0.0, 0.0]
+var _ok: Array = [true, true, true, true]
+var _sentido: Array = [1.0, -1.0, 1.0, -1.0]
+var _giro: Array = [0.0, 0.0, 0.0, 0.0]
 
 
 func _ready() -> void:
@@ -57,6 +63,30 @@ func _ready() -> void:
 	controle_txt.add_theme_font_size_override("font_size", 15)
 	controle_txt.add_theme_color_override("font_color", Color(0.7, 0.75, 0.8))
 	cx.add_child(controle_txt)
+
+	# diagrama dos motores visto de cima: mostra como o drone se move mudando a força de cada um
+	var pd := PanelContainer.new()
+	pd.add_theme_stylebox_override("panel", _fundo(Color(0.02, 0.03, 0.04, 0.55)))
+	pd.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	pd.position = Vector2(-250, 16)
+	add_child(pd)
+	var vd := VBoxContainer.new()
+	pd.add_child(vd)
+	var td := Label.new()
+	td.text = "Força de cada motor"
+	td.add_theme_font_size_override("font_size", 16)
+	td.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vd.add_child(td)
+	diagrama = Control.new()
+	diagrama.custom_minimum_size = Vector2(210, 190)
+	diagrama.draw.connect(_desenhar_motores)
+	vd.add_child(diagrama)
+	explica = Label.new()
+	explica.add_theme_font_size_override("font_size", 14)
+	explica.add_theme_color_override("font_color", Color(0.8, 0.88, 0.95))
+	explica.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	explica.custom_minimum_size = Vector2(210, 0)
+	vd.add_child(explica)
 
 	aviso = Label.new()
 	aviso.add_theme_font_size_override("font_size", 34)
@@ -112,6 +142,35 @@ func _fundo(c: Color) -> StyleBoxFlat:
 	return s
 
 
+func _desenhar_motores() -> void:
+	var c := diagrama.size * 0.5 + Vector2(0, 6)
+	var corpo := Color(0.75, 0.78, 0.82, 0.9)
+	# posições na tela: 0 FD, 1 FE, 2 TE, 3 TD (frente para cima)
+	var pos := [Vector2(52, -52), Vector2(-52, -52), Vector2(-52, 52), Vector2(52, 52)]
+	for k in 4:
+		diagrama.draw_line(c, c + pos[k], corpo, 6.0)
+	diagrama.draw_rect(Rect2(c - Vector2(16, 26), Vector2(32, 52)), Color(0.15, 0.16, 0.18), true)
+	diagrama.draw_rect(Rect2(c - Vector2(16, 26), Vector2(32, 52)), corpo, false, 2.0)
+	diagrama.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -36), c + Vector2(-7, -27), c + Vector2(7, -27)]), Color(0.4, 0.85, 1.0))
+	var fonte := ThemeDB.fallback_font
+	for k in 4:
+		var p: Vector2 = c + pos[k]
+		var f: float = clampf(_empuxo[k] / E88.T_MAX, 0.0, 1.0)
+		var cor := Color(1.0, 0.3, 0.25) if not _ok[k] else Color(0.25, 0.8, 0.45).lerp(Color(1.0, 0.75, 0.2), smoothstep(0.45, 0.9, f))
+		diagrama.draw_circle(p, 30, Color(1, 1, 1, 0.06))
+		diagrama.draw_arc(p, 30, 0, TAU, 40, Color(1, 1, 1, 0.25), 1.5)
+		if _ok[k]:
+			diagrama.draw_circle(p, 4.0 + 25.0 * f, Color(cor, 0.85))
+			# setinha mostrando o sentido do giro da hélice
+			var a0: float = _giro[k]
+			var s: float = _sentido[k]
+			diagrama.draw_arc(p, 34, a0, a0 + s * -1.6, 12, Color(0.85, 0.9, 1.0, 0.8), 2.0)
+			diagrama.draw_string(fonte, p + Vector2(-14, 6), "%d%%" % roundi(f * 100.0), HORIZONTAL_ALIGNMENT_CENTER, 28, 13, Color(1, 1, 1))
+		else:
+			diagrama.draw_line(p - Vector2(14, 14), p + Vector2(14, 14), cor, 4.0)
+			diagrama.draw_line(p - Vector2(14, -14), p + Vector2(14, -14), cor, 4.0)
+
+
 func _desenhar_seta() -> void:
 	var c := seta_vento.size * 0.5
 	var d := Vector2(sin(ang_vento), -cos(ang_vento))
@@ -149,6 +208,12 @@ func atualizar(drone: E88, vento: Vento, camera: Camera3D, controle_nome: String
 	var d := Vector3(sin(vento.direcao), 0, cos(vento.direcao))
 	ang_vento = atan2(d.dot(r), d.dot(f))
 	seta_vento.queue_redraw()
+	for k in 4:
+		_empuxo[k] = drone.empuxo[k]
+		_ok[k] = drone.helice_ok[k]
+		_giro[k] = fmod(_giro[k] - _sentido[k] * drone.rps[k] * 0.0006, TAU)
+	diagrama.queue_redraw()
+	explica.text = _explicacao(drone)
 	controle_txt.text = controle_nome + "   •   Start/H: ajuda"
 	if distancia_base > limite:
 		mostrar("Longe demais! Volte para a área de voo", 0.3)
@@ -167,3 +232,27 @@ func _process(delta: float) -> void:
 		aviso.modulate.a = clampf(tempo_aviso * 2.0, 0.0, 1.0)
 	else:
 		aviso.modulate.a = 0.0
+
+
+func _explicacao(d: E88) -> String:
+	if d.helice_ok.count(false) > 0:
+		return "Com uma hélice a menos o drone perde o equilíbrio: os outros 3 motores não conseguem segurar."
+	if not d.armado:
+		return "Motores parados. Cada motor gira uma hélice; duas giram para um lado e duas para o outro."
+	if absf(d.e_yaw) > 0.25:
+		return "Girar: as hélices de um sentido aceleram e as do outro desaceleram. A diferença de torque gira o drone."
+	if d.e_pitch > 0.25:
+		return "Para frente: os motores de trás ficam mais fortes, o drone inclina o nariz e o empuxo leva ele para frente."
+	if d.e_pitch < -0.25:
+		return "Para trás: os motores da frente ficam mais fortes e o drone inclina para trás."
+	if absf(d.e_roll) > 0.25:
+		return "Para o lado: os motores do lado oposto ficam mais fortes e o drone inclina para onde você quer ir."
+	if d.e_acel > 0.25:
+		return "Subir: os 4 motores aceleram juntos."
+	if d.e_acel < -0.25:
+		return "Descer: os 4 motores diminuem juntos."
+	if d.turb_nivel > 0.15:
+		return "Turbulência: o ar das hélices voltou batendo (chão, parede ou árvore). A controladora corrige sozinha."
+	if d.efeito_solo > 1.05:
+		return "Efeito solo: perto do chão o ar das hélices fica preso embaixo e o drone ganha força extra."
+	return "Pairando: cada motor faz 1/4 do peso. A controladora corrige a inclinação centenas de vezes por segundo."

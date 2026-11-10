@@ -24,6 +24,7 @@ func posicionar_ja() -> void:
 	global_position = _pos
 	look_at(alvo.global_position + Vector3(0, 0.05, 0), Vector3.UP)
 	iniciada = true
+	reset_physics_interpolation()
 
 
 func _yaw_do_drone() -> float:
