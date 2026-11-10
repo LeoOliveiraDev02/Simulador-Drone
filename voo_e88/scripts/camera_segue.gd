@@ -28,6 +28,9 @@ func posicionar_ja() -> void:
 
 
 func _yaw_do_drone() -> float:
+	# de cabeça para baixo (flip, capotando) a "frente" inverte: segura a câmera onde está
+	if alvo.global_transform.basis.y.y < 0.4:
+		return yaw
 	var f := -alvo.global_transform.basis.z
 	f.y = 0.0
 	if f.length() < 0.05:
