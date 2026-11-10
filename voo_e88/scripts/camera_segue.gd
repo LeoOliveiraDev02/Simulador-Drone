@@ -3,15 +3,15 @@ class_name CameraSegue
 ## Câmera que segue atrás do drone, suave, sem atravessar o chão nem paredes.
 
 var alvo: RigidBody3D
-var distancia := 1.25
-var altura := 0.38
+var distancia := 0.85
+var altura := 0.32
 var yaw := 0.0
 var _pos := Vector3.ZERO
 var iniciada := false
 
 
 func _ready() -> void:
-	fov = 68.0
+	fov = 62.0
 	near = 0.02
 	far = 6000.0
 

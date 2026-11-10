@@ -1,6 +1,6 @@
 SIMULADOR DE DRONE — ONDE PARAMOS
 =================================
-Atualizado: 10/11/2026 (madrugada, trabalho noturno)
+Atualizado: 10/11/2026 01:50 (trabalho noturno)
 
 >>> FOCO ATUAL (decidido por Leonardo em 10/11, 00:18): SÓ O DRONE E88 (dobrável) <<<
 Trabalho noturno autônomo: refinar o E88, fazer toda a física de voo e o mapa.
@@ -19,13 +19,21 @@ DECISÕES DELE PARA O VOO
 - Visual do E88: todo preto, só detalhes cinza (sem marca/logo)
 - Braços: sempre abertos (sem animação de dobrar)
 
+COMO TESTAR NO SERVIDOR (sem placa de vídeo)
+  cd voo_e88; godot --headless --path . --import
+  godot --headless --path . -- --teste-voo        (voo automático, imprime números)
+  xvfb-run godot --path . --rendering-method gl_compatibility --rendering-driver opengl3 \
+      --resolution 960x540 -- --prints --previa    (prints rápidos em voo_e88/prints)
+  scripts/empacotar_voo.sh -> /tmp/claude-0/entrega/voo_e88.zip
+
 TAREFAS DA NOITE (em ordem)
-[ ] 1. Refinar o E88 no Blender (detalhes cinza, acabamento, close-ups)
-[ ] 2. Exportar o E88 para o Godot (GLB com materiais PBR equivalentes)
-[ ] 3. Física de voo do E88 (quad com 4 motores, estabilização, alt hold, acro, gamepad)
-[ ] 4. Mapa 1x1 km (terreno, grama, eucaliptos, açude, galpão, base H, rede elétrica, portais)
-[ ] 5. Vento + biruta, colisão/quebra de hélice, efeito solo, turbulência
-[ ] 6. Câmera seguindo atrás, HUD simples, bat para abrir em C:\drone
+[x] 1. Refinar o E88 no Blender (LED cortado na malha, topo do motor cinza grafite)
+[x] 2. Exportar o E88 para o Godot (blender/exportar_e88_godot.py -> voo_e88/drone/e88.glb)
+[x] 3. Física de voo do E88 (voo_e88/scripts/e88.gd) — testada com --teste-voo
+[x] 4. Mapa 1x1 km com colisão (voo_e88/scripts/mapa.gd, base do cenário de teste)
+[x] 5. Vento + biruta, colisão/quebra de hélice, efeito solo, turbulência, capim reage às hélices
+[x] 6. Câmera seguindo atrás, HUD com ajuda, som dos motores, portais com cronômetro
+      ENTREGUE em C:\drone: VOAR_E88.bat, voo_e88.zip, voo_e88_recursos.zip, COMO_VOAR_E88.txt
 [ ] 7. Refinar sem parar (gráfico, sensação de voo, desempenho)
 
 =================================

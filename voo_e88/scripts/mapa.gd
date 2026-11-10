@@ -8,6 +8,7 @@ class_name Mapa
 const REC := "res://recursos/"
 
 var qualidade_baixa := false
+var previa := false   # prévia no servidor sem placa de vídeo: quase sem capim
 
 var ruido_a := FastNoiseLite.new()
 var ruido_b := FastNoiseLite.new()
@@ -32,12 +33,14 @@ var cache_mat := {}
 var cache_cena := {}
 
 
+const ESCALA_BASE := 0.5
 const LIMITE := 500.0          # área de voo: 1 x 1 km em volta da base
 
 var corpo_estatico: StaticBody3D
 var mat_grama: ShaderMaterial
 var biruta_pano: MeshInstance3D
 var pos_portais: Array[Vector2] = []
+var portais: Array = []   # [centro, normal] de cada aro
 
 
 func montar(baixa := false) -> void:
@@ -132,7 +135,7 @@ func _mascara(x: float, z: float) -> Color:
 	var e := _acude_e(x, z)
 	var g := 1.0 - smoothstep(1.0, 1.55, e)
 	var d := Vector2(x, z).length()
-	var b := 1.0 - smoothstep(9.3, 12.5, d)
+	var b := 1.0 - smoothstep(4.7, 6.6, d)
 	b = maxf(b, 1.0 - smoothstep(9.0, 15.0, Vector2(x, z).distance_to(GALPAO_C)))
 	return Color(r, g, b, 1.0)
 
@@ -427,6 +430,8 @@ func _montar_grama() -> void:
 	# grama em blocos de 20 x 20 m para o motor descartar o que está fora da tela
 	var tam_bloco := 20.0
 	var raio := 70.0 if qualidade_baixa else 150.0
+	if previa:
+		raio = 25.0
 	var dens_max := 18.0 if qualidade_baixa else 70.0
 	var cam_ref := Vector2(0, 26)
 	var total := 0
@@ -447,7 +452,7 @@ func _montar_grama() -> void:
 				var x := bx + rng.randf() * tam_bloco
 				var z := bz + rng.randf() * tam_bloco
 				var p := Vector2(x, z)
-				if p.length() < 9.4:
+				if p.length() < 4.75:
 					continue
 				if distancia_estrada(p) < 3.6 + rng.randf() * 1.2:
 					continue
@@ -496,8 +501,9 @@ func _montar_base_pouso() -> void:
 	sm.set_shader_parameter("c_nor", _tex(t + "nor_gl.jpg"))
 	sm.set_shader_parameter("c_arm", _tex(t + "arm.jpg"))
 	sm.set_shader_parameter("ruido", _ruido_tex(0.05))
-	_malha(_cilindro(9.0, 9.15, 0.4, 96), sm, Vector3(0, altura_centro - 0.08, 0))
-	_col_cilindro(9.1, 0.4, Transform3D(Basis(), Vector3(0, altura_centro - 0.08, 0)))
+	# base de 9 m de diâmetro (proporcional ao E88; o desenho do H escala junto)
+	_malha(_cilindro(9.0, 9.15, 0.4, 96), sm, Vector3(0, altura_centro - 0.08, 0), Vector3.ZERO, Vector3(ESCALA_BASE, 1.0, ESCALA_BASE))
+	_col_cilindro(9.1 * ESCALA_BASE, 0.4, Transform3D(Basis(), Vector3(0, altura_centro - 0.08, 0)))
 
 
 func _montar_biruta() -> void:
@@ -779,6 +785,7 @@ func _montar_portais() -> void:
 		aro.ring_segments = 16
 		var mi_aro := _malha(aro, laranja, Vector3(p.x, y + 2.35, p.y), Vector3(PI / 2, deg_to_rad(8), 0))
 		pos_portais.append(p)
+		portais.append([mi_aro.position, (mi_aro.basis * Vector3.UP).normalized()])
 		# o aro é feito de esferas pequenas (bater na borda derruba o drone)
 		for k in 28:
 			var a := TAU * k / 28.0
@@ -913,14 +920,14 @@ func _montar_pedras() -> void:
 		var r := rng.randf_range(11.0, 45.0)
 		var px := cos(ang) * r
 		var pz := sin(ang) * r + 4.0
-		if not _livre(px, pz, -12.0) and Vector2(px, pz).length() < 10.5:
+		if not _livre(px, pz, -12.0) and Vector2(px, pz).length() < 5.5:
 			continue
 		var no := _plantar("boulder_01", px, pz, rng.randf_range(0.35, 0.9))
 		no.position.y -= 0.15
 	for i in 120:
 		var px := rng.randf_range(-40.0, 40.0)
 		var pz := rng.randf_range(-40.0, 22.0)
-		if Vector2(px, pz).length() < 9.6:
+		if Vector2(px, pz).length() < 5.0:
 			continue
 		var nome := "stone_01" if rng.randf() < 0.5 else "rock_07"
 		_plantar(nome, px, pz, rng.randf_range(1.5, 4.0))

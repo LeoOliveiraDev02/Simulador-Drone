@@ -132,7 +132,7 @@ func atualizar(drone: E88, vento: Vento, camera: Camera3D, controle_nome: String
 	txt += "Altura: %.1f m      Velocidade: %.1f m/s (%d km/h)\n" % [maxf(h, 0.0), vh, roundi(vh * 3.6)]
 	txt += "Subida: %+.1f m/s    Distância da base: %d m\n" % [v.y, roundi(distancia_base)]
 	txt += "Vento: %s" % vento.texto()
-	if drone.efeito_solo > 1.03:
+	if drone.efeito_solo > 1.03 and drone.armado:
 		txt += "\nEfeito solo: +%d%% de força" % roundi((drone.efeito_solo - 1.0) * 100.0)
 	if drone.turb_nivel > 0.15:
 		txt += "\nTurbulência!"
@@ -160,6 +160,8 @@ func mostrar(texto: String, segundos: float) -> void:
 
 
 func _process(delta: float) -> void:
+	if ajuda.visible:
+		ajuda.position = (get_viewport().get_visible_rect().size - ajuda.size) * 0.5
 	if tempo_aviso > 0.0:
 		tempo_aviso -= delta
 		aviso.modulate.a = clampf(tempo_aviso * 2.0, 0.0, 1.0)

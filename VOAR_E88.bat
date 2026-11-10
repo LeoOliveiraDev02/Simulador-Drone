@@ -10,12 +10,15 @@ if exist "voo_e88_recursos.zip" (
   tar -xf "voo_e88_recursos.zip"
   move /y "voo_e88_recursos.zip" "voo_e88_recursos_instalado.zip" >nul
 )
+set PREPARAR=0
 if exist "voo_e88.zip" (
   echo Instalando a versao nova do voo do E88...
   tar -xf "voo_e88.zip"
   move /y "voo_e88.zip" "voo_e88_instalado.zip" >nul
+  set PREPARAR=1
 )
-if not exist "voo_e88\.godot\imported" (
+if not exist "voo_e88\.godot\imported" set PREPARAR=1
+if "%PREPARAR%"=="1" (
   echo.
   echo Preparando os modelos e texturas para a placa de video.
   echo Isso so acontece na primeira vez e leva alguns minutos...

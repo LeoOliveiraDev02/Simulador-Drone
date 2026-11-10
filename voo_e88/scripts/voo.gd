@@ -19,6 +19,9 @@ var modo_prints := false
 var teclado_vel := {"acel": 0.0, "yaw": 0.0, "pitch": 0.0, "roll": 0.0}
 var segurando_armar := 0.0
 var pausado_ajuda := false
+var lado_portal: Array[float] = []
+var portais_feitos := 0
+var tempo_volta := -1.0
 
 
 func _ready() -> void:
@@ -29,12 +32,15 @@ func _ready() -> void:
 			modo_teste = true
 		elif a == "--prints":
 			modo_prints = true
+		elif a == "--previa":
+			qualidade_baixa = true
 	if qualidade_baixa:
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
 		get_viewport().use_taa = false
 
 	mapa = Mapa.new()
 	mapa.name = "Mapa"
+	mapa.previa = "--previa" in OS.get_cmdline_user_args()
 	add_child(mapa)
 	mapa.montar(qualidade_baixa or modo_teste)
 
@@ -49,6 +55,10 @@ func _ready() -> void:
 	drone.mapa = mapa
 	drone.vento = vento
 	drone.recomecar(mapa.ponto_partida(), 0.0)
+	if not modo_teste:
+		var som := SomMotor.new()
+		som.drone = drone
+		drone.add_child(som)
 
 	camera = CameraSegue.new()
 	add_child(camera)
@@ -154,6 +164,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 
 
 func _recomecar() -> void:
+	portais_feitos = 0
+	tempo_volta = -1.0
 	drone.recomecar(mapa.ponto_partida(), 0.0)
 	camera.posicionar_ja()
 	hud.mostrar("De volta na base. A (ou Espaço) decola", 3.0)
@@ -192,7 +204,6 @@ func _physics_process(delta: float) -> void:
 	if not modo_teste:
 		_ler_controles(delta)
 	var p := drone.global_position
-	mapa.aplicar_vento(vento.direcao, vento.velocidade, vento.rajada_atual)
 	# vento das hélices no capim (quanto mais força e mais baixo, mais deita)
 	var forca := 0.0
 	if drone.armado:
@@ -201,14 +212,43 @@ func _physics_process(delta: float) -> void:
 			soma += e
 		forca = clampf(soma / (E88.MASSA * E88.G), 0.0, 1.6) * 0.55
 	mapa.set_drone_na_grama(p, forca)
+	_checar_portais(p, delta)
 	# limite da área de voo: depois de 60 m além do limite o drone volta pousando
 	var dist := Vector2(p.x, p.z).length()
 	if dist > Mapa.LIMITE + 60.0 and drone.armado and drone.estado != "pousando":
 		drone.estado = "pousando"
 		hud.mostrar("Sinal perdido: pousando sozinho", 4.0)
-	if hud and camera:
+
+
+func _process(_delta: float) -> void:
+	if hud and camera and drone:
+		var p := drone.global_position
+		var dist := Vector2(p.x, p.z).length()
 		var nome := "Controle: " + Input.get_joy_name(Input.get_connected_joypads()[0]) if Input.get_connected_joypads().size() > 0 else "Sem controle conectado — usando o teclado"
 		hud.atualizar(drone, vento, camera, nome, dist, Mapa.LIMITE)
+		mapa.aplicar_vento(vento.direcao, vento.velocidade, vento.rajada_atual)
+
+
+func _checar_portais(p: Vector3, delta: float) -> void:
+	if tempo_volta >= 0.0:
+		tempo_volta += delta
+	if lado_portal.size() != mapa.portais.size():
+		lado_portal.clear()
+		for pt in mapa.portais:
+			lado_portal.append(0.0)
+	for i in mapa.portais.size():
+		var c: Vector3 = mapa.portais[i][0]
+		var n: Vector3 = mapa.portais[i][1]
+		var d := (p - c).dot(n)
+		var no_plano := (p - c) - n * d
+		if lado_portal[i] != 0.0 and signf(d) != signf(lado_portal[i]) and no_plano.length() < 2.0 and drone.estado != "caido":
+			portais_feitos += 1
+			if tempo_volta < 0.0:
+				tempo_volta = 0.0
+				hud.mostrar("Passou pelo portal %d! Cronômetro ligado" % (i + 1), 2.5)
+			else:
+				hud.mostrar("Passou pelo portal %d!  (%d portais em %.1f s)" % [i + 1, portais_feitos, tempo_volta], 2.5)
+		lado_portal[i] = d if absf(d) > 0.01 else lado_portal[i]
 
 
 # ---------------------------------------------------------------- testes e prints
@@ -297,18 +337,36 @@ func _salvar_print(nome: String) -> void:
 	print("print salvo: ", nome)
 
 
+func _quadros(n: int) -> void:
+	for i in n:
+		await get_tree().process_frame
+
+
 func _tirar_prints() -> void:
+	# no servidor sem placa de vídeo cada quadro demora: posiciona o drone direto
 	hud.ajuda.visible = false
-	await _esperar(2.0)
+	await _quadros(4)
 	_salvar_print("01_no_chao")
-	drone.decolar_ou_pousar()
-	await _esperar(3.0)
+	var base := mapa.ponto_partida()
+	drone.freeze = true
+	for k in 4:
+		drone.rps[k] = 150.0
+	drone.armado = true
+	drone.estado = "voando"
+	drone.global_transform = Transform3D(Basis(Vector3.UP, 0.4), base + Vector3(0, 1.3, 0))
+	camera.posicionar_ja()
+	await _quadros(4)
 	_salvar_print("02_pairando")
-	drone.e_pitch = 0.6
-	await _esperar(2.5)
+	drone.global_transform = Transform3D(Basis(Vector3.UP, 0.4) * Basis(Vector3.RIGHT, -0.38), base + Vector3(-6, 2.5, -14))
+	camera.posicionar_ja()
+	await _quadros(4)
 	_salvar_print("03_voando")
-	drone.e_pitch = 0.0
+	camera.distancia = 0.45
+	camera.altura = 0.12
+	camera.posicionar_ja()
+	await _quadros(4)
+	_salvar_print("04_perto")
 	hud.ajuda.visible = true
-	await _esperar(0.5)
-	_salvar_print("04_ajuda")
+	await _quadros(3)
+	_salvar_print("05_ajuda")
 	get_tree().quit()
