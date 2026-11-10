@@ -3,7 +3,7 @@ class_name Vento
 ## Vento do mapa: direção e força ajustáveis, com rajadas que mudam no tempo e no espaço.
 ## Perto do chão o vento é mais fraco (atrito com o capim), como na vida real.
 
-var velocidade := 2.5          # m/s a 10 m de altura
+var velocidade := 1.5          # m/s a 10 m de altura (começa fraco para aprender)
 var direcao := deg_to_rad(35)  # para onde o vento sopra (0 = +Z)
 var rajadas := true
 var tempo := 0.0

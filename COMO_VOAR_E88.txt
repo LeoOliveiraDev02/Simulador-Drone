@@ -5,6 +5,8 @@ COMO ABRIR
   Duplo clique em VOAR_E88.bat (aqui em C:\drone).
   Na primeira vez ele descompacta o mapa e prepara as texturas (alguns minutos).
   Depois abre direto. Ligue o controle (Xbox/PS) ANTES de abrir.
+  Se ficar pesado, use VOAR_E88_LEVE.bat (menos capim e efeitos).
+  Na primeira vez aparece o PRIMEIRO VOO GUIADO (6 passos na parte de baixo da tela).
 
 CONTROLE (modo 2, igual ao rádio do E88)
   Analógico esquerdo  ↑↓  subir / descer (solto no meio = trava a altura)
@@ -22,7 +24,7 @@ CONTROLE (modo 2, igual ao rádio do E88)
 TECLADO (reserva)
   W/S subir/descer  A/D girar  setas frente/trás/lados  Espaço decolar/pousar
   M modo  R recomeçar  B desligar  +/- vento  PgUp/PgDn câmera  G rajadas
-  V direção do vento  F flip  K sem cabeça  H/Esc ajuda  F12 print  Q sai (com a ajuda aberta)
+  V direção do vento  F flip  K sem cabeça  H/Esc ajuda  T tutorial  F11 tela cheia  F12 print  Q sai (com a ajuda aberta)
 
 O QUE TEM NA FÍSICA
   - 4 motores independentes, com atraso de rotação e torque de reação (é o que faz girar)
