@@ -96,48 +96,31 @@ def ajustar(bsdf, cor, rug, metal=0.0, coat=0.0, aniso=0.0, transm=0.0, ss=0.0):
         bsdf.inputs['Subsurface Radius'].default_value = (0.002, 0.002, 0.002)
 
 def mat_carbono():
+    """Carbono trançado 2x2 feito com imagem (gerar_carbono.py). Imagem tem mipmap:
+    de longe a trama não cintila (o padrão calculado no shader cintilava)."""
     m, nt, bsdf = novo_mat('Carbono trançado 3K')
     tc = nt.nodes.new('ShaderNodeTexCoord'); tc.location = (-1400, 0)
     mp = nt.nodes.new('ShaderNodeMapping'); mp.location = (-1200, 0)
-    mp.inputs['Scale'].default_value = (420, 420, 420)     # ~2,4 mm por trama
+    mp.inputs['Scale'].default_value = (104, 104, 104)     # 8 fios em 9,6 mm (fio de 1,2 mm)
     nt.links.new(tc.outputs['Object'], mp.inputs['Vector'])
-    sep = nt.nodes.new('ShaderNodeSeparateXYZ'); sep.location = (-1000, 0)
-    nt.links.new(mp.outputs['Vector'], sep.inputs[0])
-    # tramas em X e em Y (ondas) e um xadrez que decide qual fio fica por cima (twill)
-    def onda(eixo, loc):
-        w = nt.nodes.new('ShaderNodeTexWave'); w.location = loc
-        w.wave_type = 'BANDS'; w.bands_direction = eixo
-        w.inputs['Scale'].default_value = 2.0
-        w.inputs['Distortion'].default_value = 0.0
-        w.inputs['Detail'].default_value = 0.0
-        nt.links.new(mp.outputs['Vector'], w.inputs['Vector'])
-        return w
-    wx = onda('X', (-800, 200)); wy = onda('Y', (-800, -100))
-    ck = nt.nodes.new('ShaderNodeTexChecker'); ck.location = (-800, -400)
-    ck.inputs['Scale'].default_value = 1.0
-    ck.inputs['Color1'].default_value = (1, 1, 1, 1); ck.inputs['Color2'].default_value = (0, 0, 0, 1)
-    nt.links.new(mp.outputs['Vector'], ck.inputs['Vector'])
-    mix = nt.nodes.new('ShaderNodeMix'); mix.location = (-550, 0); mix.data_type = 'FLOAT'
-    nt.links.new(ck.outputs['Fac'], mix.inputs['Factor'])
-    nt.links.new(wx.outputs['Fac'], mix.inputs['A']); nt.links.new(wy.outputs['Fac'], mix.inputs['B'])
-    rmp = nt.nodes.new('ShaderNodeMapRange'); rmp.location = (-350, 100)
-    rmp.inputs['To Min'].default_value = 0.012; rmp.inputs['To Max'].default_value = 0.055
-    nt.links.new(mix.outputs['Result'], rmp.inputs['Value'])
-    comb = nt.nodes.new('ShaderNodeCombineColor'); comb.location = (-150, 150)
-    for i in range(3): nt.links.new(rmp.outputs['Result'], comb.inputs[i])
-    nt.links.new(comb.outputs['Color'], bsdf.inputs['Base Color'])
-    rr = nt.nodes.new('ShaderNodeMapRange'); rr.location = (-350, -150)
-    rr.inputs['To Min'].default_value = 0.5; rr.inputs['To Max'].default_value = 0.3
-    nt.links.new(mix.outputs['Result'], rr.inputs['Value'])
-    nt.links.new(rr.outputs['Result'], bsdf.inputs['Roughness'])
-    bsdf.inputs['Anisotropic'].default_value = 0.45
+    def tex(nome, loc, cor=True):
+        t = nt.nodes.new('ShaderNodeTexImage'); t.location = loc
+        t.image = bpy.data.images.load(os.path.join(TEX, nome))
+        if not cor: t.image.colorspace_settings.name = 'Non-Color'
+        t.projection = 'BOX'; t.projection_blend = 0.2; t.interpolation = 'Cubic'
+        nt.links.new(mp.outputs['Vector'], t.inputs['Vector'])
+        return t
+    nt.links.new(tex('carbono_cor.png', (-800, 300)).outputs['Color'], bsdf.inputs['Base Color'])
+    nt.links.new(tex('carbono_rugosidade.png', (-800, 0), False).outputs['Color'], bsdf.inputs['Roughness'])
+    alt = tex('carbono_altura.png', (-800, -300), False)
+    bsdf.inputs['Anisotropic'].default_value = 0.35
     bsdf.inputs['Specular IOR Level'].default_value = 0.25
     bsdf.inputs['Coat Weight'].default_value = 0.55
     bsdf.inputs['Coat Roughness'].default_value = 0.12
     bsdf.inputs['Coat IOR'].default_value = 1.5
     bump = nt.nodes.new('ShaderNodeBump'); bump.location = (0, -300)
-    bump.inputs['Strength'].default_value = 0.25; bump.inputs['Distance'].default_value = 0.00004
-    nt.links.new(mix.outputs['Result'], bump.inputs['Height'])
+    bump.inputs['Strength'].default_value = 0.2; bump.inputs['Distance'].default_value = 0.00003
+    nt.links.new(alt.outputs['Color'], bump.inputs['Height'])
     bev = nt.nodes.new('ShaderNodeBevel'); bev.location = (-200, -500)
     bev.inputs['Radius'].default_value = 0.0004; bev.samples = 6
     nt.links.new(bev.outputs['Normal'], bump.inputs['Normal'])
@@ -188,15 +171,19 @@ def trocar(m):
         novo = mat_simples('Alumínio polido', (0.9, 0.9, 0.9), 0.1, metal=1.0, ruido=0.0, raio=0.0001)
     elif '222114241' in n:
         # hélices de policarbonato translúcido
-        novo = mat_simples('Hélice policarbonato', (0.75, 0.35, 0.9), 0.12, coat=0.5, transm=0.55, ruido=0.05, raio=0.0003)
+        novo = mat_simples('Hélice policarbonato', (0.62, 0.22, 0.85), 0.15, coat=0.5, ruido=0.05, raio=0.0003)
+        b_ = next(n for n in novo.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+        b_.inputs['Alpha'].default_value = 0.82
+        novo.surface_render_method = 'BLENDED'
+        novo.use_transparency_overlap = False
     elif 'Nylon' in n or 'ABSWhite' in n:
-        novo = mat_simples('Nylon branco ' + n[-4:], (0.78, 0.78, 0.76), 0.55, ss=0.08, ruido=0.3)
+        novo = mat_simples('Nylon branco ' + n[-4:], (0.78, 0.78, 0.76), 0.55, ruido=0.3)
     elif L < 0.012:
         novo = mat_simples('Preto verniz ' + n[-10:], (max(c[0], 0.008), max(c[1], 0.008), max(c[2], 0.009)), 0.32, coat=0.45, ruido=0.2)
     elif sat > 0.25:
         novo = mat_simples('Colorido ' + n[-10:], c, 0.38, coat=0.25, ruido=0.2)
     elif L > 0.6:
-        novo = mat_simples('Branco ' + n[-10:], tuple(x * 0.8 for x in c), 0.45, ss=0.04, ruido=0.25)
+        novo = mat_simples('Branco ' + n[-10:], tuple(x * 0.8 for x in c), 0.45, ruido=0.25)
     else:
         # cinza médio do CAD costuma ser metal (parafusos, conectores, blindagens)
         novo = mat_simples('Metal ' + n[-10:], c, 0.3, metal=0.85, ruido=0.0, raio=0.00015)
@@ -289,6 +276,22 @@ print('hélices animadas:', len(helices))
 # desfoque de movimento nas fotos/animações (a hélice vira um disco borrado, como na vida real)
 cena.render.use_motion_blur = True
 cena.render.motion_blur_shutter = 0.5
+
+# antena do vídeo (VTX): no arquivo do autor ela ficava caída, encostando na bancada.
+# Num drone montado ela fica presa no suporte de trás, apontando para cima e para trás.
+ant = bpy.data.objects.get('Body1.091'); ponta = bpy.data.objects.get('Body1.092')
+if ant:
+    v = np.array([ant.matrix_world @ p.co for p in ant.data.vertices])
+    base_ = v[v[:, 1] > v[:, 1].max() - 0.012].mean(axis=0)       # conector, atrás e em cima
+    longe = v[np.argmin(v[:, 1])]                                  # ponta, encostada na bancada
+    d = longe - base_
+    ang_atual = math.atan2(d[2], d[1]); ang_novo = math.radians(55)  # 55° acima da horizontal, para trás
+    from mathutils import Matrix
+    R = Matrix.Translation(Vector(base_)) @ Matrix.Rotation(ang_novo - ang_atual, 4, 'X') @ Matrix.Translation(-Vector(base_))
+    for o in (ant, ponta):
+        if o:
+            o.matrix_world = R @ o.matrix_world
+    print('antena reposicionada', round(math.degrees(ang_atual)), '->', 55)
 
 # bateria = maior peça branca: ganha a etiqueta
 def volume(o):
@@ -387,8 +390,8 @@ camera('2_de_cima', (0.02, -0.12, 0.48), (0, 0, zc * 0.5), 50, (0, 0, zc), 8.0)
 alvo_m = Vector((0.092, -0.077, 0.022))
 camera('3_motor_macro', alvo_m + Vector((0.12, -0.11, 0.07)), alvo_m, 70, alvo_m, 5.6)
 # close na câmera DJI O4 e no stack entre as placas
-alvo_c = Vector((0.0, -0.06, 0.016))
-camera('4_stack_e_camera', (-0.11, -0.2, 0.055), alvo_c, 85, alvo_c, 6.3)
+alvo_c = Vector((0.0, -0.086, 0.034))
+camera('4_stack_e_camera', (-0.1, -0.25, 0.07), alvo_c, 85, alvo_c, 6.3)
 scn.camera = bpy.data.objects['1_heroi']
 
 # ------------------------------------------------------------------ render

@@ -39,8 +39,14 @@ def modo_tempo_real():
         rt.denoise_spatial = True
         rt.denoise_temporal = True
         rt.denoise_bilateral = True
+        # superfícies foscas usam a iluminação pré-calculada (sem chiado); só as
+        # brilhantes (verniz, metal polido) usam raytracing
+        rt.trace_max_roughness = 0.3
     except Exception:
         pass
+    for nome, valor in (('use_fast_gi', False), ('use_volumetric_shadows', False)):
+        if hasattr(ee, nome):
+            setattr(ee, nome, valor)
 
 def preparar_tela():
     ligar_gpu()
@@ -61,7 +67,7 @@ def preparar_tela():
                 with bpy.context.temp_override(window=janela, area=area, region=[r for r in area.regions if r.type == 'WINDOW'][0]):
                     bpy.ops.object.select_all(action='DESELECT')
                     for o in bpy.data.objects:
-                        if o.type == 'MESH' and o.name.startswith('Body'):
+                        if o.type == 'MESH' and not o.name.startswith(('Tampo', 'Tapete')):
                             o.select_set(True)
                     bpy.ops.view3d.view_selected()
                     bpy.ops.object.select_all(action='DESELECT')
