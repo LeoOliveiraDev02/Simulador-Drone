@@ -413,6 +413,9 @@ func _tirar_prints() -> void:
 	camera.posicionar_ja()
 	await _quadros(12)
 	_salvar_print("02_pairando")
+	if "--so-dois" in OS.get_cmdline_user_args():
+		get_tree().quit()
+		return
 	drone.global_transform = Transform3D(Basis(Vector3.UP, 0.4) * Basis(Vector3.RIGHT, -0.38), base + Vector3(-6, 2.5, -14))
 	camera.posicionar_ja()
 	await _quadros(4)

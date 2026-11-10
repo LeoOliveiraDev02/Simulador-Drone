@@ -105,6 +105,7 @@ func preparar(cena_modelo: PackedScene) -> void:
 	# no Blender a frente é -Y, que no glTF vira +Z; no Godot a frente é -Z
 	modelo.rotation.y = PI
 
+	_ajustar_materiais(modelo)
 	# eixos das hélices vêm do Blender com nomes "Eixo Hélice frente direita" etc.
 	var eixos: Array[Node3D] = []
 	_achar_eixos(modelo, eixos)
@@ -136,6 +137,30 @@ func preparar(cena_modelo: PackedScene) -> void:
 	_montar_mixer()
 	_montar_colisao()
 	_montar_discos()
+
+
+## o glTF não traz o verniz (clearcoat) do Blender: refaz aqui nas peças brilhantes
+func _ajustar_materiais(n: Node) -> void:
+	if n is MeshInstance3D:
+		var mi := n as MeshInstance3D
+		for i in mi.mesh.get_surface_count():
+			var m := mi.mesh.surface_get_material(i) as StandardMaterial3D
+			if m == null:
+				continue
+			var nome := m.resource_name
+			if nome.begins_with("Preto acetinado") or nome.begins_with("Câmera") or nome.begins_with("Tampa"):
+				m.clearcoat_enabled = true
+				m.clearcoat = 0.45
+				m.clearcoat_roughness = 0.18
+			elif nome.begins_with("Lente"):
+				m.clearcoat_enabled = true
+				m.clearcoat = 1.0
+				m.clearcoat_roughness = 0.0
+			elif nome.begins_with("LED"):
+				m.emission_energy_multiplier = 2.0
+				m.rim_enabled = false
+	for f in n.get_children():
+		_ajustar_materiais(f)
 
 
 func _achar_eixos(n: Node, lista: Array[Node3D]) -> void:
