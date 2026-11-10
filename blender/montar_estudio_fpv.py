@@ -24,6 +24,16 @@ for o in list(bpy.data.objects):
         bpy.data.objects.remove(o, do_unlink=True)
 if bpy.context.scene.rigidbody_world:
     bpy.ops.rigidbody.world_remove()
+# tira a animação antiga do autor (drone voando e hélices com keyframes "aos trancos")
+bpy.context.scene.frame_set(0)
+helices = []
+for o in bpy.data.objects:
+    if o.animation_data:
+        if o.parent is not None and o.type == 'MESH':
+            helices.append(o)
+        mw = o.matrix_world.copy()
+        o.animation_data_clear()
+        o.matrix_world = mw
 drone = [o for o in bpy.data.objects if o.type in ('MESH', 'CURVE')]
 
 # caixa do drone e posição sobre a bancada (z = 0 é o tampo)
@@ -54,7 +64,9 @@ def novo_mat(nome):
     return m, nt, bsdf
 
 def quinas(nt, bsdf, raio=0.00025, ruido=0.0, escala=3000.0):
-    """Quinas arredondadas no render (Bevel) + microtextura opcional."""
+    """Quinas arredondadas no render (Bevel). A microtextura foi desligada: em
+    movimento ela cintilava ("formigamento") e deixava o alumínio com chiado."""
+    ruido = 0.0
     bev = nt.nodes.new('ShaderNodeBevel'); bev.location = (-200, -300)
     bev.inputs['Radius'].default_value = raio
     bev.samples = 6
@@ -234,6 +246,49 @@ for o in malhas:
         reduzir(o, 12000)
 depois = sum(len(o.data.polygons) for o in malhas)
 print('poligonos:', antes, '->', depois)
+
+# ------------------------------------------------------------------ hélices girando
+# Cada hélice ganha um eixo no centro do cubo, apontando na direção do motor, e gira
+# em velocidade constante (sem trancos). Hélices vizinhas giram em sentidos opostos.
+import numpy as np
+cena = bpy.context.scene
+cena.render.fps = 60
+cena.frame_start = 0
+cena.frame_end = 600
+VOLTAS_POR_SEGUNDO = 6.0
+for h in helices:
+    v = np.array([h.matrix_world @ p.co for p in h.data.vertices])
+    c = v.mean(axis=0)
+    _, _, vt = np.linalg.svd(v - c, full_matrices=False)
+    # o centro do giro é o eixo do motor logo abaixo (o centro dos vértices fica
+    # deslocado porque as pás não têm a mesma quantidade de pontos)
+    tampas = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.split('.')[0] in ('top', 'bottom')]
+    if tampas:
+        def centro_obj(o):
+            return sum((o.matrix_world @ Vector(b) for b in o.bound_box), Vector()) / 8
+        perto = min(tampas, key=lambda o: (centro_obj(o).xy - Vector(c[:2])).length)
+        cm = centro_obj(perto)
+        c = np.array([cm.x, cm.y, c[2]])
+    n = Vector(vt[2]).normalized()
+    if n.z < 0:
+        n = -n
+    eixo = bpy.data.objects.new('Eixo ' + h.name, None)
+    cena.collection.objects.link(eixo)
+    eixo.empty_display_size = 0.01
+    eixo.location = Vector(c)
+    eixo.rotation_euler = n.to_track_quat('Z', 'Y').to_euler()
+    bpy.context.view_layer.update()
+    mw = h.matrix_world.copy()
+    h.parent = eixo
+    h.matrix_world = mw
+    sentido = 1.0 if (c[0] > 0) == (c[1] > 0) else -1.0
+    fc = eixo.driver_add('rotation_euler', 2)
+    base = eixo.rotation_euler.z
+    fc.driver.expression = f'{base:.5f} + {sentido} * frame * {2 * math.pi * VOLTAS_POR_SEGUNDO / 60.0:.6f}'
+print('hélices animadas:', len(helices))
+# desfoque de movimento nas fotos/animações (a hélice vira um disco borrado, como na vida real)
+cena.render.use_motion_blur = True
+cena.render.motion_blur_shutter = 0.5
 
 # bateria = maior peça branca: ganha a etiqueta
 def volume(o):

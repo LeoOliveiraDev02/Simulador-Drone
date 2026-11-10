@@ -27,19 +27,27 @@ def modo_tempo_real():
     scn = bpy.context.scene
     scn.render.engine = 'BLENDER_EEVEE'
     ee = scn.eevee
-    for nome, valor in (('use_raytracing', True), ('use_shadows', True), ('taa_samples', 32),
-                        ('use_gtao', True), ('shadow_ray_count', 2), ('shadow_step_count', 8)):
+    for nome, valor in (('use_raytracing', True), ('ray_tracing_method', 'SCREEN'), ('use_shadows', True),
+                        ('taa_samples', 64), ('use_taa_reprojection', True), ('use_gtao', True),
+                        ('shadow_ray_count', 3), ('shadow_step_count', 12), ('use_shadow_jitter_viewport', False)):
         if hasattr(ee, nome):
             setattr(ee, nome, valor)
     try:
-        ee.ray_tracing_options.resolution_scale = '2'
-        ee.ray_tracing_options.use_denoise = True
+        rt = ee.ray_tracing_options
+        rt.resolution_scale = '1'
+        rt.use_denoise = True
+        rt.denoise_spatial = True
+        rt.denoise_temporal = True
+        rt.denoise_bilateral = True
     except Exception:
         pass
 
 def preparar_tela():
     ligar_gpu()
     modo_tempo_real()
+    scn = bpy.context.scene
+    scn.sync_mode = 'AUDIO_SYNC'   # toca as hélices na velocidade certa (60 quadros por segundo)
+    tocou = False
     for janela in bpy.context.window_manager.windows:
         for area in janela.screen.areas:
             if area.type == 'VIEW_3D':
@@ -57,6 +65,9 @@ def preparar_tela():
                             o.select_set(True)
                     bpy.ops.view3d.view_selected()
                     bpy.ops.object.select_all(action='DESELECT')
+                    if not tocou and not bpy.context.screen.is_animation_playing:
+                        bpy.ops.screen.animation_play()
+                        tocou = True
     return None
 
 bpy.app.timers.register(preparar_tela, first_interval=1.0)
