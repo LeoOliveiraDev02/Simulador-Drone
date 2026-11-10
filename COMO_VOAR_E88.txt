@@ -21,6 +21,11 @@ CONTROLE (modo 2, igual ao rádio do E88)
   Back/Select  modo sem cabeça (a frente fica fixa)
   Start  ajuda na tela
 
+RÁDIO VIA USB (EdgeTX/OpenTX em modo joystick)
+  Detectado sozinho. F5 troca a ordem dos canais (AETR / TAER / AERT),
+  F6 inverte o acelerador, F7 inverte frente/trás. Acelerador no meio = altura travada.
+  Use o teclado para decolar (Espaço), trocar modo (M) e recomeçar (R).
+
 TECLADO (reserva)
   W/S subir/descer  A/D girar  setas frente/trás/lados  Espaço decolar/pousar
   M modo  R recomeçar  B desligar  +/- vento  PgUp/PgDn câmera  G rajadas

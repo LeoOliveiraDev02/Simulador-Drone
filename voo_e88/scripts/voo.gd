@@ -7,6 +7,8 @@ extends Node3D
 ##   --prints            tira prints do voo e fecha
 
 const ZONA_MORTA := 0.08
+const ORDENS_RADIO := [["A", "E", "T", "R"], ["T", "A", "E", "R"], ["A", "E", "R", "T"]]
+const NOMES_MAPA := ["Controle de videogame (modo 2)", "Rádio USB — canais AETR", "Rádio USB — canais TAER", "Rádio USB — canais AERT"]
 
 var mapa: Mapa
 var vento: Vento
@@ -19,6 +21,9 @@ var modo_prints := false
 var teclado_vel := {"acel": 0.0, "yaw": 0.0, "pitch": 0.0, "roll": 0.0}
 var segurando_armar := 0.0
 var pausado_ajuda := false
+var mapa_controle := -1          # -1 automático; 0 gamepad; 1..3 rádio
+var inverter_pitch := false
+var inverter_acel := false
 var lado_portal: Array[float] = []
 var portais_feitos := 0
 var tempo_volta := -1.0
@@ -101,6 +106,11 @@ func _eixo(dev: int, eixo: JoyAxis) -> float:
 	return signf(v) * (absf(v) - ZONA_MORTA) / (1.0 - ZONA_MORTA)
 
 
+func _eixo_radio(dev: int, i: int) -> float:
+	var v := Input.get_joy_axis(dev, i)
+	return 0.0 if absf(v) < 0.03 else v
+
+
 func _expo(v: float, e: float) -> float:
 	return v * (1.0 - e) + v * v * v * e
 
@@ -119,10 +129,25 @@ func _ler_controles(delta: float) -> void:
 	var pads := Input.get_connected_joypads()
 	if pads.size() > 0:
 		var d: int = pads[0]
-		acel = -_eixo(d, JOY_AXIS_LEFT_Y)
-		yaw = _eixo(d, JOY_AXIS_LEFT_X)
-		pitch = -_eixo(d, JOY_AXIS_RIGHT_Y)
-		roll = _eixo(d, JOY_AXIS_RIGHT_X)
+		if mapa_controle < 0:
+			# controle de videogame conhecido = modo 2; o resto (rádio via USB) = canais AETR
+			mapa_controle = 0 if Input.is_joy_known(d) else 1
+		match mapa_controle:
+			0:
+				acel = -_eixo(d, JOY_AXIS_LEFT_Y)
+				yaw = _eixo(d, JOY_AXIS_LEFT_X)
+				pitch = -_eixo(d, JOY_AXIS_RIGHT_Y)
+				roll = _eixo(d, JOY_AXIS_RIGHT_X)
+			_:
+				# rádio (EdgeTX/OpenTX em modo joystick): eixos 0..3 na ordem dos canais
+				var ordem: Array = ORDENS_RADIO[mapa_controle - 1]
+				var ch := {}
+				for i in 4:
+					ch[ordem[i]] = _eixo_radio(d, i)
+				roll = ch["A"]
+				pitch = -ch["E"] if not inverter_pitch else ch["E"]
+				acel = ch["T"] if not inverter_acel else -ch["T"]
+				yaw = ch["R"]
 	var k_acel := float(Input.is_key_pressed(KEY_W)) - float(Input.is_key_pressed(KEY_S))
 	var k_yaw := float(Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_A))
 	var k_pitch := float(Input.is_key_pressed(KEY_UP)) - float(Input.is_key_pressed(KEY_DOWN))
@@ -183,6 +208,15 @@ func _unhandled_input(ev: InputEvent) -> void:
 				tutorial_ligado = not tutorial_ligado
 				passo_tutorial = 0
 				tutorial_t = 0.0
+			KEY_F5:
+				mapa_controle = (maxi(mapa_controle, 0) + 1) % NOMES_MAPA.size()
+				hud.mostrar("Controle: " + NOMES_MAPA[mapa_controle], 2.5)
+			KEY_F6:
+				inverter_acel = not inverter_acel
+				hud.mostrar("Acelerador " + ("invertido" if inverter_acel else "normal"), 2.0)
+			KEY_F7:
+				inverter_pitch = not inverter_pitch
+				hud.mostrar("Frente/trás " + ("invertido" if inverter_pitch else "normal"), 2.0)
 			KEY_F11:
 				var w := get_window()
 				w.mode = Window.MODE_MAXIMIZED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
@@ -265,7 +299,9 @@ func _process(_delta: float) -> void:
 	if hud and camera and drone:
 		var p := drone.global_position
 		var dist := Vector2(p.x, p.z).length()
-		var nome := "Controle: " + Input.get_joy_name(Input.get_connected_joypads()[0]) if Input.get_connected_joypads().size() > 0 else "Sem controle conectado — usando o teclado"
+		var nome := "Sem controle conectado — usando o teclado"
+		if Input.get_connected_joypads().size() > 0:
+			nome = Input.get_joy_name(Input.get_connected_joypads()[0]) + " • " + NOMES_MAPA[maxi(mapa_controle, 0)] + " (F5 troca)"
 		hud.atualizar(drone, vento, camera, nome, dist, Mapa.LIMITE)
 		mapa.aplicar_vento(vento.direcao, vento.velocidade, vento.rajada_atual)
 
