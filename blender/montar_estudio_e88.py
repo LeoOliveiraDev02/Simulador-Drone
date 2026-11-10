@@ -128,7 +128,7 @@ mat_lente = mat_vidro()
 def mat_led(nome, cor, forca):
     """Difusor branco leitoso do LED que fica embaixo de cada motor."""
     m, nt, bsdf = novo_mat(nome)
-    bsdf.inputs['Base Color'].default_value = (0.85, 0.85, 0.85, 1)
+    bsdf.inputs['Base Color'].default_value = (0.35 + 0.55 * cor[0], 0.35 + 0.55 * cor[1], 0.35 + 0.55 * cor[2], 1)
     bsdf.inputs['Roughness'].default_value = 0.25
     bsdf.inputs['Coat Weight'].default_value = 0.5
     bsdf.inputs['Emission Color'].default_value = (*cor, 1)

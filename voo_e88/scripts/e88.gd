@@ -10,6 +10,7 @@ class_name E88
 
 signal mensagem(texto: String, segundos: float)
 signal helice_quebrou(indice: int)
+signal bateu(velocidade: float)
 
 # ---------------------------------------------------------------- números do E88
 const MASSA := 0.098              # kg (com a bateria)
@@ -579,6 +580,8 @@ func _tratar_contatos(st: PhysicsDirectBodyState3D) -> void:
 		var normal := st.get_contact_local_normal(i)
 		var bater := maxf(-v_anterior.dot(normal), 0.0)
 		ultima_vel_impacto = maxf(ultima_vel_impacto, bater)
+		if bater > 0.6:
+			bateu.emit(bater)
 		if forma_helice.has(forma):
 			var k: int = forma_helice[forma]
 			if helice_ok[k] and empuxo[k] > 0.08:

@@ -59,6 +59,8 @@ func _ready() -> void:
 		var som := SomMotor.new()
 		som.drone = drone
 		drone.add_child(som)
+		drone.bateu.connect(som.impacto)
+		drone.bateu.connect(_bateu)
 		var poeira := Poeira.new()
 		poeira.drone = drone
 		poeira.mapa = mapa
@@ -166,6 +168,11 @@ func _unhandled_input(ev: InputEvent) -> void:
 			KEY_V: _girar_vento()
 			KEY_F12: _salvar_print("print_%d" % Time.get_unix_time_from_system())
 			KEY_ESCAPE: get_tree().quit()
+
+
+func _bateu(v: float) -> void:
+	if v > 1.5:
+		_vibrar(clampf(v / 4.0, 0.2, 1.0), 0.25)
 
 
 func _vibrar(forte: float, segundos: float) -> void:

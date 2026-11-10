@@ -12,6 +12,8 @@ var freq: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var taxa := 16000.0
 var rng := RandomNumberGenerator.new()
 var ruido_filtrado := 0.0
+var batida := 0.0        # energia do som de pancada (decai rápido)
+var batida_tom := 0.0
 
 
 func _ready() -> void:
@@ -53,4 +55,13 @@ func _process(_delta: float) -> void:
 		ruido_filtrado = lerpf(ruido_filtrado, rng.randf_range(-1.0, 1.0), 0.35)
 		var total_amp := amp[0] + amp[1] + amp[2] + amp[3]
 		s += ruido_filtrado * total_amp * 0.35
+		if batida > 0.001:
+			# pancada de plástico: ruído grave que some rápido
+			batida_tom = lerpf(batida_tom, rng.randf_range(-1.0, 1.0), 0.12)
+			s += batida_tom * batida * 2.2
+			batida *= 0.9985
 		gerador.push_frame(Vector2(s, s))
+
+
+func impacto(forca: float) -> void:
+	batida = clampf(batida + forca * 0.25, 0.0, 0.6)
