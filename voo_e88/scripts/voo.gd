@@ -59,6 +59,10 @@ func _ready() -> void:
 		var som := SomMotor.new()
 		som.drone = drone
 		drone.add_child(som)
+		var poeira := Poeira.new()
+		poeira.drone = drone
+		poeira.mapa = mapa
+		add_child(poeira)
 
 	camera = CameraSegue.new()
 	add_child(camera)
@@ -69,6 +73,7 @@ func _ready() -> void:
 	hud = Hud.new()
 	add_child(hud)
 	drone.mensagem.connect(hud.mostrar)
+	drone.helice_quebrou.connect(func(_k): _vibrar(0.9, 0.5))
 	hud.mostrar("Aperte A (ou Espaço) para decolar  •  Start/H: ajuda", 6.0)
 
 	if modo_teste:
@@ -161,6 +166,11 @@ func _unhandled_input(ev: InputEvent) -> void:
 			KEY_V: _girar_vento()
 			KEY_F12: _salvar_print("print_%d" % Time.get_unix_time_from_system())
 			KEY_ESCAPE: get_tree().quit()
+
+
+func _vibrar(forte: float, segundos: float) -> void:
+	for d in Input.get_connected_joypads():
+		Input.start_joy_vibration(d, forte * 0.6, forte, segundos)
 
 
 func _recomecar() -> void:
@@ -351,11 +361,12 @@ func _tirar_prints() -> void:
 	drone.freeze = true
 	for k in 4:
 		drone.rps[k] = 150.0
+		drone.empuxo[k] = 0.25
 	drone.armado = true
 	drone.estado = "voando"
-	drone.global_transform = Transform3D(Basis(Vector3.UP, 0.4), base + Vector3(0, 1.3, 0))
+	drone.global_transform = Transform3D(Basis(Vector3.UP, 0.4), base + Vector3(0, 0.25, 0))
 	camera.posicionar_ja()
-	await _quadros(4)
+	await _quadros(12)
 	_salvar_print("02_pairando")
 	drone.global_transform = Transform3D(Basis(Vector3.UP, 0.4) * Basis(Vector3.RIGHT, -0.38), base + Vector3(-6, 2.5, -14))
 	camera.posicionar_ja()
