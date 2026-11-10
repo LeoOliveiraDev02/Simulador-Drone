@@ -1,6 +1,35 @@
 SIMULADOR DE DRONE — ONDE PARAMOS
 =================================
-Atualizado: 09/11/2026
+Atualizado: 10/11/2026 (madrugada, trabalho noturno)
+
+>>> FOCO ATUAL (decidido por Leonardo em 10/11, 00:18): SÓ O DRONE E88 (dobrável) <<<
+Trabalho noturno autônomo: refinar o E88, fazer toda a física de voo e o mapa.
+Não parar até Leonardo mandar mensagem; sempre que der, refinar mais.
+
+DECISÕES DELE PARA O VOO
+- Motor: Godot 4.7 com o modelo/materiais vindos do Blender (pasta voo_e88/)
+- Modo de voo: igual ao E88 real (estabilizado, altitude travada, soltou = para no ar)
+  + tecla/botão para modo acro (manual)
+- Controle: gamepad (Xbox/PS) primeiro (teclado de reserva)
+- Câmera: seguindo atrás do drone
+- Física: vento com rajadas (biruta mostra), colisão que quebra hélice (e pouso brusco),
+  efeito solo e turbulência perto de paredes. (Bateria que acaba: NÃO nesta versão)
+- Mapa: 1 x 1 km bem detalhado, igual à imagem de referência (pasto baiano, base com H,
+  galpão, açude com vacas, eucaliptos, rede elétrica, biruta, portais de treino)
+- Visual do E88: todo preto, só detalhes cinza (sem marca/logo)
+- Braços: sempre abertos (sem animação de dobrar)
+
+TAREFAS DA NOITE (em ordem)
+[ ] 1. Refinar o E88 no Blender (detalhes cinza, acabamento, close-ups)
+[ ] 2. Exportar o E88 para o Godot (GLB com materiais PBR equivalentes)
+[ ] 3. Física de voo do E88 (quad com 4 motores, estabilização, alt hold, acro, gamepad)
+[ ] 4. Mapa 1x1 km (terreno, grama, eucaliptos, açude, galpão, base H, rede elétrica, portais)
+[ ] 5. Vento + biruta, colisão/quebra de hélice, efeito solo, turbulência
+[ ] 6. Câmera seguindo atrás, HUD simples, bat para abrir em C:\drone
+[ ] 7. Refinar sem parar (gráfico, sensação de voo, desempenho)
+
+=================================
+HISTÓRICO ANTERIOR
 
 IDEIA
 Simulador 3D (Godot 4.7, programa baixável) que ensina a montar drones peça

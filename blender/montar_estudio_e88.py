@@ -107,7 +107,7 @@ M = {
     'Carcaça de baixo': plastico('Preto fosco texturizado', (0.012, 0.012, 0.013), 0.7, raio=0.0005, textura=0.18, esc_tex=260),
     'Braço': plastico('Preto fosco (braço)', (0.013, 0.013, 0.014), 0.55, coat=0.1, raio=0.0005, textura=0.12, esc_tex=260),
     'Hélice': plastico('Hélice preta (nylon)', (0.012, 0.012, 0.013), 0.4, coat=0.1, raio=0.0003),
-    'Engrenagem': plastico('Engrenagem cinza (POM)', (0.05, 0.05, 0.052), 0.38, raio=0.0002),
+    'Engrenagem': plastico('Cinza grafite (topo do motor)', (0.11, 0.11, 0.115), 0.36, coat=0.2, raio=0.0002),
     'Motor': plastico('Motor (aço)', (0.6, 0.6, 0.62), 0.25, metal=1.0, raio=0.0002),
     'Câmera': plastico('Câmera (plástico preto)', (0.01, 0.01, 0.011), 0.35, coat=0.3, raio=0.0003),
 }
@@ -183,55 +183,31 @@ for h in helices:
         if math.hypot(c.x - cx, c.y - cy) < 0.0043 and c.z > zmin + 0.004:
             p.material_index = 1
 
-# LED: a cúpula leitosa embaixo da ponta de cada braço. A divisa preto/branco é feita
-# no shader por altura (linha reta e limpa), só perto do motor (atributo 'perto_led').
+# LED: a cúpula leitosa embaixo da ponta de cada braço. A malha é cortada numa altura
+# fixa (linha reta e limpa) e as faces de baixo, perto do motor, viram o difusor do LED.
+# Assim funciona igual no Blender e no Godot (material comum, sem truque de shader).
+import bmesh
 Z_CORTE_LED = 0.0115
-
-def mat_braco_led(nome, led):
-    m = M['Braço'].copy(); m.name = nome
-    nt = m.node_tree
-    out = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
-    bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
-    b2 = nt.nodes.new('ShaderNodeBsdfPrincipled'); b2.location = (300, -700)
-    lb = next(n for n in led.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
-    for k in ('Base Color', 'Roughness', 'Coat Weight', 'Emission Color', 'Emission Strength'):
-        b2.inputs[k].default_value = lb.inputs[k].default_value
-    b2.inputs['Subsurface Weight'].default_value = 0.0
-    bev = next(n for n in nt.nodes if n.type == 'BEVEL')
-    nt.links.new(bev.outputs['Normal'], b2.inputs['Normal'])
-    geo = nt.nodes.new('ShaderNodeNewGeometry'); geo.location = (-600, -900)
-    sep = nt.nodes.new('ShaderNodeSeparateXYZ'); sep.location = (-400, -900)
-    nt.links.new(geo.outputs['Position'], sep.inputs[0])
-    mr = nt.nodes.new('ShaderNodeMapRange'); mr.location = (-200, -900)
-    mr.interpolation_type = 'SMOOTHSTEP'
-    mr.inputs['From Min'].default_value = Z_CORTE_LED + 0.00015
-    mr.inputs['From Max'].default_value = Z_CORTE_LED - 0.00015
-    nt.links.new(sep.outputs['Z'], mr.inputs['Value'])
-    at = nt.nodes.new('ShaderNodeAttribute'); at.location = (-200, -1100); at.attribute_name = 'perto_led'
-    mul = nt.nodes.new('ShaderNodeMath'); mul.operation = 'MULTIPLY'; mul.location = (0, -1000)
-    gt = nt.nodes.new('ShaderNodeMath'); gt.operation = 'GREATER_THAN'; gt.location = (-50, -1150)
-    gt.inputs[1].default_value = 0.99
-    nt.links.new(at.outputs['Fac'], gt.inputs[0])
-    nt.links.new(mr.outputs['Result'], mul.inputs[0]); nt.links.new(gt.outputs[0], mul.inputs[1])
-    mix = nt.nodes.new('ShaderNodeMixShader'); mix.location = (500, -300)
-    nt.links.new(mul.outputs[0], mix.inputs['Fac'])
-    nt.links.new(bsdf.outputs[0], mix.inputs[1]); nt.links.new(b2.outputs[0], mix.inputs[2])
-    nt.links.new(mix.outputs[0], out.inputs['Surface'])
-    return m
-
-braco_frente = mat_braco_led('Braço + LED branco (frente)', led_frente)
-braco_tras = mat_braco_led('Braço + LED vermelho (trás)', led_tras)
 for b in [o for o in malhas if tipo[o] == 'Braço']:
     v = np.array([p.co for p in b.data.vertices])
     cb = v[:, :2].mean(0)
     h = min(helices, key=lambda h: math.hypot(eixos[h][0] - cb[0], eixos[h][1] - cb[1]))
     cx, cy = eixos[h][0], eixos[h][1]
-    perto = (np.hypot(v[:, 0] - cx, v[:, 1] - cy) < 0.022) & (v[:, 2] < 0.03)
-    at = b.data.attributes.new('perto_led', 'FLOAT', 'POINT')
-    at.data.foreach_set('value', perto.astype(np.float32))
-    b.data.materials.clear()
-    b.data.materials.append(braco_frente if cy < 0 else braco_tras)
-    print('LED', b.name, int(perto.sum()), 'vértices perto do motor')
+    led = led_frente if cy < 0 else led_tras
+    b.data.materials.append(led)
+    bm = bmesh.new(); bm.from_mesh(b.data)
+    def perto(co): return math.hypot(co.x - cx, co.y - cy) < 0.022 and co.z < 0.03
+    faces = [f for f in bm.faces if perto(f.calc_center_median())]
+    geom = list({e for f in faces for e in f.edges}) + faces + list({v_ for f in faces for v_ in f.verts})
+    bmesh.ops.bisect_plane(bm, geom=geom, plane_co=(0, 0, Z_CORTE_LED), plane_no=(0, 0, 1))
+    n = 0
+    for f in bm.faces:
+        c = f.calc_center_median()
+        if perto(c) and c.z < Z_CORTE_LED:
+            f.material_index = 1; n += 1
+    bm.to_mesh(b.data); bm.free()
+    suavizar(b)
+    print('LED', b.name, n, 'faces')
 
 # lente: faces da câmera viradas para a frente (-Y) e mais à frente
 cv = np.array([p.co for p in cam_obj.data.vertices])
@@ -244,6 +220,7 @@ for p in cam_obj.data.polygons:
         if math.hypot(p.center.x - ccx, p.center.z - ccz) < 0.0045:
             p.material_index = 1; nl += 1
 print('lente', nl, 'faces')
+
 
 # ------------------------------------------------------------------ otimização
 def reduzir(o, alvo):
