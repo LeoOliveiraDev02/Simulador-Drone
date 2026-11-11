@@ -4,6 +4,8 @@ config_version=5
 
 [application]
 
+config/project_settings_override="user://graficos.cfg"
+
 config/name="Simulador de Drone - Voo do E88"
 run/main_scene="res://cenas/voo.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")

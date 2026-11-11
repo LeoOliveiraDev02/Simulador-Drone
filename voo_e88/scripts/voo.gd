@@ -42,6 +42,19 @@ var pos_inicio := Vector3.ZERO
 var estado_antes := "pousado"
 var ja_voou := false
 
+# PC: qualidade da imagem. Na placa AMD (RX 7000/9000) o modo FSR vira FSR 4.1 com IA;
+# nas outras placas o Godot usa o FSR 2.2. "Nativo AA" não reduz a resolução, só tira o serrilhado.
+const MODOS_PC := [
+	["Sem FSR (MSAA + TAA)", 1.0],
+	["FSR Nativo AA", 1.0],
+	["FSR Qualidade", 0.67],
+	["FSR Equilibrado", 0.59],
+	["FSR Desempenho", 0.5],
+]
+const CFG_GRAFICOS := "user://graficos.cfg"
+var modo_pc := 1
+var gerador_ao_abrir := false
+
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -68,6 +81,9 @@ func _ready() -> void:
 	if qualidade_baixa:
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
 		get_viewport().use_taa = false
+	elif not movel:
+		_carregar_cfg_pc()
+		_aplicar_modo_pc(false)
 
 	var carregando := Carregamento.new()
 	add_child(carregando)
@@ -274,6 +290,14 @@ func _unhandled_input(ev: InputEvent) -> void:
 			KEY_F7:
 				inverter_pitch = not inverter_pitch
 				hud.mostrar("Frente/trás " + ("invertido" if inverter_pitch else "normal"), 2.0)
+			KEY_F8:
+				if not movel_ativo:
+					modo_pc = (modo_pc + 1) % MODOS_PC.size()
+					_aplicar_modo_pc(true)
+					_salvar_cfg_pc()
+			KEY_F9:
+				if not movel_ativo:
+					_alternar_gerador()
 			KEY_F11:
 				var w := get_window()
 				w.mode = Window.MODE_MAXIMIZED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
@@ -689,3 +713,52 @@ func _tirar_prints() -> void:
 	await _quadros(4)
 	_salvar_print("06_eucaliptos")
 	get_tree().quit()
+
+
+# ---------- PC: FSR 4.1 / gerador de quadros ----------
+
+func _carregar_cfg_pc() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(CFG_GRAFICOS) == OK:
+		modo_pc = clampi(int(cfg.get_value("jogo", "modo_pc", 1)), 0, MODOS_PC.size() - 1)
+	# o gerador de quadros só funciona se já estava ligado quando o jogo abriu
+	gerador_ao_abrir = bool(ProjectSettings.get_setting("rendering/amd_fsr/frame_generation", false))
+
+
+func _salvar_cfg_pc() -> void:
+	# este arquivo também é lido pelo motor ao abrir (application/config/project_settings_override)
+	var cfg := ConfigFile.new()
+	cfg.set_value("rendering", "amd_fsr/frame_generation", bool(ProjectSettings.get_setting("rendering/amd_fsr/frame_generation", false)))
+	cfg.set_value("jogo", "modo_pc", modo_pc)
+	cfg.save(CFG_GRAFICOS)
+
+
+func _aplicar_modo_pc(avisar: bool) -> void:
+	var vp := get_viewport()
+	if modo_pc == 0:
+		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+		vp.scaling_3d_scale = 1.0
+		vp.msaa_3d = Viewport.MSAA_2X
+		vp.use_taa = true
+	else:
+		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR2
+		vp.scaling_3d_scale = MODOS_PC[modo_pc][1]
+		vp.fsr_sharpness = 1.0 # nitidez moderada
+		vp.msaa_3d = Viewport.MSAA_DISABLED
+		vp.use_taa = false
+	if avisar and hud:
+		hud.mostrar("Imagem: " + MODOS_PC[modo_pc][0] + "  (F8 troca)", 2.5)
+
+
+func _alternar_gerador() -> void:
+	var ligado := not bool(ProjectSettings.get_setting("rendering/amd_fsr/frame_generation", false))
+	ProjectSettings.set_setting("rendering/amd_fsr/frame_generation", ligado)
+	_salvar_cfg_pc()
+	if ligado and modo_pc == 0:
+		modo_pc = 1
+		_aplicar_modo_pc(false)
+		_salvar_cfg_pc()
+	if ligado and not gerador_ao_abrir:
+		hud.mostrar("Gerador de quadros LIGADO: feche e abra o jogo para ele começar", 5.0)
+	else:
+		hud.mostrar("Gerador de quadros " + ("LIGADO" if ligado else "DESLIGADO"), 2.5)

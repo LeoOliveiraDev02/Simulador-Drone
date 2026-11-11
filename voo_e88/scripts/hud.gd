@@ -135,6 +135,7 @@ TECLADO
   W/S subir/descer   A/D girar   ↑↓←→ frente/trás/lados   Espaço decolar/pousar
   M modo   R recomeçar   B desligar   +/- vento   PgUp/PgDn câmera   G rajadas   H ajuda
   F flip   K modo sem cabeça   V direção do vento   F11 tela cheia   F12 print   T tutorial
+  F8 qualidade da imagem (FSR 4.1 na placa AMD)   F9 gerador de quadros FSR (liga/desliga)
 
 RÁDIO VIA USB (EdgeTX/OpenTX em modo joystick)
   É detectado sozinho. F5 troca a ordem dos canais (AETR/TAER/AERT), F6 inverte o acelerador,
@@ -240,6 +241,9 @@ func atualizar(drone: E88, vento: Vento, camera: Camera3D, controle_nome: String
 	diagrama.queue_redraw()
 	explica.text = _explicacao(drone)
 	controle_txt.text = controle_nome + "   •   %d FPS" % Engine.get_frames_per_second()
+	var fsr: String = ProjectSettings.get_setting("rendering/amd_fsr/status", "")
+	if fsr != "" and not OS.has_feature("mobile"):
+		controle_txt.text += "   •   " + fsr
 	if distancia_base > limite:
 		mostrar("Longe demais! Volte para a área de voo", 0.3)
 

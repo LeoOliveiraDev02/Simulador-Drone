@@ -1,0 +1,11 @@
+Godot 4.7.2 com AMD FSR 4.1 (upscaling por IA) e gerador de quadros FSR 4 (Vulkan, Windows).
+
+- godot-4.7.2-fsr4.patch: alterações no código do Godot 4.7.2-stable (driver Vulkan e Forward+).
+- amd_ffx.*: ponte que carrega amd_fidelityfx_loader_vk.dll (AMD FSR SDK 2.4) em tempo de execução.
+- amd_fsr4.*: efeito do renderizador (FSR 4 + preparação do gerador de quadros).
+
+Como aplicar: clone godot 4.7.2-stable, aplique o patch, copie amd_ffx.* para drivers/vulkan/,
+amd_fsr4.* para servers/rendering/renderer_rd/effects/ e os headers do SDK (api, upscalers,
+framegeneration) para thirdparty/amd_ffx/. Compile: scons platform=windows target=template_release.
+No jogo: modo de escala FSR2 vira FSR 4.1 em placa AMD compatível; configurações
+rendering/amd_fsr/fsr4_upscaler e rendering/amd_fsr/frame_generation.

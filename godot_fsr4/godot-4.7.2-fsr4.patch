@@ -1,0 +1,629 @@
+diff --git a/drivers/vulkan/rendering_context_driver_vulkan.cpp b/drivers/vulkan/rendering_context_driver_vulkan.cpp
+index fdb6b4a..6faa182 100644
+--- a/drivers/vulkan/rendering_context_driver_vulkan.cpp
++++ b/drivers/vulkan/rendering_context_driver_vulkan.cpp
+@@ -32,6 +32,8 @@
+ 
+ #include "rendering_context_driver_vulkan.h"
+ 
++#include "drivers/vulkan/amd_ffx.h"
++
+ #include "core/config/engine.h"
+ #include "core/config/project_settings.h"
+ #include "core/version.h"
+@@ -696,6 +698,10 @@ Error RenderingContextDriverVulkan::_initialize_instance() {
+ 	// version, devices can still support newer versions of Vulkan. The exception is when we're on Vulkan 1.0, we should not set this
+ 	// to anything but 1.0. Note that this value is only used by validation layers to warn us about version issues.
+ 	uint32_t application_api_version = instance_api_version == VK_API_VERSION_1_0 ? VK_API_VERSION_1_0 : VK_API_VERSION_1_2;
++	if (instance_api_version >= VK_API_VERSION_1_3 && AmdFfx::library_present()) {
++		// O AMD FSR 4 / gerador de quadros usam recursos do Vulkan 1.3.
++		application_api_version = VK_API_VERSION_1_3;
++	}
+ 
+ 	CharString cs = GLOBAL_GET("application/config/name").operator String().utf8();
+ 	VkApplicationInfo app_info = {};
+diff --git a/drivers/vulkan/rendering_device_driver_vulkan.cpp b/drivers/vulkan/rendering_device_driver_vulkan.cpp
+index 4b1bd9f..758d37e 100644
+--- a/drivers/vulkan/rendering_device_driver_vulkan.cpp
++++ b/drivers/vulkan/rendering_device_driver_vulkan.cpp
+@@ -35,6 +35,7 @@
+ #include "core/os/os.h"
+ #include "core/templates/fixed_vector.h"
+ #include "drivers/vulkan/vulkan_hooks.h"
++#include "drivers/vulkan/amd_ffx.h"
+ 
+ #include <thirdparty/misc/smolv.h>
+ 
+@@ -617,6 +618,35 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
+ 
+ 	_register_requested_device_extension(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME, false);
+ 
++	if (AmdFfx::library_present()) {
++		// Extensões usadas pelo AMD FSR 4 (IA) e pelo gerador de quadros. Todas opcionais.
++		static const char *amd_ffx_extensions[] = {
++			VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME,
++			VK_EXT_SHADER_FLOAT8_EXTENSION_NAME,
++			VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME,
++			VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME,
++			VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
++			VK_KHR_SHADER_SUBGROUP_EXTENDED_TYPES_EXTENSION_NAME,
++			VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
++			VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME,
++			VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME,
++			VK_KHR_MAINTENANCE_3_EXTENSION_NAME,
++			VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
++			VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME,
++			VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME,
++			VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
++			VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
++			VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME,
++			VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
++			VK_KHR_SPIRV_1_4_EXTENSION_NAME,
++		};
++		for (const char *ext : amd_ffx_extensions) {
++			if (!requested_device_extensions.has(CharString(ext))) {
++				_register_requested_device_extension(ext, false);
++			}
++		}
++	}
++
+ 	uint32_t device_extension_count = 0;
+ 	VkResult err = vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &device_extension_count, nullptr);
+ 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, ERR_CANT_CREATE, vformat("Couldn't get Vulkan device extension count (VkResult error %d).", err));
+@@ -1308,7 +1338,15 @@ Error RenderingDeviceDriverVulkan::_add_queue_create_info(LocalVector<VkDeviceQu
+ 
+ 	VkQueueFlags queue_flags_mask = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
+ 	const uint32_t max_queue_count_per_family = 1;
+-	static const float queue_priorities[max_queue_count_per_family] = {};
++	// O gerador de quadros da AMD precisa de filas próprias (apresentação, aquisição de imagem e computação).
++	// O Godot continua usando só a fila 0 de cada família.
++	const bool amd_ffx_queues = AmdFfx::frame_generation_requested() && AmdFfx::is_amd();
++	const uint32_t created_queue_count_per_family = amd_ffx_queues ? 4 : max_queue_count_per_family;
++	static const float queue_priorities[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
++	amd_ffx_queue_counts.resize(queue_family_count);
++	for (uint32_t i = 0; i < queue_family_count; i++) {
++		amd_ffx_queue_counts[i] = 0;
++	}
+ 	for (uint32_t i = 0; i < queue_family_count; i++) {
+ 		if ((queue_family_properties[i].queueFlags & queue_flags_mask) == 0) {
+ 			// We ignore creating queues in families that don't support any of the operations we require.
+@@ -1318,12 +1356,13 @@ Error RenderingDeviceDriverVulkan::_add_queue_create_info(LocalVector<VkDeviceQu
+ 		VkDeviceQueueCreateInfo create_info = {};
+ 		create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+ 		create_info.queueFamilyIndex = i;
+-		create_info.queueCount = MIN(queue_family_properties[i].queueCount, max_queue_count_per_family);
++		create_info.queueCount = MIN(queue_family_properties[i].queueCount, created_queue_count_per_family);
+ 		create_info.pQueuePriorities = queue_priorities;
+ 		r_queue_create_info.push_back(create_info);
++		amd_ffx_queue_counts[i] = create_info.queueCount;
+ 
+ 		// Prepare the vectors where the queues will be filled out.
+-		queue_families[i].resize(create_info.queueCount);
++		queue_families[i].resize(MIN(create_info.queueCount, max_queue_count_per_family));
+ 	}
+ 
+ 	return OK;
+@@ -1483,6 +1522,53 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
+ 		}
+ 	}
+ 
++#ifdef AMD_FFX_ENABLED
++	// Liga os recursos de shader que o FSR 4 e o gerador de quadros da AMD usam (só em placa AMD com a DLL presente).
++	struct AmdFfxFeature {
++		VkStructureType stype;
++		const char *extension;
++	};
++	static const AmdFfxFeature amd_ffx_features[] = {
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR, VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT8_FEATURES_EXT, VK_EXT_SHADER_FLOAT8_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR, VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES, VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES, VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES, VK_KHR_8BIT_STORAGE_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES, VK_KHR_SHADER_SUBGROUP_EXTENDED_TYPES_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES, VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES, VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES, VK_KHR_MAINTENANCE_4_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT, VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR, VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES, VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME },
++		{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME },
++	};
++	constexpr uint32_t amd_ffx_feature_count = sizeof(amd_ffx_features) / sizeof(amd_ffx_features[0]);
++	alignas(16) uint8_t amd_ffx_feature_storage[amd_ffx_feature_count][256] = {};
++	const RenderingContextDriverVulkan::Functions &amd_ffx_functions = context_driver->functions_get();
++	if (AmdFfx::library_present() && AmdFfx::is_amd() && amd_ffx_functions.GetPhysicalDeviceFeatures2 != nullptr) {
++		for (uint32_t i = 0; i < amd_ffx_feature_count; i++) {
++			if (!enabled_device_extension_names.has(CharString(amd_ffx_features[i].extension))) {
++				continue;
++			}
++			VkBaseOutStructure *feature = (VkBaseOutStructure *)amd_ffx_feature_storage[i];
++			feature->sType = amd_ffx_features[i].stype;
++			feature->pNext = nullptr;
++			VkPhysicalDeviceFeatures2 query = {};
++			query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
++			query.pNext = feature;
++			amd_ffx_functions.GetPhysicalDeviceFeatures2(physical_device, &query);
++			feature->sType = amd_ffx_features[i].stype;
++			feature->pNext = (VkBaseOutStructure *)create_info_next;
++			create_info_next = feature;
++		}
++	}
++#endif
++
+ 	VkDeviceCreateInfo create_info = {};
+ 	create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+ 	create_info.pNext = create_info_next;
+@@ -1506,6 +1592,15 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
+ 		}
+ 	}
+ 
++#ifdef AMD_FFX_ENABLED
++	if (AmdFfx::library_present()) {
++		AmdFfx::device = vk_device;
++		AmdFfx::physical_device = physical_device;
++		AmdFfx::get_device_proc_addr = context_driver->functions_get().GetDeviceProcAddr != nullptr ? context_driver->functions_get().GetDeviceProcAddr : vkGetDeviceProcAddr;
++		_amd_ffx_pick_queues();
++	}
++#endif
++
+ 	const RenderingContextDriverVulkan::Functions &functions = context_driver->functions_get();
+ 	if (functions.GetDeviceProcAddr != nullptr) {
+ 		device_functions.CreateSwapchainKHR = PFN_vkCreateSwapchainKHR(functions.GetDeviceProcAddr(vk_device, "vkCreateSwapchainKHR"));
+@@ -1844,6 +1939,7 @@ Error RenderingDeviceDriverVulkan::initialize(uint32_t p_device_index, uint32_t
+ 	ERR_FAIL_COND_V_MSG(err != OK, err, "Couldn't initialize Vulkan device extensions. This may be caused by an incompatible or outdated graphics driver.");
+ 
+ 	_get_device_properties();
++	AmdFfx::vendor_is_amd = physical_device_properties.vendorID == 0x1002;
+ 
+ 	err = _check_device_features();
+ 	ERR_FAIL_COND_V_MSG(err != OK, err, "Couldn't initialize Vulkan device features. This may be caused by an incompatible or outdated graphics driver.");
+@@ -3301,6 +3397,9 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
+ 		}
+ 
+ 		results.resize(swapchains.size());
++		for (uint32_t i = 0; i < results.size(); i++) {
++			results[i] = VK_SUCCESS; // A swapchain do gerador de quadros da AMD pode não preencher os resultados.
++		}
+ 
+ 		VkPresentInfoKHR present_info = {};
+ 		present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+@@ -3636,8 +3735,15 @@ void RenderingDeviceDriverVulkan::_swap_chain_release(SwapChain *swap_chain) {
+ 			SwappyVk_destroySwapchain(vk_device, swap_chain->vk_swapchain);
+ 		}
+ #endif
+-		device_functions.DestroySwapchainKHR(vk_device, swap_chain->vk_swapchain, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SWAPCHAIN_KHR));
+-		swap_chain->vk_swapchain = VK_NULL_HANDLE;
++#ifdef AMD_FFX_ENABLED
++		if (_amd_ffx_release_swap_chain(swap_chain)) {
++			swap_chain->vk_swapchain = VK_NULL_HANDLE;
++		} else
++#endif
++		{
++			device_functions.DestroySwapchainKHR(vk_device, swap_chain->vk_swapchain, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SWAPCHAIN_KHR));
++			swap_chain->vk_swapchain = VK_NULL_HANDLE;
++		}
+ 	}
+ 
+ 	if (swap_chain->render_pass.id != 0) {
+@@ -3819,6 +3925,11 @@ Error RenderingDeviceDriverVulkan::swap_chain_resize(CommandQueueID p_cmd_queue,
+ 	swap_create_info.imageExtent = extent;
+ 	swap_create_info.imageArrayLayers = 1;
+ 	swap_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
++#ifdef AMD_FFX_ENABLED
++	if (AmdFfx::fg_queues_ready) {
++		swap_create_info.imageUsage |= surface_capabilities.supportedUsageFlags & (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
++	}
++#endif
+ 	swap_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+ 	swap_create_info.preTransform = surface_transform_bits;
+ 	switch (swap_create_info.preTransform) {
+@@ -3845,6 +3956,10 @@ Error RenderingDeviceDriverVulkan::swap_chain_resize(CommandQueueID p_cmd_queue,
+ 	err = device_functions.CreateSwapchainKHR(vk_device, &swap_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SWAPCHAIN_KHR), &swap_chain->vk_swapchain);
+ 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, ERR_CANT_CREATE, vformat("Couldn't create Vulkan swapchain (VkResult error %d).", err));
+ 
++#ifdef AMD_FFX_ENABLED
++	_amd_ffx_replace_swap_chain(command_queue, swap_chain, swap_create_info);
++#endif
++
+ #if defined(SWAPPY_FRAME_PACING_ENABLED)
+ 	if (swappy_frame_pacer_enable) {
+ 		SwappyVk_initAndGetRefreshCycleDuration(get_jni_env(), static_cast<OS_Android *>(OS::get_singleton())->get_godot_java()->get_activity(), physical_device,
+@@ -7506,3 +7621,179 @@ RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan() {
+ 		vkDestroyDevice(vk_device, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_DEVICE));
+ 	}
+ }
++
++
++/*********************/
++/**** AMD FSR FFX ****/
++/*********************/
++
++#ifdef AMD_FFX_ENABLED
++
++void RenderingDeviceDriverVulkan::_amd_ffx_pick_queues() {
++	AmdFfx::fg_queues_ready = false;
++	if (!AmdFfx::frame_generation_requested() || !AmdFfx::is_amd()) {
++		return;
++	}
++
++	const uint32_t family_count = queue_family_properties.size();
++	LocalVector<uint32_t> next_free;
++	next_free.resize(family_count);
++	for (uint32_t i = 0; i < family_count; i++) {
++		// A fila 0 de cada família é do Godot.
++		next_free[i] = queue_families[i].size();
++	}
++
++	auto flags_of = [&](uint32_t i) { return queue_family_properties[i].queueFlags; };
++	auto can_present = [&](uint32_t i) -> bool {
++		return vkGetPhysicalDeviceWin32PresentationSupportKHR != nullptr && vkGetPhysicalDeviceWin32PresentationSupportKHR(physical_device, i) == VK_TRUE;
++	};
++	auto take = [&](uint32_t i, VkQueueInfoFFXAPI &r_info) -> bool {
++		if (i >= amd_ffx_queue_counts.size() || next_free[i] >= amd_ffx_queue_counts[i]) {
++			return false;
++		}
++		r_info = {};
++		vkGetDeviceQueue(vk_device, i, next_free[i], &r_info.queue);
++		r_info.familyIndex = i;
++		r_info.submitFunc = nullptr;
++		next_free[i]++;
++		return r_info.queue != VK_NULL_HANDLE;
++	};
++
++	bool present_ok = false;
++	for (uint32_t i = 0; i < family_count && !present_ok; i++) {
++		if ((flags_of(i) & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) == (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT) && can_present(i)) {
++			present_ok = take(i, AmdFfx::q_present);
++		}
++	}
++	for (uint32_t i = 0; i < family_count && !present_ok; i++) {
++		if ((flags_of(i) & (VK_QUEUE_TRANSFER_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT)) && can_present(i)) {
++			present_ok = take(i, AmdFfx::q_present);
++		}
++	}
++
++	bool acquire_ok = false;
++	for (uint32_t i = 0; i < family_count && !acquire_ok; i++) {
++		if (!(flags_of(i) & (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT))) {
++			acquire_ok = take(i, AmdFfx::q_acquire);
++		}
++	}
++	for (uint32_t i = 0; i < family_count && !acquire_ok; i++) {
++		if (!(flags_of(i) & VK_QUEUE_GRAPHICS_BIT)) {
++			acquire_ok = take(i, AmdFfx::q_acquire);
++		}
++	}
++	for (uint32_t i = 0; i < family_count && !acquire_ok; i++) {
++		acquire_ok = take(i, AmdFfx::q_acquire);
++	}
++
++	bool async_ok = false;
++	for (uint32_t i = 0; i < family_count && !async_ok; i++) {
++		if ((flags_of(i) & VK_QUEUE_COMPUTE_BIT) && !(flags_of(i) & VK_QUEUE_GRAPHICS_BIT)) {
++			async_ok = take(i, AmdFfx::q_async);
++		}
++	}
++	for (uint32_t i = 0; i < family_count && !async_ok; i++) {
++		if (flags_of(i) & VK_QUEUE_COMPUTE_BIT) {
++			async_ok = take(i, AmdFfx::q_async);
++		}
++	}
++	if (!async_ok) {
++		AmdFfx::q_async = {};
++	}
++
++	AmdFfx::fg_queues_ready = present_ok && acquire_ok;
++	if (!AmdFfx::fg_queues_ready) {
++		AmdFfx::set_status("Gerador de quadros: a placa não tem filas livres suficientes");
++	}
++}
++
++void RenderingDeviceDriverVulkan::_amd_ffx_replace_swap_chain(CommandQueue *p_command_queue, SwapChain *p_swap_chain, const VkSwapchainCreateInfoKHR &p_create_info) {
++	if (!AmdFfx::fg_queues_ready || AmdFfx::swapchain_context != nullptr) {
++		return;
++	}
++
++	ffxCreateContextDescFrameGenerationSwapChainVersionVK version = {};
++	version.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATIONSWAPCHAIN_VERSION_VK;
++	version.version = FFX_FRAMEGENERATION_SWAPCHAIN_VK_VERSION;
++
++	VkSwapchainKHR swapchain = p_swap_chain->vk_swapchain;
++	ffxCreateContextDescFrameGenerationSwapChainVK desc = {};
++	desc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FGSWAPCHAIN_VK;
++	desc.header.pNext = &version.header;
++	desc.physicalDevice = physical_device;
++	desc.device = vk_device;
++	desc.swapchain = &swapchain;
++	desc.allocator = nullptr;
++	desc.createInfo = p_create_info;
++	desc.gameQueue.queue = queue_families[p_command_queue->queue_family][p_command_queue->queue_index].queue;
++	desc.gameQueue.familyIndex = p_command_queue->queue_family;
++	desc.gameQueue.submitFunc = nullptr;
++	desc.asyncComputeQueue = AmdFfx::q_async;
++	desc.presentQueue = AmdFfx::q_present;
++	desc.imageAcquireQueue = AmdFfx::q_acquire;
++
++	ffxContext context = nullptr;
++	ffxReturnCode_t ret = AmdFfx::fn.CreateContext(&context, &desc.header, nullptr);
++	if (ret != FFX_API_RETURN_OK || context == nullptr) {
++		AmdFfx::set_status("Gerador de quadros: não consegui criar a swapchain (" + AmdFfx::error_name(ret) + ")");
++		AmdFfx::fg_queues_ready = false;
++		// A swapchain original pode ter sido destruída; se sim, recria do jeito normal.
++		if (swapchain == VK_NULL_HANDLE) {
++			device_functions.CreateSwapchainKHR(vk_device, &p_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SWAPCHAIN_KHR), &p_swap_chain->vk_swapchain);
++		}
++		return;
++	}
++
++	ffxQueryDescSwapchainReplacementFunctionsVK replacement = {};
++	replacement.header.type = FFX_API_QUERY_DESC_TYPE_FGSWAPCHAIN_FUNCTIONS_VK;
++	ret = AmdFfx::fn.Query(&context, &replacement.header);
++	if (ret != FFX_API_RETURN_OK || replacement.pOutQueuePresentKHR == nullptr) {
++		AmdFfx::set_status("Gerador de quadros: funções da swapchain indisponíveis (" + AmdFfx::error_name(ret) + ")");
++		AmdFfx::fn.DestroyContext(&context, nullptr);
++		AmdFfx::fg_queues_ready = false;
++		device_functions.CreateSwapchainKHR(vk_device, &p_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SWAPCHAIN_KHR), &p_swap_chain->vk_swapchain);
++		return;
++	}
++
++	AmdFfx::swapchain_context = context;
++	AmdFfx::replacement = replacement;
++	AmdFfx::fg_swapchain = swapchain;
++	AmdFfx::display_width = p_create_info.imageExtent.width;
++	AmdFfx::display_height = p_create_info.imageExtent.height;
++	AmdFfx::display_format = p_create_info.imageFormat;
++	p_swap_chain->vk_swapchain = swapchain;
++
++	amd_ffx_original_functions = device_functions;
++	device_functions.GetSwapchainImagesKHR = replacement.pOutGetSwapchainImagesKHR;
++	device_functions.AcquireNextImageKHR = replacement.pOutAcquireNextImageKHR;
++	device_functions.QueuePresentKHR = replacement.pOutQueuePresentKHR;
++	AmdFfx::set_status("Gerador de quadros pronto");
++}
++
++bool RenderingDeviceDriverVulkan::_amd_ffx_release_swap_chain(SwapChain *p_swap_chain) {
++	if (AmdFfx::swapchain_context == nullptr || p_swap_chain->vk_swapchain != AmdFfx::fg_swapchain) {
++		return false;
++	}
++
++	// Primeiro o gerador de quadros, depois a swapchain dele.
++	AmdFfx::destroy_fg_context();
++
++	ffxDispatchDescFrameGenerationSwapChainWaitForPresentsVK wait = {};
++	wait.header.type = FFX_API_DISPATCH_DESC_TYPE_FGSWAPCHAIN_WAIT_FOR_PRESENTS_VK;
++	AmdFfx::fn.Dispatch(&AmdFfx::swapchain_context, &wait.header);
++
++	AmdFfx::fn.DestroyContext(&AmdFfx::swapchain_context, nullptr);
++	AmdFfx::swapchain_context = nullptr;
++	if (AmdFfx::replacement.pOutDestroySwapchainFFXAPI != nullptr) {
++		AmdFfx::replacement.pOutDestroySwapchainFFXAPI(vk_device, AmdFfx::fg_swapchain, nullptr, nullptr);
++	}
++	AmdFfx::fg_swapchain = VK_NULL_HANDLE;
++	AmdFfx::replacement = {};
++
++	device_functions.GetSwapchainImagesKHR = amd_ffx_original_functions.GetSwapchainImagesKHR;
++	device_functions.AcquireNextImageKHR = amd_ffx_original_functions.AcquireNextImageKHR;
++	device_functions.QueuePresentKHR = amd_ffx_original_functions.QueuePresentKHR;
++	return true;
++}
++
++#endif
+diff --git a/drivers/vulkan/rendering_device_driver_vulkan.h b/drivers/vulkan/rendering_device_driver_vulkan.h
+index 6d17386..732d469 100644
+--- a/drivers/vulkan/rendering_device_driver_vulkan.h
++++ b/drivers/vulkan/rendering_device_driver_vulkan.h
+@@ -411,6 +411,9 @@ private:
+ 	};
+ 
+ public:
++	// Usado pelo AMD FSR 4 para gravar comandos no buffer do Godot.
++	static VkCommandBuffer command_buffer_get_vk(CommandBufferID p_cmd_buffer) { return ((CommandBufferInfo *)p_cmd_buffer.id)->vk_command_buffer; }
++
+ 	virtual CommandBufferID command_buffer_create(CommandPoolID p_cmd_pool) override final;
+ 	virtual bool command_buffer_begin(CommandBufferID p_cmd_buffer) override final;
+ 	virtual bool command_buffer_begin_secondary(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, uint32_t p_subpass, FramebufferID p_framebuffer) override final;
+@@ -823,6 +826,15 @@ private:
+ 			CommandBufferInfo>;
+ 	PagedAllocator<VersatileResource, true> resources_allocator;
+ 
++	/**** AMD FSR (FSR 4.1 + gerador de quadros) ****/
++	LocalVector<uint32_t> amd_ffx_queue_counts;
++	DeviceFunctions amd_ffx_original_functions;
++#if defined(WINDOWS_ENABLED)
++	void _amd_ffx_pick_queues();
++	void _amd_ffx_replace_swap_chain(CommandQueue *p_command_queue, SwapChain *p_swap_chain, const VkSwapchainCreateInfoKHR &p_create_info);
++	bool _amd_ffx_release_swap_chain(SwapChain *p_swap_chain);
++#endif
++
+ 	/******************/
+ 
+ public:
+diff --git a/servers/rendering/renderer_rd/effects/SCsub b/servers/rendering/renderer_rd/effects/SCsub
+index e0efb7b..bdc4a61 100644
+--- a/servers/rendering/renderer_rd/effects/SCsub
++++ b/servers/rendering/renderer_rd/effects/SCsub
+@@ -7,6 +7,15 @@ Import("env")
+ 
+ env_effects = env.Clone()
+ 
++# Vulkan headers for AMD FSR 4 (Windows)
++if env["vulkan"]:
++    env_effects.Prepend(CPPPATH=["#thirdparty/vulkan", "#thirdparty/vulkan/include"])
++    if env["use_volk"]:
++        env_effects.AppendUnique(CPPDEFINES=["USE_VOLK"])
++        env_effects.Prepend(CPPPATH=["#thirdparty/volk"])
++    if env["platform"] == "windows":
++        env_effects.AppendUnique(CPPDEFINES=["VK_USE_PLATFORM_WIN32_KHR"])
++
+ # metal-cpp headers for Metal FX
+ if env["metal"]:
+     env_effects.Prepend(CPPPATH=["#thirdparty/metal-cpp"])
+diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
+index 370d3b6..3856fca 100644
+--- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
++++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
+@@ -90,6 +90,13 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_fsr2(Rende
+ 	}
+ }
+ 
++bool RenderForwardClustered::RenderBufferDataForwardClustered::ensure_fsr4() {
++	if (fsr4_context == nullptr) {
++		fsr4_context = RendererRD::AmdFsr4::create_context(render_buffers->get_internal_size(), render_buffers->get_target_size());
++	}
++	return fsr4_context != nullptr;
++}
++
+ #ifdef METAL_MFXTEMPORAL_ENABLED
+ bool RenderForwardClustered::RenderBufferDataForwardClustered::ensure_mfx_temporal(RendererRD::MFXTemporalEffect *p_effect) {
+ 	if (mfx_temporal_context == nullptr) {
+@@ -129,6 +136,11 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
+ 		fsr2_context = nullptr;
+ 	}
+ 
++	if (fsr4_context) {
++		RendererRD::AmdFsr4::free_context(fsr4_context);
++		fsr4_context = nullptr;
++	}
++
+ #ifdef METAL_MFXTEMPORAL_ENABLED
+ 	if (mfx_temporal_context) {
+ 		memdelete(mfx_temporal_context);
+@@ -1783,12 +1795,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
+ 	enum {
+ 		SCALE_NONE,
+ 		SCALE_FSR2,
++		SCALE_FSR4,
+ 		SCALE_MFX,
+ 	} scale_type = SCALE_NONE;
+ 
+ 	switch (rb->get_scaling_3d_mode()) {
+ 		case RSE::VIEWPORT_SCALING_3D_MODE_FSR2:
+-			scale_type = SCALE_FSR2;
++			// Em placa AMD compatível com a DLL do FSR SDK, o modo FSR 2 vira FSR 4.1 (IA).
++			scale_type = (!is_reflection_probe && RendererRD::AmdFsr4::is_available()) ? SCALE_FSR4 : SCALE_FSR2;
+ 			break;
+ 		case RSE::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL:
+ #ifdef METAL_MFXTEMPORAL_ENABLED
+@@ -2227,7 +2241,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
+ 		RD::get_singleton()->draw_command_end_label();
+ 
+ 		if (using_motion_pass) {
+-			if (scale_type == SCALE_MFX) {
++			if (scale_type == SCALE_MFX || scale_type == SCALE_FSR4) {
+ 				motion_vectors_store->process(rb,
+ 						p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform,
+ 						p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform);
+@@ -2504,6 +2518,56 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
+ 				fsr2_effect->upscale(params);
+ 			}
+ 
++			RD::get_singleton()->draw_command_end_label();
++		} else if (scale_type == SCALE_FSR4) {
++			RD::get_singleton()->draw_command_begin_label("AMD FSR 4");
++			RENDER_TIMESTAMP("AMD FSR 4");
++			if (rb_data->ensure_fsr4()) {
++				real_t fov = p_render_data->scene_data->cam_projection.get_fov();
++				real_t aspect = p_render_data->scene_data->cam_projection.get_aspect();
++				real_t fovy = p_render_data->scene_data->cam_projection.get_fovy(fov, 1.0 / aspect);
++				RendererRD::AmdFsr4::Params params;
++				params.context = rb_data->get_fsr4_context();
++				params.color = rb->get_internal_texture(0);
++				params.depth = rb->get_depth_texture(0);
++				params.velocity = rb->get_velocity_buffer(false, 0);
++				params.output = rb->get_upscaled_texture(0);
++				params.internal_size = rb->get_internal_size();
++				params.target_size = rb->get_target_size();
++				params.jitter = p_render_data->scene_data->taa_jitter * Vector2(rb->get_internal_size()) * 0.5f;
++				params.sharpness = CLAMP(1.0f - (rb->get_fsr_sharpness() / 2.0f), 0.0f, 1.0f);
++				params.delta_time = float(time_step);
++				params.z_near = p_render_data->scene_data->z_near;
++				params.z_far = p_render_data->scene_data->z_far;
++				params.fovy = Math::deg_to_rad(fovy);
++				params.camera_transform = p_render_data->scene_data->cam_transform;
++				RendererRD::AmdFsr4::process(params);
++			} else {
++				// Não deu para criar o FSR 4: usa o FSR 2.2 neste quadro (os próximos já vêm como FSR 2).
++				rb_data->ensure_fsr2(fsr2_effect);
++				Vector2 jitter = p_render_data->scene_data->taa_jitter * Vector2(rb->get_internal_size()) * 0.5f;
++				real_t fov = p_render_data->scene_data->cam_projection.get_fov();
++				real_t aspect = p_render_data->scene_data->cam_projection.get_aspect();
++				RendererRD::FSR2Effect::Parameters params;
++				params.context = rb_data->get_fsr2_context();
++				params.internal_size = rb->get_internal_size();
++				params.sharpness = CLAMP(1.0f - (rb->get_fsr_sharpness() / 2.0f), 0.0f, 1.0f);
++				params.color = rb->get_internal_texture(0);
++				params.depth = rb->get_depth_texture(0);
++				params.velocity = rb->get_velocity_buffer(false, 0);
++				params.reactive = rb->get_internal_texture_reactive(0);
++				params.output = rb->get_upscaled_texture(0);
++				params.z_near = p_render_data->scene_data->z_near;
++				params.z_far = p_render_data->scene_data->z_far;
++				params.fovy = p_render_data->scene_data->cam_projection.get_fovy(fov, 1.0 / aspect);
++				params.jitter = jitter;
++				params.delta_time = float(time_step);
++				params.reset_accumulation = true;
++				Projection correction;
++				correction.set_depth_correction(true, true, false);
++				params.reprojection = (correction * p_render_data->scene_data->prev_cam_projection) * p_render_data->scene_data->prev_cam_transform.affine_inverse() * p_render_data->scene_data->cam_transform * (correction * p_render_data->scene_data->cam_projection).inverse();
++				fsr2_effect->upscale(params);
++			}
+ 			RD::get_singleton()->draw_command_end_label();
+ 		} else if (scale_type == SCALE_MFX) {
+ #ifdef METAL_MFXTEMPORAL_ENABLED
+@@ -5239,8 +5303,8 @@ RenderForwardClustered::RenderForwardClustered() {
+ 	taa = memnew(RendererRD::TAA);
+ 	fsr2_effect = memnew(RendererRD::FSR2Effect);
+ 	ss_effects = memnew(RendererRD::SSEffects);
+-#ifdef METAL_MFXTEMPORAL_ENABLED
+ 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
++#ifdef METAL_MFXTEMPORAL_ENABLED
+ 	mfx_temporal_effect = memnew(RendererRD::MFXTemporalEffect);
+ #endif
+ }
+@@ -5266,12 +5330,12 @@ RenderForwardClustered::~RenderForwardClustered() {
+ 		memdelete(mfx_temporal_effect);
+ 		mfx_temporal_effect = nullptr;
+ 	}
++#endif
+ 
+ 	if (motion_vectors_store) {
+ 		memdelete(motion_vectors_store);
+ 		motion_vectors_store = nullptr;
+ 	}
+-#endif
+ 
+ 	RD::get_singleton()->free_rid(shadow_sampler);
+ 	RSG::light_storage->directional_shadow_atlas_set_size(0);
+diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h
+index be97ee2..cbb2278 100644
+--- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h
++++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h
+@@ -33,6 +33,7 @@
+ #include "core/templates/paged_allocator.h"
+ #include "servers/rendering/multi_uma_buffer.h"
+ #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
++#include "servers/rendering/renderer_rd/effects/amd_fsr4.h"
+ #include "servers/rendering/renderer_rd/effects/fsr2.h"
+ #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
+ #include "servers/rendering/renderer_rd/effects/ss_effects.h"
+@@ -96,6 +97,7 @@ public:
+ 	private:
+ 		RenderSceneBuffersRD *render_buffers = nullptr;
+ 		RendererRD::FSR2Context *fsr2_context = nullptr;
++		RendererRD::AmdFsr4::Context *fsr4_context = nullptr;
+ #ifdef METAL_MFXTEMPORAL_ENABLED
+ 		RendererRD::MFXTemporalContext *mfx_temporal_context = nullptr;
+ #endif
+@@ -144,6 +146,8 @@ public:
+ 
+ 		void ensure_fsr2(RendererRD::FSR2Effect *p_effect);
+ 		RendererRD::FSR2Context *get_fsr2_context() const { return fsr2_context; }
++		bool ensure_fsr4();
++		RendererRD::AmdFsr4::Context *get_fsr4_context() const { return fsr4_context; }
+ 
+ #ifdef METAL_MFXTEMPORAL_ENABLED
+ 		bool ensure_mfx_temporal(RendererRD::MFXTemporalEffect *p_effect);
