@@ -69,12 +69,23 @@ func _ready() -> void:
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
 		get_viewport().use_taa = false
 
+	var carregando := Carregamento.new()
+	add_child(carregando)
+	await get_tree().process_frame
+	if modo_prints:
+		carregando.definir(0.4, "Capim")
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_salvar_print("00_carregando")
 	mapa = Mapa.new()
 	mapa.name = "Mapa"
 	mapa.previa = "--previa" in OS.get_cmdline_user_args()
 	mapa.movel = movel
+	mapa.progresso.connect(carregando.definir)
 	add_child(mapa)
-	mapa.montar(qualidade_baixa or modo_teste)
+	await mapa.montar(qualidade_baixa or modo_teste)
+	carregando.definir(0.88, "Montando o E88")
+	await get_tree().process_frame
 
 	vento = Vento.new()
 	vento.name = "Vento"
@@ -118,6 +129,12 @@ func _ready() -> void:
 		hud.mostrar("Use os dois analógicos da tela  •  arraste no meio da tela para olhar em volta", 6.0)
 	if movel_ativo:
 		_aplicar_grafico()
+
+	carregando.definir(0.92, "Preparando os gráficos na placa de vídeo")
+	if not modo_teste:
+		await _aquecer_graficos()
+	carregando.definir(1.0, "Pronto")
+	carregando.sumir()
 
 	if modo_teste:
 		_teste_voo()
@@ -211,6 +228,8 @@ func _ler_controles(delta: float) -> void:
 
 
 func _unhandled_input(ev: InputEvent) -> void:
+	if drone == null or hud == null:
+		return
 	if ev is InputEventJoypadButton and ev.pressed:
 		match ev.button_index:
 			JOY_BUTTON_A: drone.decolar_ou_pousar()
@@ -299,12 +318,12 @@ func _aplicar_grafico() -> void:
 
 
 func _ajuste_automatico(delta: float) -> void:
-	# se o celular não aguentar 50 FPS por 3 s, baixa o gráfico sozinho; se sobrar, sobe
+	# mínimo de 30 FPS: se ficar abaixo de 32 por 3 s, baixa o gráfico; se sobrar folga (55+) por 12 s, sobe
 	if not movel_ativo or not grafico_auto:
 		return
 	var fps := Engine.get_frames_per_second()
-	_tempo_fps_baixo = _tempo_fps_baixo + delta if fps < 50 else 0.0
-	_tempo_fps_alto = _tempo_fps_alto + delta if fps >= 59 else 0.0
+	_tempo_fps_baixo = _tempo_fps_baixo + delta if fps < 32 else 0.0
+	_tempo_fps_alto = _tempo_fps_alto + delta if fps >= 55 else 0.0
 	if _tempo_fps_baixo > 3.0 and grafico > 0:
 		grafico -= 1
 		_aplicar_grafico()
@@ -353,7 +372,38 @@ func _girar_vento() -> void:
 
 # ---------------------------------------------------------------- quadro a quadro
 
+## mostra tudo uma vez por trás da tela de carregamento: o celular prepara
+## os sombreadores agora, e não no meio do voo (é o que causa os engasgos)
+func _aquecer_graficos() -> void:
+	var giros := 8
+	for k in 4:
+		drone.rps[k] = 150.0
+	camera.olhando = true
+	for i in giros:
+		camera.olhar_yaw = TAU * i / giros
+		camera.olhar_pitch = 0.6 if i % 2 == 0 else 0.0
+		camera.posicionar_ja()
+		await get_tree().process_frame
+		await get_tree().process_frame
+	# olha de longe (árvores com pouco detalhe, açude, galpão)
+	camera.distancia = 40.0
+	for i in 4:
+		camera.olhar_yaw = TAU * i / 4.0
+		camera.posicionar_ja()
+		await get_tree().process_frame
+	camera.distancia = 0.85
+	camera.olhar_pitch = 0.0
+	camera.olhar_yaw = 0.0
+	camera.olhando = false
+	for k in 4:
+		drone.rps[k] = 0.0
+	camera.posicionar_ja()
+	await get_tree().process_frame
+
+
 func _physics_process(delta: float) -> void:
+	if drone == null or hud == null:
+		return
 	if not modo_teste:
 		_ler_controles(delta)
 	var p := drone.global_position
@@ -376,6 +426,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _process(_delta: float) -> void:
+	if drone == null or hud == null:
+		return
 	_ajuste_automatico(_delta)
 	if hud and camera and drone:
 		var p := drone.global_position

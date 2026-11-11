@@ -49,6 +49,15 @@ var portais: Array = []   # [centro, normal] de cada aro
 var obstaculos: Array = []  # [centro xz, raio, altura do topo] — fazem sombra de vento
 
 
+signal progresso(fracao: float, texto: String)
+
+
+func _passo(f: float, texto: String) -> void:
+	progresso.emit(f, texto)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
 func montar(baixa := false) -> void:
 	qualidade_baixa = baixa
 	rng.seed = 2026
@@ -70,18 +79,29 @@ func montar(baixa := false) -> void:
 	add_child(corpo_estatico)
 
 	var t0 := Time.get_ticks_msec()
+	await _passo(0.02, "Céu e luz do sol")
 	_montar_ambiente()
+	await _passo(0.08, "Relevo do pasto")
 	_montar_terreno()
+	await _passo(0.2, "Chão firme (colisão do terreno)")
 	_colisao_terreno()
+	await _passo(0.3, "Açude")
 	_montar_agua()
+	await _passo(0.36, "Capim")
 	_montar_grama()
+	await _passo(0.46, "Base de pouso, biruta e galpão")
 	_montar_base_pouso()
 	_montar_biruta()
 	_montar_galpao()
+	await _passo(0.54, "Cercas")
 	_montar_cercas()
+	await _passo(0.6, "Rede elétrica")
 	_montar_postes()
+	await _passo(0.64, "Portais de treino")
 	_montar_portais()
+	await _passo(0.68, "Árvores e eucaliptos")
 	_montar_vegetacao()
+	await _passo(0.84, "Pedras")
 	_montar_pedras()
 	print("Mapa montado em %d ms" % (Time.get_ticks_msec() - t0))
 
@@ -818,7 +838,12 @@ func _montar_portais() -> void:
 func _cena(nome: String) -> PackedScene:
 	if cache_cena.has(nome):
 		return cache_cena[nome]
-	var c: PackedScene = load(REC + "modelos/%s/%s_1k.gltf" % [nome, nome])
+	# no celular usa as versões leves (blender/modelos_celular.py)
+	var c: PackedScene
+	if movel and ResourceLoader.exists(REC + "modelos_movel/%s.glb" % nome):
+		c = load(REC + "modelos_movel/%s.glb" % nome)
+	else:
+		c = load(REC + "modelos/%s/%s_1k.gltf" % [nome, nome])
 	cache_cena[nome] = c
 	return c
 
