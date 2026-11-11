@@ -140,6 +140,10 @@ RÁDIO VIA USB (EdgeTX/OpenTX em modo joystick)
   É detectado sozinho. F5 troca a ordem dos canais (AETR/TAER/AERT), F6 inverte o acelerador,
   F7 inverte frente/trás. Acelerador no meio = altura travada. Espaço decola, M troca o modo.
 
+CELULAR
+  Analógico da esquerda: subir/descer e girar. Da direita: frente/trás e lados.
+  Botões: DECOLAR/POUSAR, FLIP, MODO, RECOMEÇAR; em cima: AJUDA, CÂMERA e VENTO.
+
 MODOS
   ESTABILIZADO: o drone se nivela sozinho e trava a altura. Soltou o controle, ele freia e para.
   ACRO: você comanda o giro direto; ele NÃO se nivela sozinho e o acelerador é manual.

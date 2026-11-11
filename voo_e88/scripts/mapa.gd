@@ -8,6 +8,7 @@ class_name Mapa
 const REC := "res://recursos/"
 
 var qualidade_baixa := false
+var movel := false    # celular (Android): menos capim, árvores mais simples, sombras menores
 var previa := false   # prévia no servidor sem placa de vídeo: quase sem capim
 
 var ruido_a := FastNoiseLite.new()
@@ -160,11 +161,11 @@ func _montar_ambiente() -> void:
 	env.tonemap_mode = Environment.TONE_MAPPER_AGX
 	env.tonemap_exposure = 1.05
 
-	env.ssao_enabled = true
+	env.ssao_enabled = not movel
 	env.ssao_radius = 1.4
 	env.ssao_intensity = 1.8
 	env.ssil_enabled = not qualidade_baixa
-	env.ssr_enabled = true
+	env.ssr_enabled = not movel
 	env.ssr_max_steps = 96
 
 	env.sdfgi_enabled = not qualidade_baixa
@@ -210,7 +211,7 @@ func _montar_ambiente() -> void:
 	sol.shadow_enabled = true
 	sol.shadow_blur = 1.0
 	sol.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	sol.directional_shadow_max_distance = 420.0
+	sol.directional_shadow_max_distance = 420.0 if not movel else 160.0
 	sol.directional_shadow_split_1 = 0.04
 	sol.directional_shadow_split_2 = 0.14
 	sol.directional_shadow_split_3 = 0.4
@@ -431,6 +432,8 @@ func _montar_grama() -> void:
 	# grama em blocos de 20 x 20 m para o motor descartar o que está fora da tela
 	var tam_bloco := 20.0
 	var raio := 70.0 if qualidade_baixa else 150.0
+	if movel:
+		raio = 55.0
 	if previa:
 		raio = 25.0
 	var dens_max := 18.0 if qualidade_baixa else 70.0
@@ -849,6 +852,8 @@ func _plantar(nome: String, x: float, z: float, escala: float, giro := -1.0, esc
 	# folhas são geometria fina: o LOD automático apagava as copas, então
 	# as árvores pedem mais detalhe (mais forte perto da câmera)
 	var vies := 8.0 if Vector2(x, z).length() < 200.0 else 3.0
+	if movel:
+		vies = 1.5 if Vector2(x, z).length() < 120.0 else 0.6
 	_definir_lod(no, vies)
 	if not cache_cena.has(nome + "_ok"):
 		_ajustar_folhas(no, 4.0 if nome.contains("tree") else 1.2)

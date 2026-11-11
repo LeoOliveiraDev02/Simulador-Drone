@@ -15,6 +15,7 @@ var vento: Vento
 var drone: E88
 var camera: CameraSegue
 var hud: Hud
+var toque: ControleToque
 var qualidade_baixa := false
 var modo_teste := false
 var modo_prints := false
@@ -46,6 +47,9 @@ func _ready() -> void:
 			modo_prints = true
 		elif a == "--previa":
 			qualidade_baixa = true
+	var movel := OS.has_feature("mobile")
+	if movel:
+		qualidade_baixa = true
 	if qualidade_baixa:
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
 		get_viewport().use_taa = false
@@ -53,6 +57,7 @@ func _ready() -> void:
 	mapa = Mapa.new()
 	mapa.name = "Mapa"
 	mapa.previa = "--previa" in OS.get_cmdline_user_args()
+	mapa.movel = movel
 	add_child(mapa)
 	mapa.montar(qualidade_baixa or modo_teste)
 
@@ -90,6 +95,12 @@ func _ready() -> void:
 	drone.mensagem.connect(hud.mostrar)
 	drone.helice_quebrou.connect(func(_k): _vibrar(0.9, 0.5))
 	hud.mostrar("Start ou H: ajuda dos controles", 5.0)
+	if (movel or DisplayServer.is_touchscreen_available() or "--toque" in OS.get_cmdline_user_args()) and not modo_teste:
+		toque = ControleToque.new()
+		add_child(toque)
+		toque.botao.connect(_botao_toque)
+		hud.missao.position.y = -260
+		hud.mostrar("Use os dois analógicos da tela  •  DECOLAR para começar", 5.0)
 
 	if modo_teste:
 		_teste_voo()
@@ -156,6 +167,12 @@ func _ler_controles(delta: float) -> void:
 	yaw = clampf(yaw + _rampa("yaw", k_yaw, delta), -1.0, 1.0)
 	pitch = clampf(pitch + _rampa("pitch", k_pitch * 0.8, delta), -1.0, 1.0)
 	roll = clampf(roll + _rampa("roll", k_roll * 0.8, delta), -1.0, 1.0)
+	if toque:
+		acel = clampf(acel + toque.acel, -1.0, 1.0)
+		yaw = clampf(yaw + toque.yaw, -1.0, 1.0)
+		pitch = clampf(pitch + toque.pitch, -1.0, 1.0)
+		roll = clampf(roll + toque.roll, -1.0, 1.0)
+		toque.texto_decolar = "POUSAR" if drone.armado and drone.estado != "pousado" else "DECOLAR"
 	var acro := drone.modo == E88.Modo.ACRO
 	drone.e_acel = acel
 	drone.e_yaw = _expo(yaw, 0.25)
@@ -236,6 +253,20 @@ func _vibrar(forte: float, segundos: float) -> void:
 		Input.start_joy_vibration(d, forte * 0.6, forte, segundos)
 
 
+func _botao_toque(nome: String) -> void:
+	match nome:
+		"decolar": drone.decolar_ou_pousar()
+		"flip": drone.fazer_flip(Vector2(drone.e_roll, drone.e_pitch))
+		"modo": drone.trocar_modo()
+		"recomecar": _recomecar()
+		"ajuda": _ajuda()
+		"cam_perto": camera.afastar(-0.3)
+		"cam_longe": camera.afastar(0.3)
+		"vento":
+			vento.velocidade = fmod(vento.velocidade + 1.5, 9.0)
+			hud.mostrar("Vento: " + vento.texto(), 1.5)
+
+
 func _recomecar() -> void:
 	portais_feitos = 0
 	tempo_volta = -1.0
@@ -299,7 +330,7 @@ func _process(_delta: float) -> void:
 	if hud and camera and drone:
 		var p := drone.global_position
 		var dist := Vector2(p.x, p.z).length()
-		var nome := "Sem controle conectado — usando o teclado"
+		var nome := "Controle na tela" if toque else "Sem controle conectado — usando o teclado"
 		if Input.get_connected_joypads().size() > 0:
 			nome = Input.get_joy_name(Input.get_connected_joypads()[0]) + " • " + NOMES_MAPA[maxi(mapa_controle, 0)] + " (F5 troca)"
 		hud.atualizar(drone, vento, camera, nome, dist, Mapa.LIMITE)
