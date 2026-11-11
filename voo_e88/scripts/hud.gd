@@ -239,7 +239,7 @@ func atualizar(drone: E88, vento: Vento, camera: Camera3D, controle_nome: String
 		_giro[k] = fmod(_giro[k] - _sentido[k] * drone.rps[k] * 0.0006, TAU)
 	diagrama.queue_redraw()
 	explica.text = _explicacao(drone)
-	controle_txt.text = controle_nome + "   •   Start/H: ajuda"
+	controle_txt.text = controle_nome + "   •   %d FPS" % Engine.get_frames_per_second()
 	if distancia_base > limite:
 		mostrar("Longe demais! Volte para a área de voo", 0.3)
 

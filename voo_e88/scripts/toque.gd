@@ -21,6 +21,8 @@ var pos_dir := Vector2.ZERO
 var botoes := []                 # [nome, texto, retângulo]
 var apertado := {}               # dedo -> nome do botão
 var texto_decolar := "DECOLAR"
+var dedo_olhar := -1
+var olhar_delta := Vector2.ZERO   # quanto o dedo arrastou para olhar em volta (lido pela câmera)
 
 
 func _ready() -> void:
@@ -55,9 +57,9 @@ func _montar_botoes() -> void:
 	var x0 := t.x * 0.5 - (w * 4 + gap * 3) * 0.5
 	for i in nomes.size():
 		botoes.append([nomes[i][0], nomes[i][1], Rect2(x0 + i * (w + gap), t.y - 110, w, 82)])
-	var cima := [["ajuda", "AJUDA"], ["cam_perto", "CÂMERA −"], ["cam_longe", "CÂMERA +"], ["vento", "VENTO"]]
+	var cima := [["ajuda", "AJUDA"], ["cam_perto", "CÂMERA −"], ["cam_longe", "CÂMERA +"], ["vento", "VENTO"], ["grafico", "GRÁFICO"]]
 	var w2 := 150.0
-	var x1 := t.x * 0.5 - (w2 * 4 + gap * 3) * 0.5
+	var x1 := t.x * 0.5 - (w2 * cima.size() + gap * (cima.size() - 1)) * 0.5
 	for i in cima.size():
 		botoes.append([cima[i][0], cima[i][1], Rect2(x1 + i * (w2 + gap), 18, w2, 62)])
 
@@ -73,15 +75,19 @@ func _input(ev: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 					tela.queue_redraw()
 					return
-			var t := _tamanho()
-			if p.x < t.x * 0.5 and dedo_esq < 0:
+			# perto de um analógico = analógico; no resto da tela = olhar em volta
+			if p.distance_to(_centro_esq()) < RAIO * 1.6 and dedo_esq < 0:
 				dedo_esq = ev.index
 				pos_esq = _limitar(p - _centro_esq())
-			elif p.x >= t.x * 0.5 and dedo_dir < 0:
+			elif p.distance_to(_centro_dir()) < RAIO * 1.6 and dedo_dir < 0:
 				dedo_dir = ev.index
 				pos_dir = _limitar(p - _centro_dir())
+			elif dedo_olhar < 0:
+				dedo_olhar = ev.index
 		else:
 			apertado.erase(ev.index)
+			if ev.index == dedo_olhar:
+				dedo_olhar = -1
 			if ev.index == dedo_esq:
 				dedo_esq = -1
 				pos_esq = Vector2.ZERO
@@ -95,6 +101,8 @@ func _input(ev: InputEvent) -> void:
 			pos_esq = _limitar(ev.position - _centro_esq())
 		elif ev.index == dedo_dir:
 			pos_dir = _limitar(ev.position - _centro_dir())
+		elif ev.index == dedo_olhar:
+			olhar_delta += ev.relative
 		_atualizar()
 		get_viewport().set_input_as_handled()
 

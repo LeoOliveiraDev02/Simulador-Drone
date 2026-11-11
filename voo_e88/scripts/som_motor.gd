@@ -17,6 +17,8 @@ var batida_tom := 0.0
 
 
 func _ready() -> void:
+	if OS.has_feature("mobile"):
+		taxa = 11025.0
 	var s := AudioStreamGenerator.new()
 	s.mix_rate = taxa
 	s.buffer_length = 0.12

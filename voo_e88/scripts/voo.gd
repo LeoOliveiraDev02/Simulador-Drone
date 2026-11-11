@@ -16,6 +16,12 @@ var drone: E88
 var camera: CameraSegue
 var hud: Hud
 var toque: ControleToque
+var movel_ativo := false
+var grafico := 1                  # celular: 0 baixo, 1 médio, 2 alto (ajusta sozinho se o FPS cair)
+var grafico_auto := true
+var _tempo_fps_baixo := 0.0
+var _tempo_fps_alto := 0.0
+const ESCALA_3D := [0.5, 0.67, 0.85]
 var qualidade_baixa := false
 var modo_teste := false
 var modo_prints := false
@@ -47,9 +53,18 @@ func _ready() -> void:
 			modo_prints = true
 		elif a == "--previa":
 			qualidade_baixa = true
-	var movel := OS.has_feature("mobile")
+	var movel := OS.has_feature("mobile") or "--movel" in OS.get_cmdline_user_args()
 	if movel:
 		qualidade_baixa = true
+		# celular: física a 120 Hz (sem acumular passos atrasados), 3D em 70% da
+		# resolução com nitidez FSR e no máximo 60 quadros
+		Engine.physics_ticks_per_second = 120
+		Engine.max_physics_steps_per_frame = 3
+		Engine.max_fps = 60
+		get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
+		get_viewport().scaling_3d_scale = 0.7
+		get_viewport().fsr_sharpness = 0.4
+		movel_ativo = true
 	if qualidade_baixa:
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
 		get_viewport().use_taa = false
@@ -100,7 +115,9 @@ func _ready() -> void:
 		add_child(toque)
 		toque.botao.connect(_botao_toque)
 		hud.missao.position.y = -260
-		hud.mostrar("Use os dois analógicos da tela  •  DECOLAR para começar", 5.0)
+		hud.mostrar("Use os dois analógicos da tela  •  arraste no meio da tela para olhar em volta", 6.0)
+	if movel_ativo:
+		_aplicar_grafico()
 
 	if modo_teste:
 		_teste_voo()
@@ -173,6 +190,10 @@ func _ler_controles(delta: float) -> void:
 		pitch = clampf(pitch + toque.pitch, -1.0, 1.0)
 		roll = clampf(roll + toque.roll, -1.0, 1.0)
 		toque.texto_decolar = "POUSAR" if drone.armado and drone.estado != "pousado" else "DECOLAR"
+		if toque.olhar_delta != Vector2.ZERO:
+			camera.olhar(toque.olhar_delta)
+			toque.olhar_delta = Vector2.ZERO
+		camera.olhando = toque.dedo_olhar >= 0
 	var acro := drone.modo == E88.Modo.ACRO
 	drone.e_acel = acel
 	drone.e_yaw = _expo(yaw, 0.25)
@@ -262,9 +283,37 @@ func _botao_toque(nome: String) -> void:
 		"ajuda": _ajuda()
 		"cam_perto": camera.afastar(-0.3)
 		"cam_longe": camera.afastar(0.3)
+		"grafico":
+			grafico = (grafico + 1) % 3
+			grafico_auto = false
+			_aplicar_grafico()
+			hud.mostrar("Gráfico: " + ["BAIXO", "MÉDIO", "ALTO"][grafico], 2.0)
 		"vento":
 			vento.velocidade = fmod(vento.velocidade + 1.5, 9.0)
 			hud.mostrar("Vento: " + vento.texto(), 1.5)
+
+
+func _aplicar_grafico() -> void:
+	get_viewport().scaling_3d_scale = ESCALA_3D[grafico]
+	mapa.nivel_grafico(grafico)
+
+
+func _ajuste_automatico(delta: float) -> void:
+	# se o celular não aguentar 50 FPS por 3 s, baixa o gráfico sozinho; se sobrar, sobe
+	if not movel_ativo or not grafico_auto:
+		return
+	var fps := Engine.get_frames_per_second()
+	_tempo_fps_baixo = _tempo_fps_baixo + delta if fps < 50 else 0.0
+	_tempo_fps_alto = _tempo_fps_alto + delta if fps >= 59 else 0.0
+	if _tempo_fps_baixo > 3.0 and grafico > 0:
+		grafico -= 1
+		_aplicar_grafico()
+		hud.mostrar("Gráfico ajustado para " + ["BAIXO", "MÉDIO", "ALTO"][grafico] + " (FPS)", 2.0)
+		_tempo_fps_baixo = 0.0
+	elif _tempo_fps_alto > 12.0 and grafico < 2:
+		grafico += 1
+		_aplicar_grafico()
+		_tempo_fps_alto = 0.0
 
 
 func _recomecar() -> void:
@@ -327,6 +376,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _process(_delta: float) -> void:
+	_ajuste_automatico(_delta)
 	if hud and camera and drone:
 		var p := drone.global_position
 		var dist := Vector2(p.x, p.z).length()

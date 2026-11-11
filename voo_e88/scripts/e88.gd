@@ -79,6 +79,9 @@ var tempo_no_chao := 0.0
 var rng := RandomNumberGenerator.new()
 var inercia := Vector3(0.00042, 0.00078, 0.00045)
 var ultima_vel_impacto := 0.0
+var _passo_turb := 0
+var _nivel_paredes := 0.0
+var _esteira := 0.0
 
 
 func preparar(cena_modelo: PackedScene) -> void:
@@ -703,21 +706,26 @@ func _tratar_contatos(st: PhysicsDirectBodyState3D) -> void:
 
 
 func _turbulencia(st: PhysicsDirectBodyState3D, b: Basis, pos: Vector3, h: float, rotor: float, v: Vector3, dt: float) -> void:
-	var nivel := 0.0
 	# perto de paredes, troncos e copas o ar das hélices volta "sujo"
-	var espaco := st.get_space_state()
-	for d: Vector3 in [Vector3.RIGHT, Vector3.LEFT, Vector3.FORWARD, Vector3.BACK, Vector3.UP]:
-		var q := PhysicsRayQueryParameters3D.create(pos, pos + d * 1.2)
-		q.exclude = [get_rid()]
-		var r := espaco.intersect_ray(q)
-		if not r.is_empty():
-			nivel = maxf(nivel, 1.0 - pos.distance_to(r.position) / 1.2)
+	# (os raios são caros: mede a cada 4 passos e reaproveita)
+	_passo_turb += 1
+	if _passo_turb % 4 == 0:
+		_nivel_paredes = 0.0
+		var espaco := st.get_space_state()
+		for d: Vector3 in [Vector3.RIGHT, Vector3.LEFT, Vector3.FORWARD, Vector3.BACK, Vector3.UP]:
+			var q := PhysicsRayQueryParameters3D.create(pos, pos + d * 1.2)
+			q.exclude = [get_rid()]
+			var r := espaco.intersect_ray(q)
+			if not r.is_empty():
+				_nivel_paredes = maxf(_nivel_paredes, 1.0 - pos.distance_to(r.position) / 1.2)
+		_esteira = vento.esteira(pos) if vento and vento.has_method("esteira") else 0.0
+	var nivel := _nivel_paredes
 	# no chão o vento das hélices bate e volta
 	if h < 0.35 and armado:
 		nivel = maxf(nivel, (1.0 - h / 0.35) * 0.45)
 	# atrás do galpão e das árvores o vento vira redemoinho
-	if vento and vento.has_method("esteira"):
-		nivel = maxf(nivel, vento.esteira(pos) * clampf(vento.velocidade / 5.0, 0.0, 1.0) * 1.2)
+	if vento:
+		nivel = maxf(nivel, _esteira * clampf(vento.velocidade / 5.0, 0.0, 1.0) * 1.2)
 	# descendo rápido dentro do próprio vento (anel de vórtice)
 	if v.y < -1.5 and rotor > 0.5:
 		nivel = maxf(nivel, clampf((-v.y - 1.5) / 1.5, 0.0, 1.0) * 0.8)

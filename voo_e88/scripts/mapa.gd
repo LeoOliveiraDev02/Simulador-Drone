@@ -8,6 +8,10 @@ class_name Mapa
 const REC := "res://recursos/"
 
 var qualidade_baixa := false
+var blocos_grama: Array[MultiMeshInstance3D] = []
+var luz_sol: DirectionalLight3D
+var ambiente: Environment
+var arvores_longe: Array[Node3D] = []
 var movel := false    # celular (Android): menos capim, árvores mais simples, sombras menores
 var previa := false   # prévia no servidor sem placa de vídeo: quase sem capim
 
@@ -174,7 +178,8 @@ func _montar_ambiente() -> void:
 	env.sdfgi_min_cell_size = 0.25
 	env.sdfgi_y_scale = Environment.SDFGI_Y_SCALE_75_PERCENT
 
-	env.glow_enabled = true
+	ambiente = env
+	env.glow_enabled = not movel
 	env.glow_intensity = 0.35
 	env.glow_bloom = 0.04
 
@@ -201,6 +206,7 @@ func _montar_ambiente() -> void:
 
 	# Sol: mesma direção do sol da foto HDRI (elevação ~50°)
 	var sol := DirectionalLight3D.new()
+	luz_sol = sol
 	var elev := deg_to_rad(49.6)
 	var dir_sol := Vector3(-0.602 * cos(elev), sin(elev), 0.799 * cos(elev)).normalized()
 	add_child(sol)
@@ -211,7 +217,10 @@ func _montar_ambiente() -> void:
 	sol.shadow_enabled = true
 	sol.shadow_blur = 1.0
 	sol.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	sol.directional_shadow_max_distance = 420.0 if not movel else 160.0
+	sol.directional_shadow_max_distance = 420.0 if not movel else 45.0
+	if movel:
+		sol.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+		sol.shadow_blur = 0.6
 	sol.directional_shadow_split_1 = 0.04
 	sol.directional_shadow_split_2 = 0.14
 	sol.directional_shadow_split_3 = 0.4
@@ -433,10 +442,12 @@ func _montar_grama() -> void:
 	var tam_bloco := 20.0
 	var raio := 70.0 if qualidade_baixa else 150.0
 	if movel:
-		raio = 55.0
+		raio = 32.0
 	if previa:
 		raio = 25.0
 	var dens_max := 18.0 if qualidade_baixa else 70.0
+	if movel:
+		dens_max = 9.0
 	var cam_ref := Vector2(0, 26)
 	var total := 0
 	var bx := -raio
@@ -486,7 +497,8 @@ func _montar_grama() -> void:
 				var mmi := MultiMeshInstance3D.new()
 				mmi.multimesh = mm
 				mmi.material_override = mat
-				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if dist > 60.0 else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if dist > 60.0 or movel else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+				blocos_grama.append(mmi)
 				mmi.visibility_range_end = raio + 30.0
 				add_child(mmi)
 				total += xs.size()
@@ -853,14 +865,25 @@ func _plantar(nome: String, x: float, z: float, escala: float, giro := -1.0, esc
 	# as árvores pedem mais detalhe (mais forte perto da câmera)
 	var vies := 8.0 if Vector2(x, z).length() < 200.0 else 3.0
 	if movel:
-		vies = 1.5 if Vector2(x, z).length() < 120.0 else 0.6
+		vies = 1.0 if Vector2(x, z).length() < 80.0 else 0.25
 	_definir_lod(no, vies)
+	if movel and Vector2(x, z).length() > 70.0:
+		_sem_sombra(no)
+	if Vector2(x, z).length() > 250.0:
+		arvores_longe.append(no)
 	if not cache_cena.has(nome + "_ok"):
 		_ajustar_folhas(no, 4.0 if nome.contains("tree") else 1.2)
 		cache_cena[nome + "_ok"] = true
 	if absf(x) < LIMITE + 80.0 and absf(z) < LIMITE + 80.0:
 		_colidir_planta(no, nome)
 	return no
+
+
+func _sem_sombra(n: Node) -> void:
+	if n is GeometryInstance3D:
+		(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for f in n.get_children():
+		_sem_sombra(f)
 
 
 func _livre(x: float, z: float, folga: float) -> bool:
@@ -1109,3 +1132,15 @@ func set_drone_na_grama(p: Vector3, forca: float) -> void:
 	if mat_grama:
 		mat_grama.set_shader_parameter("drone_pos", p)
 		mat_grama.set_shader_parameter("drone_forca", forca)
+
+
+## nível de gráfico no celular: 0 baixo, 1 médio, 2 alto
+func nivel_grafico(n: int) -> void:
+	if luz_sol:
+		luz_sol.shadow_enabled = n >= 1
+	for b in blocos_grama:
+		b.visibility_range_end = [18.0, 30.0, 60.0][n]
+	for a in arvores_longe:
+		a.visible = n >= 1
+	if ambiente:
+		ambiente.fog_enabled = n >= 1

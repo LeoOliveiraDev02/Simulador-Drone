@@ -10,6 +10,8 @@ var tempo := 0.0
 var ruido := FastNoiseLite.new()
 var ruido_dir := FastNoiseLite.new()
 var rajada_atual := 0.0         # 0..1 (para a grama e a biruta)
+var _perto: Array = []
+var _ref_perto := Vector2.INF
 var mapa: Node                   # para a sombra de vento atrás do galpão e das árvores
 
 
@@ -53,7 +55,14 @@ func esteira(p: Vector3) -> float:
 	var n := Vector2(-d.y, d.x)
 	var q := Vector2(p.x, p.z)
 	var maior := 0.0
-	for o in mapa.obstaculos:
+	var q2 := Vector2(p.x, p.z)
+	if _ref_perto == Vector2.INF or q2.distance_to(_ref_perto) > 15.0:
+		_ref_perto = q2
+		_perto.clear()
+		for o in mapa.obstaculos:
+			if (o[0] as Vector2).distance_to(q2) < 140.0:
+				_perto.append(o)
+	for o in _perto:
 		var c: Vector2 = o[0]
 		var r: float = o[1]
 		var topo: float = o[2]

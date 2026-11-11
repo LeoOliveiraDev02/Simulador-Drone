@@ -8,6 +8,9 @@ var altura := 0.32
 var yaw := 0.0
 var _pos := Vector3.ZERO
 var iniciada := false
+var olhar_yaw := 0.0      # olhar em volta arrastando o dedo (ou o botão direito do mouse)
+var olhar_pitch := 0.0
+var olhando := false
 
 
 func _ready() -> void:
@@ -39,8 +42,27 @@ func _yaw_do_drone() -> float:
 
 
 func _desejada() -> Vector3:
-	var atras := Vector3(sin(yaw), 0, cos(yaw))
-	return alvo.global_position + atras * distancia + Vector3.UP * (altura + distancia * 0.12)
+	var y := yaw + olhar_yaw
+	var atras := Vector3(sin(y), 0, cos(y))
+	var base := alvo.global_position + atras * distancia + Vector3.UP * (altura + distancia * 0.12)
+	if absf(olhar_pitch) < 0.001:
+		return base
+	# inclina a órbita para cima/baixo em volta do drone
+	var rel := base - alvo.global_position
+	var eixo := atras.cross(Vector3.UP).normalized()
+	return alvo.global_position + rel.rotated(eixo, olhar_pitch)
+
+
+func olhar(delta_px: Vector2) -> void:
+	olhar_yaw = wrapf(olhar_yaw - delta_px.x * 0.006, -PI, PI)
+	olhar_pitch = clampf(olhar_pitch + delta_px.y * 0.004, -0.5, 1.1)
+
+
+func _unhandled_input(ev: InputEvent) -> void:
+	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_RIGHT:
+		olhando = ev.pressed
+	elif ev is InputEventMouseMotion and olhando:
+		olhar(ev.relative)
 
 
 func _physics_process(delta: float) -> void:
@@ -52,6 +74,11 @@ func _physics_process(delta: float) -> void:
 	var vel := alvo.linear_velocity
 	var y_alvo := _yaw_do_drone()
 	yaw = lerp_angle(yaw, y_alvo, 1.0 - exp(-delta * 2.6))
+	# soltou o dedo: a câmera volta devagar para trás do drone
+	if not olhando:
+		var k := 1.0 - exp(-delta * 1.2)
+		olhar_yaw = lerpf(olhar_yaw, 0.0, k)
+		olhar_pitch = lerpf(olhar_pitch, 0.0, k)
 	var desejada := _desejada()
 	_pos = _pos.lerp(desejada, 1.0 - exp(-delta * (6.0 + vel.length() * 0.6)))
 	# não deixa a câmera entrar em parede, árvore ou no chão
