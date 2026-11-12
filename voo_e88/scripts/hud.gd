@@ -138,8 +138,8 @@ TECLADO
   Esc configurações   J desafios (balões, entrega, pouso, corrida)   N velocidade (lenta/normal/esporte)   F8 imagem (FSR 4.1)   F9 gerador de quadros
 
 RÁDIO VIA USB (EdgeTX/OpenTX em modo joystick)
-  É detectado sozinho. F5 troca a ordem dos canais (AETR/TAER/AERT), F6 inverte o acelerador,
-  F7 inverte frente/trás. Acelerador no meio = altura travada. Espaço decola, M troca o modo.
+  É detectado sozinho. Shift+F5 troca a ordem dos canais (AETR/TAER/AERT), Shift+F6 inverte o acelerador,
+  Shift+F7 inverte frente/trás. Acelerador no meio = altura travada. Espaço decola, M troca o modo.
 
 CELULAR
   Analógico da esquerda: subir/descer e girar. Da direita: frente/trás e lados.

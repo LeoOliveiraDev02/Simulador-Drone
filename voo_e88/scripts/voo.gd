@@ -321,15 +321,26 @@ func _unhandled_input(ev: InputEvent) -> void:
 				tutorial_ligado = not tutorial_ligado
 				passo_tutorial = 0
 				tutorial_t = 0.0
+			# trocar o tipo de controle e inverter eixos mexe muito no voo: só com Shift
+			# (antes F5/F6/F7 ficavam ao lado do F8 e eram apertadas sem querer)
 			KEY_F5:
-				mapa_controle = (maxi(mapa_controle, 0) + 1) % NOMES_MAPA.size()
-				hud.mostrar("Controle: " + NOMES_MAPA[mapa_controle], 2.5)
+				if ev.shift_pressed:
+					mapa_controle = (maxi(mapa_controle, 0) + 1) % NOMES_MAPA.size()
+					hud.mostrar("Controle: " + NOMES_MAPA[mapa_controle], 2.5)
+				else:
+					hud.mostrar("Para trocar o tipo de controle use Shift+F5", 2.5)
 			KEY_F6:
-				inverter_acel = not inverter_acel
-				hud.mostrar("Acelerador " + ("invertido" if inverter_acel else "normal"), 2.0)
+				if ev.shift_pressed:
+					inverter_acel = not inverter_acel
+					hud.mostrar("Acelerador " + ("invertido" if inverter_acel else "normal"), 2.0)
+				else:
+					hud.mostrar("Para inverter o acelerador use Shift+F6", 2.5)
 			KEY_F7:
-				inverter_pitch = not inverter_pitch
-				hud.mostrar("Frente/trás " + ("invertido" if inverter_pitch else "normal"), 2.0)
+				if ev.shift_pressed:
+					inverter_pitch = not inverter_pitch
+					hud.mostrar("Frente/trás " + ("invertido" if inverter_pitch else "normal"), 2.0)
+				else:
+					hud.mostrar("Para inverter frente/trás use Shift+F7", 2.5)
 			KEY_F8:
 				if not movel_ativo:
 					ciclar_modo_pc()
@@ -513,7 +524,12 @@ func _process(_delta: float) -> void:
 		var dist := Vector2(p.x, p.z).length()
 		var nome := "Controle na tela" if toque else "Sem controle conectado — usando o teclado"
 		if Input.get_connected_joypads().size() > 0:
-			nome = Input.get_joy_name(Input.get_connected_joypads()[0]) + " • " + NOMES_MAPA[maxi(mapa_controle, 0)] + " (F5 troca)"
+			nome = Input.get_joy_name(Input.get_connected_joypads()[0]) + " • " + NOMES_MAPA[maxi(mapa_controle, 0)] + " (Shift+F5 troca)"
+		# aviso fixo quando algo do controle está fora do normal
+		if inverter_pitch:
+			nome += "  •  FRENTE/TRÁS INVERTIDO (Shift+F7)"
+		if inverter_acel:
+			nome += "  •  ACELERADOR INVERTIDO (Shift+F6)"
 		hud.atualizar(drone, vento, camera, nome, dist, Mapa.LIMITE)
 		mapa.aplicar_vento(vento.direcao, vento.velocidade, vento.rajada_atual)
 
@@ -771,6 +787,19 @@ func _voar_reto(nome: String, a: Vector3, b: Vector3, vel_frac: float) -> bool:
 
 func _teste_colisao() -> void:
 	await _esperar(1.0)
+	if "--medir" in OS.get_cmdline_user_args():
+		var t0 := Time.get_ticks_usec()
+		var n := 0
+		for i in 2000:
+			mapa.folha_em(Vector3(-33.0 + randf() * 6.0, mapa.altura(-33, -20) + 2.0 + randf() * 4.0, -20.0 + randf() * 6.0))
+			n += 1
+		print("folha_em: %.1f us por consulta, %d plantas na lista" % [float(Time.get_ticks_usec() - t0) / n, mapa.folhagens.size()])
+		t0 = Time.get_ticks_usec()
+		for i in 2000:
+			mapa.folha_em(Vector3(5.0, mapa.altura(5, 5) + 2.0, 5.0))
+		print("folha_em longe de plantas: %.1f us" % (float(Time.get_ticks_usec() - t0) / 2000.0))
+		get_tree().quit()
+		return
 	drone.marcha = 1
 	var arvores := [Vector2(-33, -20), Vector2(-72, -98), Vector2(14, -158), Vector2(90, -58), Vector2(-66, -38)]
 	for c: Vector2 in arvores:

@@ -7,6 +7,7 @@
 #include "servers/rendering/rendering_device.h"
 #include "core/config/engine.h"
 #include "core/templates/local_vector.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 
 #if defined(VULKAN_ENABLED) && defined(WINDOWS_ENABLED)
 #include "drivers/vulkan/amd_ffx.h"
@@ -42,6 +43,48 @@ bool AmdFsr4::is_available() {
 
 bool AmdFsr4::frame_generation_active() {
 	return AmdFfx::swapchain_context != nullptr && !AmdFfx::fg_failed && AmdFfx::frame_generation_enabled();
+}
+
+// ---- imagem sem HUD para o gerador de quadros ----
+static RID _hudless;
+static Size2i _hudless_tam;
+static bool _hudless_ok = false;
+
+void AmdFsr4::capture_hudless(RID p_render_target) {
+	if (!frame_generation_active() || AmdFfx::fg_context == nullptr) {
+		_hudless_ok = false;
+		return;
+	}
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	RendererRD::TextureStorage *ts = RendererRD::TextureStorage::get_singleton();
+	if (rd == nullptr || ts == nullptr) {
+		return;
+	}
+	RID origem = ts->render_target_get_rd_texture(p_render_target);
+	if (origem.is_null()) {
+		_hudless_ok = false;
+		return;
+	}
+	RD::TextureFormat f = rd->texture_get_format(origem);
+	if (f.format != RD::DATA_FORMAT_R8G8B8A8_UNORM || f.array_layers != 1 || f.width != AmdFfx::display_width || f.height != AmdFfx::display_height) {
+		_hudless_ok = false; // tamanho/formato diferente da tela: o gerador segue sem a cópia (como antes)
+		return;
+	}
+	Size2i tam(f.width, f.height);
+	if (_hudless.is_null() || _hudless_tam != tam) {
+		if (_hudless.is_valid()) {
+			rd->free_rid(_hudless);
+		}
+		RD::TextureFormat tf;
+		tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
+		tf.width = tam.width;
+		tf.height = tam.height;
+		tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
+		_hudless = rd->texture_create(tf, RD::TextureView());
+		_hudless_tam = tam;
+	}
+	rd->texture_copy(origem, _hudless, Vector3(), Vector3(), Vector3(tam.width, tam.height, 1), 0, 0, 0, 0);
+	_hudless_ok = true;
 }
 
 // Um contexto só, criado no tamanho da tela: trocar Qualidade/Equilibrado/Desempenho muda só a
@@ -254,6 +297,9 @@ static void _amd_fsr4_callback(RenderingDeviceDriver *p_driver, RenderingDeviceD
 		cfg.frameGenerationEnabled = a->frame_generation;
 		cfg.allowAsyncWorkloads = false;
 		cfg.HUDLessColor = {};
+		if (_hudless_ok && _hudless.is_valid()) {
+			cfg.HUDLessColor = _resource(_hudless, _hudless_tam, FFX_API_RESOURCE_USAGE_READ_ONLY, FFX_API_RESOURCE_STATE_COPY_DEST);
+		}
 		cfg.flags = 0;
 		cfg.onlyPresentGenerated = false;
 		cfg.generationRect = { 0, 0, (int32_t)AmdFfx::display_width, (int32_t)AmdFfx::display_height };
@@ -365,6 +411,8 @@ bool AmdFsr4::is_available() {
 bool AmdFsr4::frame_generation_active() {
 	return false;
 }
+
+void AmdFsr4::capture_hudless(RID) {}
 
 AmdFsr4::Context *AmdFsr4::create_context(const Size2i &, const Size2i &) {
 	return nullptr;

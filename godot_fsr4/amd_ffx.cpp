@@ -165,9 +165,15 @@ bool AmdFfx::ensure_fg_context(uint32_t p_max_render_width, uint32_t p_max_rende
 	version.header.pNext = &backend.header;
 	version.version = FFX_FRAMEGENERATION_VERSION;
 
+	// a cópia sem HUD vem do render target do Godot (RGBA8), a tela é BGRA8
+	ffxCreateContextDescFrameGenerationHudless hudless = {};
+	hudless.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATION_HUDLESS;
+	hudless.header.pNext = &version.header;
+	hudless.hudlessBackBufferFormat = FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM;
+
 	ffxCreateContextDescFrameGeneration desc = {};
 	desc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATION;
-	desc.header.pNext = &version.header;
+	desc.header.pNext = &hudless.header;
 	desc.flags = FFX_FRAMEGENERATION_ENABLE_DEPTH_INVERTED;
 	desc.displaySize = { display_width, display_height };
 	desc.maxRenderSize = { MAX(p_max_render_width, display_width), MAX(p_max_render_height, display_height) };

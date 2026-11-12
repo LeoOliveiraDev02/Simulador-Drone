@@ -24,6 +24,9 @@ public:
 	static bool is_available();
 	// O gerador de quadros está pronto e ligado?
 	static bool frame_generation_active();
+	// Gerador de quadros: guarda uma cópia da imagem 3D antes dos textos/painéis (HUD), para o
+	// gerador saber o que é interface e não deformar as letras nos quadros gerados.
+	static void capture_hudless(RID p_render_target);
 
 	static Context *create_context(const Size2i &p_internal_size, const Size2i &p_target_size);
 	static void free_context(Context *p_context);

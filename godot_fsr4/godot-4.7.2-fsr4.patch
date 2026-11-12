@@ -627,3 +627,26 @@ index be97ee2..cbb2278 100644
  
  #ifdef METAL_MFXTEMPORAL_ENABLED
  		bool ensure_mfx_temporal(RendererRD::MFXTemporalEffect *p_effect);
+diff --git a/servers/rendering/renderer_viewport.cpp b/servers/rendering/renderer_viewport.cpp
+index 8098fea..08521db 100644
+--- a/servers/rendering/renderer_viewport.cpp
++++ b/servers/rendering/renderer_viewport.cpp
+@@ -41,6 +41,7 @@
+ #include "servers/rendering/renderer_compositor.h"
+ #include "servers/rendering/renderer_scene_occlusion_cull.h"
+ #include "servers/rendering/rendering_device.h"
++#include "servers/rendering/renderer_rd/effects/amd_fsr4.h"
+ #include "servers/rendering/rendering_method.h"
+ #include "servers/rendering/rendering_server_globals.h"
+ #include "servers/rendering/storage/texture_storage.h"
+@@ -405,6 +406,10 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
+ 			RSG::texture_storage->render_target_do_clear_request(p_viewport->render_target);
+ 		}
+ 		_draw_3d(p_viewport);
++		// gerador de quadros da AMD: cópia da imagem 3D antes de desenhar os textos/painéis
++		if (p_viewport->viewport_to_screen != DisplayServerEnums::INVALID_WINDOW_ID && RendererRD::AmdFsr4::frame_generation_active()) {
++			RendererRD::AmdFsr4::capture_hudless(p_viewport->render_target);
++		}
+ 	}
+ 
+ 	if (can_draw_2d) {
