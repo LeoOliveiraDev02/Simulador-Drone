@@ -6,23 +6,27 @@ import bpy, sys, os, glob
 
 argv = sys.argv[sys.argv.index('--') + 1:]
 ENTRA, SAI = argv[0], argv[1]
+# 3º argumento opcional: multiplica as frações das árvores (PC usa 2.5) e só gera árvores
+MULT = float(argv[2]) if len(argv) > 2 else 1.0
 os.makedirs(SAI, exist_ok=True)
 
 # fração mantida por tipo de material
 def fracao(nome_mat, total):
     n = nome_mat.lower()
     if 'leaves' in n:
-        return 0.08
+        return min(1.0, 0.08 * MULT)
     if 'branches' in n:
-        return 0.035
+        return min(1.0, 0.035 * MULT)
     if 'trunk' in n or n.startswith('island_tree'):
-        return 0.25
+        return min(1.0, 0.25 * MULT)
     # pedras e arbustos: mira ~6 mil triângulos
     return min(1.0, 6000.0 / max(total, 1))
 
 
 for f in sorted(glob.glob(os.path.join(ENTRA, '*', '*_1k.gltf'))):
     nome = os.path.basename(f).replace('_1k.gltf', '')
+    if MULT > 1.0 and 'tree' not in nome:
+        continue
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=f)
     antes = depois = 0

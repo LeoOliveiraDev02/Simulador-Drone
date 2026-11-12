@@ -22,8 +22,12 @@ const R_HELICE := 0.071           # m: raio da hélice
 const RPS_MAX := 210.0            # voltas por segundo da hélice no máximo
 const G := 9.8
 
-const INCLINACAO_MAX := deg_to_rad(30.0)   # modo estabilizado
-const VEL_MAX_HORIZ := 7.0                 # m/s comandados com o controle no fim
+# velocidades do modo estabilizado, como o botão de velocidade do E88 de verdade:
+# LENTA (iniciante), NORMAL e ESPORTE (inclina mais e passa de 45 km/h)
+const NOMES_MARCHA := ["LENTA", "NORMAL", "ESPORTE"]
+const VEL_MARCHA := [4.5, 9.0, 14.0]                 # m/s com o controle no fim
+const INCLINACAO_MARCHA := [22.0, 35.0, 45.0]        # graus de inclinação máxima
+var marcha := 1
 const SUBIDA_MAX := 2.2                    # m/s
 const DESCIDA_MAX := 1.6                   # m/s
 const GIRO_YAW_MAX := deg_to_rad(160.0)    # °/s no modo estabilizado
@@ -514,9 +518,9 @@ func _integrate_forces(st: PhysicsDirectBodyState3D) -> void:
 	var vh := Vector3(vr.x, 0, vr.z)
 	var rotor := clampf(soma / (MASSA * G), 0.0, 1.5)
 	# hélices girando "seguram" o ar (arrasto do rotor) + arrasto do corpo
-	var c1h := 0.012 + 0.036 * rotor
+	var c1h := 0.010 + 0.018 * rotor
 	var c1v := 0.02 + 0.07 * rotor
-	var c2 := 0.0065
+	var c2 := 0.0032
 	var f_ar := -vh * (c1h + c2 * vh.length()) - Vector3(0, vr.y, 0) * (c1v + c2 * absf(vr.y))
 	st.apply_central_force(f_ar)
 	# o ar amortece os giros
@@ -545,12 +549,15 @@ func _controle_estabilizado(b: Basis, cima: Vector3, v: Vector3, w_b: Vector3, p
 	var direita := frente.cross(Vector3.UP)
 
 	# velocidade horizontal desejada pelo controle; soltou = freia até parar
-	var v_alvo := (frente * e_pitch + direita * e_roll) * VEL_MAX_HORIZ
+	var v_alvo := (frente * e_pitch + direita * e_roll) * float(VEL_MARCHA[marcha])
 	if estado == "decolando" or estado == "pousando" or estado == "pousado":
 		v_alvo = Vector3.ZERO
 	var vh := Vector3(v.x, 0, v.z)
 	var acel_h := (v_alvo - vh) * 2.0
-	var lim := G * tan(INCLINACAO_MAX)
+	# compensa o arrasto do ar na velocidade atual (para chegar na velocidade da marcha)
+	if v_alvo.length() > 0.1:
+		acel_h += vh * (0.028 + 0.0032 * vh.length()) / MASSA
+	var lim := G * tan(deg_to_rad(INCLINACAO_MARCHA[marcha]))
 	if acel_h.length() > lim:
 		acel_h = acel_h.normalized() * lim
 	var cima_alvo := (acel_h + Vector3.UP * G).normalized()
@@ -788,3 +795,8 @@ func _process(delta: float) -> void:
 
 func velocidade_vento_relativo() -> Vector3:
 	return linear_velocity - (vento.no_ponto(global_position, global_position.y - chao_y) if vento else Vector3.ZERO)
+
+
+func trocar_marcha(n := -1) -> void:
+	marcha = (marcha + 1) % VEL_MARCHA.size() if n < 0 else clampi(n, 0, VEL_MARCHA.size() - 1)
+	mensagem.emit("Velocidade %s (até %d km/h)" % [NOMES_MARCHA[marcha], roundi(float(VEL_MARCHA[marcha]) * 3.6)], 2.5)

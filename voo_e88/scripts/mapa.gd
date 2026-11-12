@@ -188,13 +188,13 @@ func _montar_ambiente() -> void:
 	env.ssao_enabled = not movel
 	env.ssao_radius = 1.4
 	env.ssao_intensity = 1.8
-	env.ssil_enabled = not qualidade_baixa
+	env.ssil_enabled = false
 	env.ssr_enabled = not movel
-	env.ssr_max_steps = 96
+	env.ssr_max_steps = 48
 
 	env.sdfgi_enabled = not qualidade_baixa
 	env.sdfgi_use_occlusion = true
-	env.sdfgi_cascades = 6
+	env.sdfgi_cascades = 4
 	env.sdfgi_min_cell_size = 0.25
 	env.sdfgi_y_scale = Environment.SDFGI_Y_SCALE_75_PERCENT
 
@@ -835,16 +835,22 @@ func _montar_portais() -> void:
 
 # ------------------------------------------------------------------ árvores, arbustos e pedras
 
-func _cena(nome: String) -> PackedScene:
-	if cache_cena.has(nome):
-		return cache_cena[nome]
-	# no celular usa as versões leves (blender/modelos_celular.py)
+func _cena(nome: String, versao := "") -> PackedScene:
+	# versões das árvores (blender/modelos_celular.py), do original de 1-2 milhões de triângulos:
+	#   "movel" ~75-165 mil (celular e árvores longe no PC), "pc" ~190-410 mil (árvores perto no PC)
+	if versao == "":
+		versao = "movel" if movel else "orig"
+	var chave := nome + "@" + versao
+	if cache_cena.has(chave):
+		return cache_cena[chave]
 	var c: PackedScene
-	if movel and ResourceLoader.exists(REC + "modelos_movel/%s.glb" % nome):
+	if versao == "movel" and ResourceLoader.exists(REC + "modelos_movel/%s.glb" % nome):
 		c = load(REC + "modelos_movel/%s.glb" % nome)
+	elif versao == "pc" and ResourceLoader.exists(REC + "modelos_pc/%s.glb" % nome):
+		c = load(REC + "modelos_pc/%s.glb" % nome)
 	else:
 		c = load(REC + "modelos/%s/%s_1k.gltf" % [nome, nome])
-	cache_cena[nome] = c
+	cache_cena[chave] = c
 	return c
 
 
@@ -881,24 +887,30 @@ func _definir_lod(n: Node, vies: float) -> void:
 
 
 func _plantar(nome: String, x: float, z: float, escala: float, giro := -1.0, escala_v := Vector3.ZERO) -> Node3D:
-	var no: Node3D = _cena(nome).instantiate()
+	var dist := Vector2(x, z).length()
+	var arvore := nome.contains("tree")
+	var versao := ""
+	if not movel and arvore:
+		# PC: árvores perto com bastante detalhe; as de longe (eucaliptal, horizonte) na versão leve
+		versao = "pc" if dist < 160.0 else "movel"
+	var no: Node3D = _cena(nome, versao).instantiate()
 	add_child(no)
 	no.position = Vector3(x, altura(x, z) - 0.05, z)
 	no.rotation.y = rng.randf() * TAU if giro < 0.0 else giro
 	no.scale = Vector3.ONE * escala if escala_v == Vector3.ZERO else escala_v
 	# folhas são geometria fina: o LOD automático apagava as copas, então
 	# as árvores pedem mais detalhe (mais forte perto da câmera)
-	var vies := 8.0 if Vector2(x, z).length() < 200.0 else 3.0
+	var vies := 1.5 if dist < 160.0 else 1.0
 	if movel:
-		vies = 1.0 if Vector2(x, z).length() < 80.0 else 0.25
+		vies = 1.0 if dist < 80.0 else 0.25
 	_definir_lod(no, vies)
-	if movel and Vector2(x, z).length() > 70.0:
+	if (movel and dist > 70.0) or (arvore and dist > 160.0):
 		_sem_sombra(no)
 	if Vector2(x, z).length() > 250.0:
 		arvores_longe.append(no)
-	if not cache_cena.has(nome + "_ok"):
-		_ajustar_folhas(no, 4.0 if nome.contains("tree") else 1.2)
-		cache_cena[nome + "_ok"] = true
+	if not cache_cena.has(nome + "@" + versao + "_ok"):
+		_ajustar_folhas(no, 4.0 if arvore else 1.2)
+		cache_cena[nome + "@" + versao + "_ok"] = true
 	if absf(x) < LIMITE + 80.0 and absf(z) < LIMITE + 80.0:
 		_colidir_planta(no, nome)
 	return no
@@ -1169,3 +1181,21 @@ func nivel_grafico(n: int) -> void:
 		a.visible = n >= 1
 	if ambiente:
 		ambiente.fog_enabled = n >= 1
+
+
+## qualidade gráfica no PC: 0 baixa, 1 média, 2 alta
+func nivel_grafico_pc(n: int) -> void:
+	if ambiente:
+		ambiente.sdfgi_enabled = n >= 2      # luz rebatida em tempo real (pesada)
+		ambiente.volumetric_fog_enabled = n >= 2
+		ambiente.ssr_enabled = n >= 2
+		ambiente.ssao_enabled = n >= 1
+		ambiente.glow_enabled = true
+	if luz_sol:
+		luz_sol.shadow_enabled = true
+		luz_sol.directional_shadow_max_distance = [70.0, 140.0, 220.0][n]
+		luz_sol.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if n == 0 else DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	for b in blocos_grama:
+		b.visibility_range_end = [35.0, 60.0, 95.0][n]
+	for a in arvores_longe:
+		a.visible = n >= 1

@@ -54,6 +54,15 @@ const MODOS_PC := [
 const CFG_GRAFICOS := "user://graficos.cfg"
 var modo_pc := 1
 var gerador_ao_abrir := false
+const NOMES_QUALIDADE := ["BAIXA", "MÉDIA", "ALTA"]
+const LIMITES_FPS := [0, 60, 120, 144, 165, 240]
+var qualidade_pc := 2
+var qualidade_pc_auto := true
+var marcha_cfg := 1
+var vsync_ligado := true
+var limite_fps_i := 0
+var menu: MenuConfig
+var _tempo_pc_baixo := 0.0
 
 
 func _ready() -> void:
@@ -115,6 +124,9 @@ func _ready() -> void:
 	drone.mapa = mapa
 	drone.vento = vento
 	drone.recomecar(mapa.ponto_partida(), 0.0)
+	drone.marcha = marcha_cfg
+	if not movel and not qualidade_baixa:
+		mapa.nivel_grafico_pc(qualidade_pc)
 	if not modo_teste:
 		var som := SomMotor.new()
 		som.drone = drone
@@ -145,6 +157,11 @@ func _ready() -> void:
 		hud.mostrar("Use os dois analógicos da tela  •  arraste no meio da tela para olhar em volta", 6.0)
 	if movel_ativo:
 		_aplicar_grafico()
+	if not movel and not modo_teste and not modo_prints:
+		menu = MenuConfig.new()
+		menu.voo = self
+		add_child(menu)
+		hud.mostrar("Esc (ou Start): configurações  •  H: ajuda dos controles", 6.0)
 
 	carregando.definir(0.92, "Preparando os gráficos na placa de vídeo")
 	if not modo_teste:
@@ -252,7 +269,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 			JOY_BUTTON_Y: drone.trocar_modo()
 			JOY_BUTTON_X: _recomecar()
 			JOY_BUTTON_B: _emergencia()
-			JOY_BUTTON_START: _ajuda()
+			JOY_BUTTON_START:
+				if menu == null:
+					_ajuda()
 			JOY_BUTTON_BACK: drone.trocar_sem_cabeca()
 			JOY_BUTTON_RIGHT_STICK: drone.fazer_flip(Vector2(drone.e_roll, drone.e_pitch))
 			JOY_BUTTON_DPAD_UP: _vento(1.0)
@@ -292,16 +311,19 @@ func _unhandled_input(ev: InputEvent) -> void:
 				hud.mostrar("Frente/trás " + ("invertido" if inverter_pitch else "normal"), 2.0)
 			KEY_F8:
 				if not movel_ativo:
-					modo_pc = (modo_pc + 1) % MODOS_PC.size()
-					_aplicar_modo_pc(true)
-					_salvar_cfg_pc()
+					ciclar_modo_pc()
+					hud.mostrar("Imagem: " + texto_modo_pc() + "  (F8 troca)", 2.5)
 			KEY_F9:
 				if not movel_ativo:
-					_alternar_gerador()
+					alternar_gerador_menu()
+					hud.mostrar("Gerador de quadros: " + texto_gerador(), 4.0)
 			KEY_F11:
 				var w := get_window()
 				w.mode = Window.MODE_MAXIMIZED if w.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
-			KEY_ESCAPE: _ajuda()
+			KEY_ESCAPE:
+				if menu == null:
+					_ajuda()
+			KEY_N: drone.trocar_marcha()
 			KEY_Q:
 				if hud.ajuda.visible:
 					get_tree().quit()
@@ -342,6 +364,14 @@ func _aplicar_grafico() -> void:
 
 
 func _ajuste_automatico(delta: float) -> void:
+	# PC: se ficar abaixo de 45 FPS por 4 s, baixa a qualidade sozinho (só enquanto você não escolher no menu)
+	if not movel_ativo and qualidade_pc_auto and not qualidade_baixa and mapa and not get_tree().paused:
+		_tempo_pc_baixo = _tempo_pc_baixo + delta if Engine.get_frames_per_second() < 45 else 0.0
+		if _tempo_pc_baixo > 4.0 and qualidade_pc > 0:
+			_tempo_pc_baixo = -6.0
+			qualidade_pc -= 1
+			mapa.nivel_grafico_pc(qualidade_pc)
+			hud.mostrar("Qualidade gráfica ajustada para " + NOMES_QUALIDADE[qualidade_pc] + " (FPS baixo). Esc para escolher.", 3.0)
 	# mínimo de 30 FPS: se ficar abaixo de 32 por 3 s, baixa o gráfico; se sobrar folga (55+) por 12 s, sobe
 	if not movel_ativo or not grafico_auto:
 		return
@@ -715,14 +745,21 @@ func _tirar_prints() -> void:
 	get_tree().quit()
 
 
-# ---------- PC: FSR 4.1 / gerador de quadros ----------
+# ---------- PC: configurações (menu Esc), FSR 4.1 e gerador de quadros ----------
 
 func _carregar_cfg_pc() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(CFG_GRAFICOS) == OK:
 		modo_pc = clampi(int(cfg.get_value("jogo", "modo_pc", 1)), 0, MODOS_PC.size() - 1)
+		if cfg.has_section_key("jogo", "qualidade_pc"):
+			qualidade_pc = clampi(int(cfg.get_value("jogo", "qualidade_pc", 2)), 0, 2)
+			qualidade_pc_auto = false
+		marcha_cfg = clampi(int(cfg.get_value("jogo", "marcha", 1)), 0, 2)
+		vsync_ligado = bool(cfg.get_value("jogo", "vsync", true))
+		limite_fps_i = clampi(int(cfg.get_value("jogo", "limite_fps", 0)), 0, LIMITES_FPS.size() - 1)
 	# o gerador de quadros só funciona se já estava ligado quando o jogo abriu
 	gerador_ao_abrir = bool(ProjectSettings.get_setting("rendering/amd_fsr/frame_generation", false))
+	_aplicar_vsync()
 
 
 func _salvar_cfg_pc() -> void:
@@ -730,10 +767,15 @@ func _salvar_cfg_pc() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("rendering", "amd_fsr/frame_generation", bool(ProjectSettings.get_setting("rendering/amd_fsr/frame_generation", false)))
 	cfg.set_value("jogo", "modo_pc", modo_pc)
+	if not qualidade_pc_auto:
+		cfg.set_value("jogo", "qualidade_pc", qualidade_pc)
+	cfg.set_value("jogo", "marcha", drone.marcha if drone else marcha_cfg)
+	cfg.set_value("jogo", "vsync", vsync_ligado)
+	cfg.set_value("jogo", "limite_fps", limite_fps_i)
 	cfg.save(CFG_GRAFICOS)
 
 
-func _aplicar_modo_pc(avisar: bool) -> void:
+func _aplicar_modo_pc(_avisar: bool) -> void:
 	var vp := get_viewport()
 	if modo_pc == 0:
 		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
@@ -746,19 +788,92 @@ func _aplicar_modo_pc(avisar: bool) -> void:
 		vp.fsr_sharpness = 1.0 # nitidez moderada
 		vp.msaa_3d = Viewport.MSAA_DISABLED
 		vp.use_taa = false
-	if avisar and hud:
-		hud.mostrar("Imagem: " + MODOS_PC[modo_pc][0] + "  (F8 troca)", 2.5)
 
 
-func _alternar_gerador() -> void:
+func _aplicar_vsync() -> void:
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync_ligado else DisplayServer.VSYNC_DISABLED)
+	Engine.max_fps = LIMITES_FPS[limite_fps_i]
+
+
+func texto_modo_pc() -> String:
+	return MODOS_PC[modo_pc][0]
+
+
+func ciclar_modo_pc() -> void:
+	modo_pc = (modo_pc + 1) % MODOS_PC.size()
+	_aplicar_modo_pc(false)
+	_salvar_cfg_pc()
+
+
+func texto_gerador() -> String:
+	var ligado := bool(ProjectSettings.get_setting("rendering/amd_fsr/frame_generation", false))
+	if not ligado:
+		return "DESLIGADO"
+	return "LIGADO (reabra o jogo para começar)" if not gerador_ao_abrir else "LIGADO"
+
+
+func alternar_gerador_menu() -> void:
 	var ligado := not bool(ProjectSettings.get_setting("rendering/amd_fsr/frame_generation", false))
 	ProjectSettings.set_setting("rendering/amd_fsr/frame_generation", ligado)
-	_salvar_cfg_pc()
 	if ligado and modo_pc == 0:
-		modo_pc = 1
+		modo_pc = 1 # o gerador de quadros usa os dados do FSR
 		_aplicar_modo_pc(false)
-		_salvar_cfg_pc()
-	if ligado and not gerador_ao_abrir:
-		hud.mostrar("Gerador de quadros LIGADO: feche e abra o jogo para ele começar", 5.0)
-	else:
-		hud.mostrar("Gerador de quadros " + ("LIGADO" if ligado else "DESLIGADO"), 2.5)
+	_salvar_cfg_pc()
+
+
+func precisa_reabrir() -> bool:
+	return bool(ProjectSettings.get_setting("rendering/amd_fsr/frame_generation", false)) and not gerador_ao_abrir
+
+
+func reabrir_jogo() -> void:
+	_salvar_cfg_pc()
+	OS.create_process(OS.get_executable_path(), OS.get_cmdline_args())
+	get_tree().quit()
+
+
+func texto_qualidade_pc() -> String:
+	return NOMES_QUALIDADE[qualidade_pc] + (" (automática)" if qualidade_pc_auto else "")
+
+
+func ciclar_qualidade_pc() -> void:
+	qualidade_pc = (qualidade_pc + 1) % 3
+	qualidade_pc_auto = false
+	if mapa:
+		mapa.nivel_grafico_pc(qualidade_pc)
+	_salvar_cfg_pc()
+
+
+func texto_marcha() -> String:
+	var m: int = drone.marcha if drone else marcha_cfg
+	return "%s (até %d km/h)" % [E88.NOMES_MARCHA[m], roundi(float(E88.VEL_MARCHA[m]) * 3.6)]
+
+
+func ciclar_marcha() -> void:
+	if drone:
+		drone.marcha = (drone.marcha + 1) % E88.VEL_MARCHA.size()
+	_salvar_cfg_pc()
+
+
+func texto_vsync() -> String:
+	return "LIGADA" if vsync_ligado else "DESLIGADA"
+
+
+func alternar_vsync() -> void:
+	vsync_ligado = not vsync_ligado
+	_aplicar_vsync()
+	_salvar_cfg_pc()
+
+
+func texto_limite_fps() -> String:
+	var l: int = LIMITES_FPS[limite_fps_i]
+	return "SEM LIMITE" if l == 0 else str(l)
+
+
+func ciclar_limite_fps() -> void:
+	limite_fps_i = (limite_fps_i + 1) % LIMITES_FPS.size()
+	_aplicar_vsync()
+	_salvar_cfg_pc()
+
+
+func mostrar_ajuda() -> void:
+	hud.ajuda.visible = true
