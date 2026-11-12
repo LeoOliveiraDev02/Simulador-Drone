@@ -135,7 +135,7 @@ TECLADO
   W/S subir/descer   A/D girar   ↑↓←→ frente/trás/lados   Espaço decolar/pousar
   M modo   R recomeçar   B desligar   +/- vento   PgUp/PgDn câmera   G rajadas   H ajuda
   F flip   K modo sem cabeça   V direção do vento   F11 tela cheia   F12 print   T tutorial
-  Esc configurações   N velocidade (lenta/normal/esporte)   F8 imagem (FSR 4.1)   F9 gerador de quadros
+  Esc configurações   J desafios (balões, entrega, pouso, corrida)   N velocidade (lenta/normal/esporte)   F8 imagem (FSR 4.1)   F9 gerador de quadros
 
 RÁDIO VIA USB (EdgeTX/OpenTX em modo joystick)
   É detectado sozinho. F5 troca a ordem dos canais (AETR/TAER/AERT), F6 inverte o acelerador,

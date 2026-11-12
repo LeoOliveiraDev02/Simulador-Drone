@@ -5,6 +5,7 @@
 #include "amd_ffx.h"
 
 #include "core/config/project_settings.h"
+#include "core/io/file_access.h"
 #include "core/os/os.h"
 
 #ifdef AMD_FFX_ENABLED
@@ -23,7 +24,14 @@ bool AmdFfx::library_present() {
 		return _ffx_present;
 	}
 	_ffx_tried = true;
-	if (OS::get_singleton() && OS::get_singleton()->get_cmdline_args().find("--sem-fsr4") != nullptr) {
+	// Para testes automáticos: o arquivo "forcar_fsr4.txt" ao lado do executável ignora o --sem-fsr4.
+	bool forcar = false;
+	if (OS::get_singleton()) {
+		String exe_dir = OS::get_singleton()->get_executable_path().get_base_dir();
+		String f = exe_dir.path_join("forcar_fsr4.txt");
+		forcar = FileAccess::exists(f) && FileAccess::get_file_as_string(f).strip_edges().begins_with("sim");
+	}
+	if (!forcar && OS::get_singleton() && OS::get_singleton()->get_cmdline_args().find("--sem-fsr4") != nullptr) {
 		set_status("FSR 4 desligado (--sem-fsr4)");
 		return false;
 	}
@@ -73,16 +81,30 @@ bool AmdFfx::frame_generation_enabled() {
 	return _setting_bool(SETTING_FRAMEGEN, false);
 }
 
-void AmdFfx::set_status(const String &p_status) {
-	if (status == p_status) {
+static void _publicar_status() {
+	String s = AmdFfx::status_fsr;
+	if (!AmdFfx::status_fg.is_empty()) {
+		s += (s.is_empty() ? "" : " • ") + AmdFfx::status_fg;
+	}
+	if (AmdFfx::status == s) {
 		return;
 	}
-	status = p_status;
-	print_line("[AMD FSR] " + p_status);
+	AmdFfx::status = s;
+	print_line("[AMD FSR] " + s);
 	ProjectSettings *ps = ProjectSettings::get_singleton();
 	if (ps) {
-		ps->set_setting(SETTING_STATUS, p_status);
+		ps->set_setting(AmdFfx::SETTING_STATUS, s);
 	}
+}
+
+void AmdFfx::set_status(const String &p_status) {
+	status_fsr = p_status;
+	_publicar_status();
+}
+
+void AmdFfx::set_status_fg(const String &p_status) {
+	status_fg = p_status;
+	_publicar_status();
 }
 
 #ifdef AMD_FFX_ENABLED
@@ -120,6 +142,7 @@ void AmdFfx::destroy_fg_context() {
 	if (fg_context != nullptr) {
 		fn.DestroyContext(&fg_context, nullptr);
 		fg_context = nullptr;
+		set_status_fg("gerador de quadros pronto");
 	}
 	fg_frame_id = 0;
 }
@@ -154,10 +177,11 @@ bool AmdFfx::ensure_fg_context(uint32_t p_max_render_width, uint32_t p_max_rende
 	if (ret != FFX_API_RETURN_OK) {
 		fg_context = nullptr;
 		fg_failed = true;
-		set_status("Gerador de quadros falhou ao iniciar: " + error_name(ret));
+		set_status_fg("Gerador de quadros falhou ao iniciar: " + error_name(ret));
 		return false;
 	}
 	fg_frame_id = 1;
+	set_status_fg("gerador de quadros ATIVO");
 	return true;
 }
 

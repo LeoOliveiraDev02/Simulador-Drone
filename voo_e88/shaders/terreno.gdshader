@@ -1,5 +1,6 @@
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
+#include "res://shaders/nuvens.gdshaderinc"
 
 // Pasto de perto (grass_ground) e de longe (aerial_grass_rock)
 uniform sampler2D grama_alb : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -76,7 +77,7 @@ void fragment() {
 	nor = mix(nor, texture(terra_nor, uv_t).rgb, terra);
 	vec3 arm = mix(arm_pasto, texture(terra_arm, uv_t).rgb, terra);
 
-	ALBEDO = albedo;
+	ALBEDO = albedo * sombra_nuvem(wpos);
 	NORMAL_MAP = nor;
 	NORMAL_MAP_DEPTH = mix(1.0, 0.4, longe);
 	ROUGHNESS = clamp(arm.g * 1.05, 0.55, 1.0);

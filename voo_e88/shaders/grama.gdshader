@@ -1,5 +1,6 @@
 shader_type spatial;
 render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
+#include "res://shaders/nuvens.gdshaderinc"
 
 uniform vec3 cor_base : source_color = vec3(0.07, 0.15, 0.03);
 uniform vec3 cor_ponta : source_color = vec3(0.30, 0.50, 0.11);
@@ -13,12 +14,14 @@ uniform float drone_forca = 0.0;
 varying float altura_folha;
 varying float seca;
 varying float variacao;
+varying vec3 wpos_g;
 
 void vertex() {
 	altura_folha = UV.y;
 	seca = INSTANCE_CUSTOM.r;
 	variacao = INSTANCE_CUSTOM.g;
 	vec3 wp = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+	wpos_g = wp;
 	float t = TIME;
 	float rajada = sin(t * 0.6 + wp.x * 0.03 + wp.z * 0.02) * 0.5 + 0.5;
 	float onda = sin(t * 1.9 + wp.x * 0.45 + wp.z * 0.25) * 0.6 + sin(t * 3.1 + wp.x * 1.3 - wp.z * 0.7) * 0.25;
@@ -41,7 +44,7 @@ void fragment() {
 	vec3 c = mix(cor_base, cor_ponta, smoothstep(0.0, 1.0, altura_folha));
 	c *= mix(0.82, 1.18, variacao);
 	c = mix(c, cor_seca * mix(0.7, 1.1, altura_folha), seca);
-	ALBEDO = c;
+	ALBEDO = c * sombra_nuvem(wpos_g);
 	ROUGHNESS = 0.62;
 	SPECULAR = 0.3;
 	AO = mix(0.3, 1.0, altura_folha);

@@ -42,12 +42,15 @@ public:
 	static bool frame_generation_requested(); // Lido uma vez ao criar o device.
 	static bool upscaler_enabled(); // Lido a cada quadro.
 	static bool frame_generation_enabled(); // Lido a cada quadro.
-	static void set_status(const String &p_status);
+	static void set_status(const String &p_status); // FSR (upscaler)
+	static void set_status_fg(const String &p_status); // gerador de quadros
 	static String get_status() { return status; }
 
 	static inline bool vendor_is_amd = false;
 	static inline bool upscaler_failed = false;
 	static inline String status;
+	static inline String status_fsr;
+	static inline String status_fg;
 
 #ifdef AMD_FFX_ENABLED
 	static inline AmdFfxFunctions fn;

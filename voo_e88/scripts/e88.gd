@@ -28,6 +28,7 @@ const NOMES_MARCHA := ["LENTA", "NORMAL", "ESPORTE"]
 const VEL_MARCHA := [4.5, 9.0, 14.0]                 # m/s com o controle no fim
 const INCLINACAO_MARCHA := [22.0, 35.0, 45.0]        # graus de inclinação máxima
 var marcha := 1
+var peso_extra := 0.0   # kg de carga pendurada (desafio da entrega)
 const SUBIDA_MAX := 2.2                    # m/s
 const DESCIDA_MAX := 1.6                   # m/s
 const GIRO_YAW_MAX := deg_to_rad(160.0)    # °/s no modo estabilizado
@@ -529,6 +530,22 @@ func _integrate_forces(st: PhysicsDirectBodyState3D) -> void:
 	# ------------------ turbulência (perto de paredes/árvores, no chão e na rajada)
 	_turbulencia(st, b, pos, h, rotor, v, dt)
 
+	if peso_extra > 0.0:
+		st.apply_central_force(Vector3.DOWN * peso_extra * G)
+
+	# ------------------ folhagem: entrar na copa de uma árvore ou num arbusto freia e sacode o drone
+	if mapa and mapa.has_method("folhagem_em"):
+		var folha: float = mapa.folhagem_em(pos)
+		if folha > 0.0:
+			st.apply_central_force(-v * folha * 0.22)
+			var sacode := Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * folha * 0.0045
+			st.apply_torque(sacode)
+			# batendo rápido nos galhos, uma hélice pode quebrar
+			if v.length() > 3.5 and folha > 0.45 and randf() < dt * 1.5 * folha:
+				var k := randi() % 4
+				if helice_ok[k]:
+					quebrar_helice(k, "bateu nos galhos")
+
 	v_anterior = v
 
 	# ------------------ estado
@@ -584,7 +601,7 @@ func _controle_estabilizado(b: Basis, cima: Vector3, v: Vector3, w_b: Vector3, p
 	int_vz = clampf(int_vz + erro_vz * dt, -1.5, 1.5)
 	var acel_z := erro_vz * 4.5 + int_vz * 2.5
 	var cos_inc := maxf(cima.dot(Vector3.UP), 0.5)
-	var total := MASSA * (G + acel_z) / cos_inc
+	var total := (MASSA + peso_extra) * (G + acel_z) / cos_inc
 	if estado == "pousando" and h < 0.03:
 		total *= 0.6
 

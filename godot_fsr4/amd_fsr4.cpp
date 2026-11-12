@@ -76,7 +76,7 @@ AmdFsr4::Context *AmdFsr4::create_context(const Size2i &p_internal_size, const S
 	if (AmdFfx::fn.Query(&c->ffx, &provider.header) == FFX_API_RETURN_OK && provider.versionName != nullptr) {
 		name = "FSR " + String::utf8(provider.versionName);
 	}
-	AmdFfx::set_status(name + " ativo" + String(AmdFfx::swapchain_context != nullptr ? " • gerador de quadros pronto" : ""));
+	AmdFfx::set_status(name + " ativo");
 	return c;
 }
 
@@ -196,7 +196,7 @@ static void _amd_fsr4_callback(RenderingDeviceDriver *p_driver, RenderingDeviceD
 		ffxReturnCode_t ret = AmdFfx::fn.Configure(&AmdFfx::fg_context, &cfg.header);
 		if (ret != FFX_API_RETURN_OK) {
 			AmdFfx::fg_failed = true;
-			AmdFfx::set_status("Gerador de quadros falhou ao configurar (" + AmdFfx::error_name(ret) + ")");
+			AmdFfx::set_status_fg("Gerador de quadros falhou ao configurar (" + AmdFfx::error_name(ret) + ")");
 		} else if (a->frame_generation) {
 			ffxDispatchDescFrameGenerationPrepareV2 prep = {};
 			prep.header.type = FFX_API_DISPATCH_DESC_TYPE_FRAMEGENERATION_PREPARE_V2;
@@ -223,7 +223,7 @@ static void _amd_fsr4_callback(RenderingDeviceDriver *p_driver, RenderingDeviceD
 			ret = AmdFfx::fn.Dispatch(&AmdFfx::fg_context, &prep.header);
 			if (ret != FFX_API_RETURN_OK) {
 				AmdFfx::fg_failed = true;
-				AmdFfx::set_status("Gerador de quadros falhou ao preparar (" + AmdFfx::error_name(ret) + ")");
+				AmdFfx::set_status_fg("Gerador de quadros falhou ao preparar (" + AmdFfx::error_name(ret) + ")");
 			}
 		}
 		AmdFfx::fg_frame_id++;
@@ -259,8 +259,10 @@ void AmdFsr4::process(const Params &p_params) {
 		bool want = AmdFfx::frame_generation_enabled();
 		if (want && AmdFfx::ensure_fg_context(p_params.internal_size.width, p_params.internal_size.height)) {
 			a->frame_generation = true;
+			AmdFfx::set_status_fg("gerador de quadros ATIVO");
 		} else if (!want && AmdFfx::fg_context != nullptr) {
 			a->frame_generation_configure_only = true; // desliga o gerador mantendo a ordem das chamadas
+			AmdFfx::set_status_fg("gerador de quadros desligado");
 		}
 	}
 	if (a->frame_generation) {

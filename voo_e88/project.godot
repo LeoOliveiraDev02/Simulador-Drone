@@ -48,3 +48,18 @@ environment/sdfgi/probe_ray_count=3
 environment/volumetric_fog/volume_size=128
 environment/volumetric_fog/volume_depth=96
 mesh_lod/lod_change/threshold_pixels=0.75
+
+[shader_globals]
+
+nuvem_ruido={
+"type": "sampler2D",
+"value": ""
+}
+nuvem_forca={
+"type": "float",
+"value": 0.0
+}
+nuvem_desloc={
+"type": "vec2",
+"value": Vector2(0, 0)
+}

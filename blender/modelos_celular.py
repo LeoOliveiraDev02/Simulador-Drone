@@ -19,6 +19,9 @@ def fracao(nome_mat, total):
         return min(1.0, 0.035 * MULT)
     if 'trunk' in n or n.startswith('island_tree'):
         return min(1.0, 0.25 * MULT)
+    # flores (espalhadas aos milhares): bem leves
+    if 'dandelion' in n or 'celandine' in n:
+        return min(1.0, 1200.0 / max(total, 1))
     # pedras e arbustos: mira ~6 mil triângulos
     return min(1.0, 6000.0 / max(total, 1))
 
@@ -36,11 +39,14 @@ for f in sorted(glob.glob(os.path.join(ENTRA, '*', '*_1k.gltf'))):
         bpy.ops.object.select_all(action='DESELECT')
         o.select_set(True)
         bpy.context.view_layer.objects.active = o
-        if len(o.data.materials) > 1:
+        if len(o.data.materials) > 1 and len(o.data.polygons) < 2500000:
             bpy.ops.mesh.separate(type='MATERIAL')
     for o in [o for o in bpy.data.objects if o.type == 'MESH']:
         m = o.data.materials[0].name if o.data.materials else ''
         r = fracao(m, len(o.data.polygons))
+        if len(o.data.materials) > 1:
+            # malha enorme não separada (memória): usa a fração das folhas para tudo
+            r = min(1.0, 0.08 * MULT)
         if r < 1.0:
             mod = o.modifiers.new('reduzir', 'DECIMATE')
             mod.decimate_type = 'COLLAPSE'

@@ -46,6 +46,20 @@ var mat_grama: ShaderMaterial
 var biruta_pano: MeshInstance3D
 var pos_portais: Array[Vector2] = []
 var portais: Array = []   # [centro, normal] de cada aro
+var pontos_pouso: Array = []  # [nome, ponto em cima] para o desafio de pouso
+var folhagens: Array = []   # [centro, raio, densidade] — copas e arbustos (atravessáveis)
+var pano_ceu: PanoramaSkyMaterial
+var hora_atual := 0
+var nuvem_desloc := Vector2.ZERO
+var nuvens_ligadas := true
+var vento_vel := Vector2(1.0, 0.3)
+# céus (Poly Haven, CC0): arquivo, azimute e elevação do sol na foto, cor e força do sol, nuvens, exposição, neblina
+const HORAS := [
+	["kloofendal_48d_partly_cloudy_puresky_godot.hdr", 34.2, 47.9, Color(1.0, 0.96, 0.9), 1.85, 0.42, 1.0, Color(0.66, 0.76, 0.9)],
+	["kloppenheim_06_puresky_godot.hdr", 38.5, 9.5, Color(1.0, 0.66, 0.38), 1.6, 0.18, 1.2, Color(0.95, 0.72, 0.52)],
+	["farm_field_puresky_godot.hdr", 36.6, 51.0, Color(1.0, 0.96, 0.9), 1.7, 0.0, 1.05, Color(0.66, 0.76, 0.9)],
+]
+const NOMES_HORA := ["TARDE COM NUVENS", "PÔR DO SOL", "CÉU LIMPO"]
 var obstaculos: Array = []  # [centro xz, raio, altura do topo] — fazem sombra de vento
 
 
@@ -101,8 +115,14 @@ func montar(baixa := false) -> void:
 	_montar_portais()
 	await _passo(0.68, "Árvores e eucaliptos")
 	_montar_vegetacao()
-	await _passo(0.84, "Pedras")
+	await _passo(0.8, "Pedras")
 	_montar_pedras()
+	await _passo(0.84, "Jacarandás, píer e objetos da fazenda")
+	_montar_extras()
+	await _passo(0.86, "Flores do campo")
+	_montar_flores()
+	_iniciar_nuvens()
+	definir_hora(hora_atual)
 	print("Mapa montado em %d ms" % (Time.get_ticks_msec() - t0))
 
 
@@ -173,10 +193,11 @@ func _montar_ambiente() -> void:
 	env.background_mode = Environment.BG_SKY
 	var ceu := Sky.new()
 	var pano := PanoramaSkyMaterial.new()
-	pano.panorama = load(REC + "ceu/farm_field_puresky.hdr")
+	pano.panorama = load(REC + "ceu/" + HORAS[0][0])
 	pano.energy_multiplier = 1.0
+	pano_ceu = pano
 	ceu.sky_material = pano
-	ceu.radiance_size = Sky.RADIANCE_SIZE_512
+	ceu.radiance_size = Sky.RADIANCE_SIZE_256 if movel else Sky.RADIANCE_SIZE_1024
 	env.sky = ceu
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_sky_contribution = 1.0
@@ -855,6 +876,9 @@ func _cena(nome: String, versao := "") -> PackedScene:
 
 
 var mats_folhas: Array[ShaderMaterial] = []
+var mat_flores: ShaderMaterial
+var blocos_flores: Array = []
+var jacarandas: Array = []
 
 
 func _ajustar_folhas(n: Node, alt_ref := 4.0) -> void:
@@ -1086,6 +1110,32 @@ func _col_segmento(p1: Vector3, p2: Vector3, r: float) -> void:
 	_add_forma(c, Transform3D(Basis(x, y, z), (p1 + p2) * 0.5))
 
 
+func _colidir_filhos_rec(no: Node) -> void:
+	for f in no.get_children():
+		if f is MeshInstance3D:
+			var mi := f as MeshInstance3D
+			_add_forma(mi.mesh.create_convex_shape(true, true), mi.global_transform)
+		_colidir_filhos_rec(f)
+
+
+## quanto de folhagem há no ponto (0 = ar livre, 1 = dentro da copa)
+func folhagem_em(p: Vector3) -> float:
+	var d := 0.0
+	for f in folhagens:
+		var c: Vector3 = f[0]
+		var r: float = f[1]
+		var dx := p.x - c.x
+		if absf(dx) > r:
+			continue
+		var dz := p.z - c.z
+		if absf(dz) > r:
+			continue
+		var q := (dx * dx + dz * dz + (p.y - c.y) * (p.y - c.y)) / (r * r)
+		if q < 1.0:
+			d = maxf(d, (1.0 - q) * float(f[2]))
+	return d
+
+
 func _colidir_filhos(no: Node3D) -> void:
 	for f in no.get_children():
 		if f is MeshInstance3D:
@@ -1125,15 +1175,16 @@ func _colidir_planta(no: Node3D, nome: String) -> void:
 		cap.radius = r_tronco
 		cap.height = h_tronco + r_tronco * 2.0
 		_add_forma(cap, Transform3D(Basis(), Vector3(no.position.x, base_y + h_tronco * 0.5, no.position.z)))
-		# copa: duas esferas (a de cima menor), parecido com o volume das folhas
-		_col_esfera(r_copa, Transform3D(Basis(), Vector3(centro.x, y_copa, centro.z)))
-		_col_esfera(r_copa * 0.7, Transform3D(Basis(), Vector3(centro.x, y_copa + r_copa * 0.6, centro.z)))
+		# copa: não é parede. O drone entra nas folhas, é freado, balança e pode quebrar hélice
+		folhagens.append([Vector3(centro.x, y_copa, centro.z), r_copa * 1.05, 1.0])
+		folhagens.append([Vector3(centro.x, y_copa + r_copa * 0.6, centro.z), r_copa * 0.75, 1.0])
 		obstaculos.append([Vector2(centro.x, centro.z), r_copa, c.end.y])
+	elif nome.begins_with("shrub"):
+		var r := maxf(c.size.x, c.size.z) * 0.45
+		folhagens.append([Vector3(centro.x, c.position.y + c.size.y * 0.45, centro.z), r, 0.7])
 	else:
-		var r := minf(minf(c.size.x, c.size.z), c.size.y * 2.0) * 0.45
-		if r < 0.12:
-			return
-		_col_esfera(r, Transform3D(Basis(), Vector3(centro.x, c.position.y + r * 0.9, centro.z)))
+		# pedras: colisão com o formato de verdade (casca convexa da malha)
+		_colidir_filhos_rec(no)
 
 
 # ------------------------------------------------------------------ consultas do voo
@@ -1156,6 +1207,10 @@ func aplicar_vento(dir_rad: float, velocidade: float, rajada: float) -> void:
 	if mat_grama:
 		mat_grama.set_shader_parameter("vento_dir", d)
 		mat_grama.set_shader_parameter("vento_forca", 0.05 + velocidade * 0.035 * (0.7 + 0.6 * rajada))
+	if mat_flores:
+		mat_flores.set_shader_parameter("vento_dir", d)
+		mat_flores.set_shader_parameter("vento_forca", 0.05 + velocidade * 0.035 * (0.7 + 0.6 * rajada))
+	vento_vel = d * maxf(velocidade, 1.0) * (1.0 + 0.4 * rajada)
 	if biruta:
 		# o eixo X local do pano aponta para onde o vento vai
 		biruta.rotation.y = lerp_angle(biruta.rotation.y, atan2(-d.y, d.x), 0.05)
@@ -1183,19 +1238,266 @@ func nivel_grafico(n: int) -> void:
 		ambiente.fog_enabled = n >= 1
 
 
-## qualidade gráfica no PC: 0 baixa, 1 média, 2 alta
+## qualidade gráfica no PC: 0 baixa, 1 média, 2 alta, 3 ultra
 func nivel_grafico_pc(n: int) -> void:
 	if ambiente:
 		ambiente.sdfgi_enabled = n >= 2      # luz rebatida em tempo real (pesada)
+		ambiente.sdfgi_cascades = 6 if n >= 3 else 4
 		ambiente.volumetric_fog_enabled = n >= 2
+		ambiente.volumetric_fog_density = 0.006 if n >= 3 else 0.0035
 		ambiente.ssr_enabled = n >= 2
 		ambiente.ssao_enabled = n >= 1
+		ambiente.ssil_enabled = n >= 3
 		ambiente.glow_enabled = true
 	if luz_sol:
 		luz_sol.shadow_enabled = true
-		luz_sol.directional_shadow_max_distance = [70.0, 140.0, 220.0][n]
+		luz_sol.directional_shadow_max_distance = [70.0, 140.0, 220.0, 320.0][n]
 		luz_sol.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if n == 0 else DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+		luz_sol.shadow_blur = 1.5 if n >= 3 else 1.0
 	for b in blocos_grama:
-		b.visibility_range_end = [35.0, 60.0, 95.0][n]
+		b.visibility_range_end = [35.0, 60.0, 95.0, 150.0][n]
+	for b in blocos_flores:
+		b.visibility_range_end = [30.0, 55.0, 90.0, 120.0][n]
 	for a in arvores_longe:
 		a.visible = n >= 1
+	RenderingServer.global_shader_parameter_set("nuvem_forca", 0.0 if (movel or n == 0) else float(HORAS[hora_atual][5]))
+
+
+# ------------------------------------------------------------------ hora do dia, nuvens
+
+func definir_hora(i: int) -> void:
+	hora_atual = clampi(i, 0, HORAS.size() - 1)
+	var h: Array = HORAS[hora_atual]
+	if pano_ceu:
+		pano_ceu.panorama = load(REC + "ceu/" + h[0])
+	if luz_sol:
+		var az := deg_to_rad(float(h[1]))
+		var el := deg_to_rad(float(h[2]))
+		var dir_sol := Vector3(-sin(az) * cos(el), sin(el), cos(az) * cos(el)).normalized()
+		luz_sol.global_transform = Transform3D.IDENTITY
+		luz_sol.look_at_from_position(Vector3.ZERO, -dir_sol, Vector3.UP)
+		luz_sol.light_color = h[3]
+		luz_sol.light_energy = h[4]
+	if ambiente:
+		ambiente.tonemap_exposure = h[6]
+		ambiente.fog_light_color = h[7]
+		ambiente.volumetric_fog_albedo = Color(h[7]).lerp(Color.WHITE, 0.4)
+	RenderingServer.global_shader_parameter_set("nuvem_forca", 0.0 if movel else float(h[5]))
+
+
+func _iniciar_nuvens() -> void:
+	var n := FastNoiseLite.new()
+	n.frequency = 0.006
+	n.fractal_octaves = 4
+	n.seed = 77
+	var t := NoiseTexture2D.new()
+	t.noise = n
+	t.width = 512
+	t.height = 512
+	t.seamless = true
+	t.generate_mipmaps = true
+	RenderingServer.global_shader_parameter_set("nuvem_ruido", t)
+
+
+func _process(delta: float) -> void:
+	# as sombras das nuvens andam com o vento (lá em cima venta mais)
+	nuvem_desloc -= vento_vel * delta * 2.2
+	RenderingServer.global_shader_parameter_set("nuvem_desloc", nuvem_desloc)
+
+
+# ------------------------------------------------------------------ jacarandás, píer, objetos
+
+func _cena_simples(nome: String) -> Node3D:
+	var no: Node3D = _cena(nome, "orig").instantiate()
+	add_child(no)
+	return no
+
+
+func _por_no_chao(no: Node3D, x: float, z: float, giro: float, escala := 1.0, afundar := 0.0) -> void:
+	no.position = Vector3(x, altura(x, z) - afundar, z)
+	no.rotation.y = giro
+	no.scale = Vector3.ONE * escala
+
+
+func _montar_extras() -> void:
+	# jacarandás floridos (roxos), perto do galpão e da estrada
+	for p in [Vector2(-66, -38), Vector2(-24, -78), Vector2(32, -48), Vector2(-88, -132), Vector2(58, -112)]:
+		if _livre(p.x, p.y, 2.0):
+			_plantar("jacaranda_tree", p.x, p.y, rng.randf_range(0.95, 1.15))
+			jacarandas.append(p)
+	# tronco caído no pasto
+	var tronco := _cena_simples("dead_tree_trunk_02")
+	_por_no_chao(tronco, 16.0, -27.0, 0.7, 1.0, 0.1)
+	_colidir_filhos_rec(tronco)
+	# píer de madeira no açude, saindo da margem sul para dentro da água
+	if not movel:
+		var pier := _cena_simples("modular_wooden_pier")
+		var cx: float = ACUDE_C.x - 8.0
+		var cz: float = ACUDE_C.y + ACUDE_R.y * 0.62
+		pier.position = Vector3(cx, nivel_agua + 0.15, cz)
+		var cx_box := _caixa_global(pier)
+		# deixa o lado comprido apontando para o meio do açude (eixo z)
+		if cx_box.size.x > cx_box.size.z:
+			pier.rotation.y = PI * 0.5
+		var b2 := _caixa_global(pier)
+		pier.position.y += (nivel_agua + 0.55) - b2.end.y
+		_colidir_filhos_rec(pier)
+		var b3 := _caixa_global(pier)
+		# ponta do píer (o lado mais dentro do açude)
+		var ponta := Vector3(b3.get_center().x, b3.end.y, b3.position.z + 1.2)
+		if absf(b3.end.z - ACUDE_C.y) < absf(b3.position.z - ACUDE_C.y):
+			ponta.z = b3.end.z - 1.2
+		pontos_pouso.append(["ponta do píer", ponta])
+	# barris e caixotes encostados no galpão, mesa de piquenique perto da base
+	var g := GALPAO_C
+	for i in 3:
+		var barril := _cena_simples("Barrel_01")
+		_por_no_chao(barril, g.x + 9.6 + i * 0.75, g.y + 6.5 + (i % 2) * 0.5, rng.randf() * TAU)
+		_colidir_filhos_rec(barril)
+	var cx_topo: Node3D = null
+	for i in 4:
+		var cx2 := _cena_simples("wooden_crate_01")
+		cx_topo = cx2
+		var alto := 1 if i == 3 else 0
+		_por_no_chao(cx2, g.x + 9.5 + (i % 3) * 0.95 - alto * 1.4, g.y - 6.0, rng.randf_range(-0.2, 0.2))
+		if alto:
+			cx2.position.y += _caixa_global(cx2).size.y * 0.98
+		_colidir_filhos_rec(cx2)
+	var mesa := _cena_simples("wooden_picnic_table")
+	_por_no_chao(mesa, 9.0, 9.0, 0.4)
+	_colidir_filhos_rec(mesa)
+	var bm := _caixa_global(mesa)
+	pontos_pouso.append(["mesa de piquenique", Vector3(bm.get_center().x, bm.end.y, bm.get_center().z)])
+	var topo_cx := _caixa_global(cx_topo)
+	pontos_pouso.append(["pilha de caixotes", Vector3(topo_cx.get_center().x, topo_cx.end.y, topo_cx.get_center().z)])
+
+
+# ------------------------------------------------------------------ flores do campo
+
+func _malha_flor() -> ArrayMesh:
+	# caule (um quadradinho fino) + cabeça em cruz (dois quadrados): a cor/forma vem do shader
+	var v := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var nrm := PackedVector3Array()
+	var idx := PackedInt32Array()
+	var w := 0.004
+	# caule: uv.x < 0 marca o caule
+	for q in [[Vector3(-w, 0, 0), Vector3(w, 0, 0), Vector3(w, 1, 0), Vector3(-w, 1, 0)]]:
+		var b := v.size()
+		for k in 4:
+			v.append(q[k]); nrm.append(Vector3(0, 0, 1))
+		uv.append(Vector2(-1, 0)); uv.append(Vector2(-1, 0)); uv.append(Vector2(-1, 1)); uv.append(Vector2(-1, 1))
+		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
+	var r := 0.11
+	for eixo in [Vector3(1, 0, 0), Vector3(0, 0, 1)]:
+		var e: Vector3 = eixo
+		var b := v.size()
+		var up := Vector3(0, 1, 0)
+		v.append(Vector3(0, 1, 0) - e * r - up * r * 0.2)
+		v.append(Vector3(0, 1, 0) + e * r - up * r * 0.2)
+		v.append(Vector3(0, 1, 0) + e * r + up * r * 1.8)
+		v.append(Vector3(0, 1, 0) - e * r + up * r * 1.8)
+		for k in 4:
+			nrm.append(Vector3(0, 1, 0))
+		uv.append(Vector2(0, 0)); uv.append(Vector2(1, 0)); uv.append(Vector2(1, 1)); uv.append(Vector2(0, 1))
+		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
+	# cabeça deitada (vista de cima, que é como o drone vê)
+	var b3 := v.size()
+	v.append(Vector3(-r, 1.0, -r)); v.append(Vector3(r, 1.0, -r)); v.append(Vector3(r, 1.0, r)); v.append(Vector3(-r, 1.0, r))
+	for k in 4:
+		nrm.append(Vector3(0, 1, 0))
+	uv.append(Vector2(0, 0)); uv.append(Vector2(1, 0)); uv.append(Vector2(1, 1)); uv.append(Vector2(0, 1))
+	idx.append_array([b3, b3 + 1, b3 + 2, b3, b3 + 2, b3 + 3])
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = v
+	arr[Mesh.ARRAY_TEX_UV] = uv
+	arr[Mesh.ARRAY_NORMAL] = nrm
+	arr[Mesh.ARRAY_INDEX] = idx
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return m
+
+
+func _montar_flores() -> void:
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://shaders/flores.gdshader")
+	mat_flores = mat
+	var malha := _malha_flor()
+	var cores := [Color(1.0, 0.82, 0.12), Color(0.97, 0.96, 0.92), Color(0.62, 0.38, 0.86), Color(1.0, 0.55, 0.15), Color(0.95, 0.35, 0.45)]
+	var tam := 20.0
+	var raio := 40.0 if movel else 120.0
+	var por_bloco := 90 if movel else 420
+	var bx := -raio
+	while bx < raio:
+		var bz := -raio - 30.0
+		while bz < raio * 0.5:
+			var xs: Array[Transform3D] = []
+			var cs: Array[Color] = []
+			for i in por_bloco:
+				var x := bx + rng.randf() * tam
+				var z := bz + rng.randf() * tam
+				var p := Vector2(x, z)
+				if p.length() < 6.0 or p.length() > raio:
+					continue
+				var mancha := ruido_b.get_noise_2d(x * 0.045 + 100.0, z * 0.045) * 0.5 + 0.5
+				if mancha < 0.52 or rng.randf() > (mancha - 0.45) * 2.2:
+					continue
+				if distancia_estrada(p) < 4.0 or _acude_e(x, z) < 1.1 or p.distance_to(GALPAO_C) < 11.0:
+					continue
+				var alt := rng.randf_range(0.22, 0.5)
+				var bas := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(1.0, alt, 1.0) * rng.randf_range(0.8, 1.25))
+				xs.append(Transform3D(bas, Vector3(x, altura(x, z) - 0.02, z)))
+				# cor da mancha: cada mancha tende a uma cor
+				var ci := int(floor((ruido_c.get_noise_2d(x * 0.02, z * 0.02) * 0.5 + 0.5) * cores.size() * 0.999))
+				if rng.randf() < 0.2:
+					ci = rng.randi() % cores.size()
+				var c: Color = cores[clampi(ci, 0, cores.size() - 1)]
+				cs.append(Color(c.r, c.g, c.b, rng.randf()))
+			if xs.size() > 0:
+				var mm := MultiMesh.new()
+				mm.transform_format = MultiMesh.TRANSFORM_3D
+				mm.use_custom_data = true
+				mm.mesh = malha
+				mm.instance_count = xs.size()
+				for i in xs.size():
+					mm.set_instance_transform(i, xs[i])
+					mm.set_instance_custom_data(i, cs[i])
+				var mmi := MultiMeshInstance3D.new()
+				mmi.multimesh = mm
+				mmi.material_override = mat
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				mmi.visibility_range_end = 90.0 if not movel else 35.0
+				blocos_flores.append(mmi)
+				add_child(mmi)
+			bz += tam
+		bx += tam
+	# tapete de flores roxas caídas embaixo de cada jacarandá
+	for j in jacarandas:
+		var jp: Vector2 = j
+		var xs2: Array[Transform3D] = []
+		var cs2: Array[Color] = []
+		for i in (900 if not movel else 250):
+			var ang := rng.randf() * TAU
+			var r := sqrt(rng.randf()) * 6.5
+			var x := jp.x + cos(ang) * r
+			var z := jp.y + sin(ang) * r
+			var bas := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.35, 0.012, 0.35) * rng.randf_range(0.7, 1.3))
+			xs2.append(Transform3D(bas, Vector3(x, altura(x, z) + 0.005, z)))
+			var c := Color(0.55, 0.36, 0.85).lerp(Color(0.68, 0.5, 0.95), rng.randf())
+			cs2.append(Color(c.r, c.g, c.b, 0.9))
+		var mm2 := MultiMesh.new()
+		mm2.transform_format = MultiMesh.TRANSFORM_3D
+		mm2.use_custom_data = true
+		mm2.mesh = malha
+		mm2.instance_count = xs2.size()
+		for i in xs2.size():
+			mm2.set_instance_transform(i, xs2[i])
+			mm2.set_instance_custom_data(i, cs2[i])
+		var mmi2 := MultiMeshInstance3D.new()
+		mmi2.multimesh = mm2
+		mmi2.material_override = mat
+		mmi2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mmi2.visibility_range_end = 70.0
+		blocos_flores.append(mmi2)
+		add_child(mmi2)

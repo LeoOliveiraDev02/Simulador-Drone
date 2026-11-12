@@ -1,5 +1,6 @@
 shader_type spatial;
 render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
+#include "res://shaders/nuvens.gdshaderinc"
 // folhas das árvores e arbustos balançando com o vento do mapa
 
 uniform sampler2D alb : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -10,9 +11,11 @@ uniform vec2 vento_dir = vec2(1.0, 0.35);
 uniform float vento_forca = 0.05;
 uniform float altura_ref = 4.0;
 uniform float corte = 0.3;
+varying vec3 wpos_f;
 
 void vertex() {
 	vec3 wp = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+	wpos_f = wp;
 	float alt = clamp(VERTEX.y / altura_ref, 0.0, 1.0);
 	float t = TIME;
 	float balanco = sin(t * 1.1 + wp.x * 0.21 + wp.z * 0.17) * 0.55 + sin(t * 2.3 + wp.x * 0.5 - wp.z * 0.3) * 0.25;
@@ -25,7 +28,7 @@ void vertex() {
 
 void fragment() {
 	vec4 c = texture(alb, UV) * tom;
-	ALBEDO = c.rgb;
+	ALBEDO = c.rgb * sombra_nuvem(wpos_f);
 	ALPHA = c.a;
 	ALPHA_SCISSOR_THRESHOLD = corte;
 	NORMAL_MAP = texture(nor, UV).rgb;

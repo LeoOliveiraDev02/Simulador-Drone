@@ -54,14 +54,16 @@ const MODOS_PC := [
 const CFG_GRAFICOS := "user://graficos.cfg"
 var modo_pc := 1
 var gerador_ao_abrir := false
-const NOMES_QUALIDADE := ["BAIXA", "MÉDIA", "ALTA"]
+const NOMES_QUALIDADE := ["BAIXA", "MÉDIA", "ALTA", "ULTRA"]
 const LIMITES_FPS := [0, 60, 120, 144, 165, 240]
 var qualidade_pc := 2
 var qualidade_pc_auto := true
 var marcha_cfg := 1
+var hora_cfg := 0
 var vsync_ligado := true
 var limite_fps_i := 0
 var menu: MenuConfig
+var desafios: Desafios
 var _tempo_pc_baixo := 0.0
 
 
@@ -125,6 +127,7 @@ func _ready() -> void:
 	drone.vento = vento
 	drone.recomecar(mapa.ponto_partida(), 0.0)
 	drone.marcha = marcha_cfg
+	mapa.definir_hora(hora_cfg)
 	if not movel and not qualidade_baixa:
 		mapa.nivel_grafico_pc(qualidade_pc)
 	if not modo_teste:
@@ -157,6 +160,12 @@ func _ready() -> void:
 		hud.mostrar("Use os dois analógicos da tela  •  arraste no meio da tela para olhar em volta", 6.0)
 	if movel_ativo:
 		_aplicar_grafico()
+	if not modo_teste and not modo_prints:
+		desafios = Desafios.new()
+		desafios.voo = self
+		desafios.mapa = mapa
+		desafios.drone = drone
+		add_child(desafios)
 	if not movel and not modo_teste and not modo_prints:
 		menu = MenuConfig.new()
 		menu.voo = self
@@ -173,6 +182,15 @@ func _ready() -> void:
 		_teste_voo()
 	elif modo_prints:
 		_tirar_prints()
+	elif desafios:
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--desafio="):
+				desafios.iniciar(int(a.get_slice("=", 1)))
+	if not modo_teste and not modo_prints and not movel and Benchmark.ativo():
+		var b := Benchmark.new()
+		b.voo = self
+		add_child(b)
+		b.rodar()
 
 
 # ---------------------------------------------------------------- entrada
@@ -267,7 +285,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 		match ev.button_index:
 			JOY_BUTTON_A: drone.decolar_ou_pousar()
 			JOY_BUTTON_Y: drone.trocar_modo()
-			JOY_BUTTON_X: _recomecar()
+			JOY_BUTTON_X: _recomecar_ou_desafio()
 			JOY_BUTTON_B: _emergencia()
 			JOY_BUTTON_START:
 				if menu == null:
@@ -286,7 +304,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 			KEY_M: drone.trocar_modo()
 			KEY_F: drone.fazer_flip(Vector2(drone.e_roll, drone.e_pitch))
 			KEY_K: drone.trocar_sem_cabeca()
-			KEY_R: _recomecar()
+			KEY_R: _recomecar_ou_desafio()
+			KEY_J: ciclar_desafio()
 			KEY_B: _emergencia()
 			KEY_H, KEY_F1: _ajuda()
 			KEY_EQUAL, KEY_KP_ADD: _vento(1.0)
@@ -470,7 +489,11 @@ func _physics_process(delta: float) -> void:
 		forca = clampf(soma / (E88.MASSA * E88.G), 0.0, 1.6) * 0.55
 	mapa.set_drone_na_grama(p, forca)
 	_checar_portais(p, delta)
-	_tutorial(p, delta)
+	if desafios and desafios.modo != 0:
+		tutorial_ligado = false
+		desafios.atualizar(delta)
+	else:
+		_tutorial(p, delta)
 	_avaliar_pouso(p)
 	# limite da área de voo: depois de 60 m além do limite o drone volta pousando
 	var dist := Vector2(p.x, p.z).length()
@@ -752,9 +775,10 @@ func _carregar_cfg_pc() -> void:
 	if cfg.load(CFG_GRAFICOS) == OK:
 		modo_pc = clampi(int(cfg.get_value("jogo", "modo_pc", 1)), 0, MODOS_PC.size() - 1)
 		if cfg.has_section_key("jogo", "qualidade_pc"):
-			qualidade_pc = clampi(int(cfg.get_value("jogo", "qualidade_pc", 2)), 0, 2)
+			qualidade_pc = clampi(int(cfg.get_value("jogo", "qualidade_pc", 2)), 0, 3)
 			qualidade_pc_auto = false
 		marcha_cfg = clampi(int(cfg.get_value("jogo", "marcha", 1)), 0, 2)
+		hora_cfg = clampi(int(cfg.get_value("jogo", "hora", 0)), 0, 2)
 		vsync_ligado = bool(cfg.get_value("jogo", "vsync", true))
 		limite_fps_i = clampi(int(cfg.get_value("jogo", "limite_fps", 0)), 0, LIMITES_FPS.size() - 1)
 	# o gerador de quadros só funciona se já estava ligado quando o jogo abriu
@@ -771,6 +795,7 @@ func _salvar_cfg_pc() -> void:
 		cfg.set_value("jogo", "qualidade_pc", qualidade_pc)
 	cfg.set_value("jogo", "marcha", drone.marcha if drone else marcha_cfg)
 	cfg.set_value("jogo", "vsync", vsync_ligado)
+	cfg.set_value("jogo", "hora", mapa.hora_atual if mapa else hora_cfg)
 	cfg.set_value("jogo", "limite_fps", limite_fps_i)
 	cfg.save(CFG_GRAFICOS)
 
@@ -836,7 +861,7 @@ func texto_qualidade_pc() -> String:
 
 
 func ciclar_qualidade_pc() -> void:
-	qualidade_pc = (qualidade_pc + 1) % 3
+	qualidade_pc = (qualidade_pc + 1) % 4
 	qualidade_pc_auto = false
 	if mapa:
 		mapa.nivel_grafico_pc(qualidade_pc)
@@ -877,3 +902,34 @@ func ciclar_limite_fps() -> void:
 
 func mostrar_ajuda() -> void:
 	hud.ajuda.visible = true
+
+
+func texto_hora() -> String:
+	return Mapa.NOMES_HORA[mapa.hora_atual] if mapa else Mapa.NOMES_HORA[hora_cfg]
+
+
+func ciclar_hora() -> void:
+	if mapa:
+		mapa.definir_hora((mapa.hora_atual + 1) % Mapa.HORAS.size())
+		mapa.nivel_grafico_pc(qualidade_pc)
+	_salvar_cfg_pc()
+
+
+func _recomecar_ou_desafio() -> void:
+	if desafios and desafios.modo != 0:
+		desafios.iniciar(desafios.modo)
+	else:
+		_recomecar()
+
+
+func texto_desafio() -> String:
+	return Desafios.NOMES[desafios.modo] if desafios else Desafios.NOMES[0]
+
+
+func ciclar_desafio() -> void:
+	if desafios == null:
+		return
+	desafios.iniciar((desafios.modo + 1) % Desafios.NOMES.size())
+	if desafios.modo == 0:
+		hud.missao.text = ""
+		hud.mostrar("Voo livre", 2.0)

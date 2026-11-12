@@ -23,7 +23,7 @@ index fdb6b4a..6faa182 100644
  	CharString cs = GLOBAL_GET("application/config/name").operator String().utf8();
  	VkApplicationInfo app_info = {};
 diff --git a/drivers/vulkan/rendering_device_driver_vulkan.cpp b/drivers/vulkan/rendering_device_driver_vulkan.cpp
-index 4b1bd9f..758d37e 100644
+index 4b1bd9f..6522e5a 100644
 --- a/drivers/vulkan/rendering_device_driver_vulkan.cpp
 +++ b/drivers/vulkan/rendering_device_driver_vulkan.cpp
 @@ -35,6 +35,7 @@
@@ -318,7 +318,7 @@ index 4b1bd9f..758d37e 100644
 +
 +	AmdFfx::fg_queues_ready = present_ok && acquire_ok;
 +	if (!AmdFfx::fg_queues_ready) {
-+		AmdFfx::set_status("Gerador de quadros: a placa não tem filas livres suficientes");
++		AmdFfx::set_status_fg("Gerador de quadros: a placa não tem filas livres suficientes");
 +	}
 +}
 +
@@ -350,7 +350,7 @@ index 4b1bd9f..758d37e 100644
 +	ffxContext context = nullptr;
 +	ffxReturnCode_t ret = AmdFfx::fn.CreateContext(&context, &desc.header, nullptr);
 +	if (ret != FFX_API_RETURN_OK || context == nullptr) {
-+		AmdFfx::set_status("Gerador de quadros: não consegui criar a swapchain (" + AmdFfx::error_name(ret) + ")");
++		AmdFfx::set_status_fg("Gerador de quadros: não consegui criar a swapchain (" + AmdFfx::error_name(ret) + ")");
 +		AmdFfx::fg_queues_ready = false;
 +		// A swapchain original pode ter sido destruída; se sim, recria do jeito normal.
 +		if (swapchain == VK_NULL_HANDLE) {
@@ -363,7 +363,7 @@ index 4b1bd9f..758d37e 100644
 +	replacement.header.type = FFX_API_QUERY_DESC_TYPE_FGSWAPCHAIN_FUNCTIONS_VK;
 +	ret = AmdFfx::fn.Query(&context, &replacement.header);
 +	if (ret != FFX_API_RETURN_OK || replacement.pOutQueuePresentKHR == nullptr) {
-+		AmdFfx::set_status("Gerador de quadros: funções da swapchain indisponíveis (" + AmdFfx::error_name(ret) + ")");
++		AmdFfx::set_status_fg("Gerador de quadros: funções da swapchain indisponíveis (" + AmdFfx::error_name(ret) + ")");
 +		AmdFfx::fn.DestroyContext(&context, nullptr);
 +		AmdFfx::fg_queues_ready = false;
 +		device_functions.CreateSwapchainKHR(vk_device, &p_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_SWAPCHAIN_KHR), &p_swap_chain->vk_swapchain);
@@ -382,7 +382,7 @@ index 4b1bd9f..758d37e 100644
 +	device_functions.GetSwapchainImagesKHR = replacement.pOutGetSwapchainImagesKHR;
 +	device_functions.AcquireNextImageKHR = replacement.pOutAcquireNextImageKHR;
 +	device_functions.QueuePresentKHR = replacement.pOutQueuePresentKHR;
-+	AmdFfx::set_status("Gerador de quadros pronto");
++	AmdFfx::set_status_fg("gerador de quadros pronto");
 +}
 +
 +bool RenderingDeviceDriverVulkan::_amd_ffx_release_swap_chain(SwapChain *p_swap_chain) {
