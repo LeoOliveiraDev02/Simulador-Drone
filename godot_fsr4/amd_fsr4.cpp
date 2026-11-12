@@ -5,6 +5,8 @@
 #include "amd_fsr4.h"
 
 #include "servers/rendering/rendering_device.h"
+#include "core/config/engine.h"
+#include "core/templates/local_vector.h"
 
 #if defined(VULKAN_ENABLED) && defined(WINDOWS_ENABLED)
 #include "drivers/vulkan/amd_ffx.h"
@@ -42,7 +44,56 @@ bool AmdFsr4::frame_generation_active() {
 	return AmdFfx::swapchain_context != nullptr && !AmdFfx::fg_failed && AmdFfx::frame_generation_enabled();
 }
 
+// Um contexto só, criado no tamanho da tela: trocar Qualidade/Equilibrado/Desempenho muda só a
+// resolução interna, e o FSR aceita qualquer resolução até o máximo sem recriar nada.
+// Destruir o contexto com a placa de vídeo ainda usando ele no quadro em andamento derrubava o jogo;
+// agora um contexto antigo (janela mudou de tamanho) só é destruído alguns quadros depois.
+static AmdFsr4::Context *_compartilhado = nullptr;
+struct _Aposentado {
+	AmdFsr4::Context *c = nullptr;
+	uint64_t quadro = 0;
+};
+static LocalVector<_Aposentado> _aposentados;
+static const uint64_t QUADROS_ESPERA = 8;
+
+static void _destruir(AmdFsr4::Context *p_c);
+
+static uint64_t _quadro_atual() {
+	return Engine::get_singleton() ? Engine::get_singleton()->get_frames_drawn() : 0;
+}
+
+static void _recolher() {
+	uint64_t agora = _quadro_atual();
+	for (uint32_t i = 0; i < _aposentados.size();) {
+		if (agora >= _aposentados[i].quadro + QUADROS_ESPERA) {
+			_destruir(_aposentados[i].c);
+			_aposentados.remove_at_unordered(i);
+		} else {
+			i++;
+		}
+	}
+}
+
+static void _aposentar(AmdFsr4::Context *p_c) {
+	_Aposentado a;
+	a.c = p_c;
+	a.quadro = _quadro_atual();
+	_aposentados.push_back(a);
+}
+
 AmdFsr4::Context *AmdFsr4::create_context(const Size2i &p_internal_size, const Size2i &p_target_size) {
+	_recolher();
+	if (_compartilhado != nullptr) {
+		if (_compartilhado->target_size == p_target_size) {
+			// mesmo tamanho de tela: reaproveita, só recomeça o histórico (a resolução interna mudou)
+			_compartilhado->internal_size = p_internal_size;
+			_compartilhado->reset = true;
+			return _compartilhado;
+		}
+		_aposentar(_compartilhado);
+		_compartilhado = nullptr;
+	}
+
 	Context *c = memnew(Context);
 	c->internal_size = p_internal_size;
 	c->target_size = p_target_size;
@@ -58,7 +109,8 @@ AmdFsr4::Context *AmdFsr4::create_context(const Size2i &p_internal_size, const S
 	c->desc.header.pNext = &c->version.header;
 	// A cor que o Godot entrega antes do tonemap é linear e HDR; a profundidade é invertida (reverse Z).
 	c->desc.flags = FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE | FFX_UPSCALE_ENABLE_DEPTH_INVERTED;
-	c->desc.maxRenderSize = { (uint32_t)p_internal_size.width, (uint32_t)p_internal_size.height };
+	// resolução interna máxima = a da tela (serve para todos os modos, inclusive Nativo AA)
+	c->desc.maxRenderSize = { (uint32_t)MAX(p_internal_size.width, p_target_size.width), (uint32_t)MAX(p_internal_size.height, p_target_size.height) };
 	c->desc.maxUpscaleSize = { (uint32_t)p_target_size.width, (uint32_t)p_target_size.height };
 	c->desc.fpMessage = _ffx_message;
 
@@ -77,17 +129,30 @@ AmdFsr4::Context *AmdFsr4::create_context(const Size2i &p_internal_size, const S
 		name = "FSR " + String::utf8(provider.versionName);
 	}
 	AmdFfx::set_status(name + " ativo");
+	_compartilhado = c;
 	return c;
+}
+
+static void _destruir(AmdFsr4::Context *p_c) {
+	if (p_c == nullptr) {
+		return;
+	}
+	if (p_c->ffx != nullptr) {
+		AmdFfx::fn.DestroyContext(&p_c->ffx, nullptr);
+	}
+	memdelete(p_c);
 }
 
 void AmdFsr4::free_context(Context *p_context) {
 	if (p_context == nullptr) {
 		return;
 	}
-	if (p_context->ffx != nullptr) {
-		AmdFfx::fn.DestroyContext(&p_context->ffx, nullptr);
+	if (p_context == _compartilhado) {
+		// os buffers da imagem foram refeitos (troca de modo): o contexto continua vivo
+		p_context->reset = true;
+		return;
 	}
-	memdelete(p_context);
+	_aposentar(p_context);
 }
 
 static FfxApiResource _resource(RID p_rid, const Size2i &p_size, uint32_t p_usage, uint32_t p_state) {
@@ -235,6 +300,7 @@ static void _amd_fsr4_callback(RenderingDeviceDriver *p_driver, RenderingDeviceD
 void AmdFsr4::process(const Params &p_params) {
 	ERR_FAIL_NULL(p_params.context);
 	Context *c = p_params.context;
+	_recolher();
 
 	AmdFsr4CallbackArgs *a = memnew(AmdFsr4CallbackArgs);
 	a->ffx = &c->ffx;
