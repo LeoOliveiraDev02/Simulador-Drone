@@ -178,7 +178,9 @@ func _ready() -> void:
 	carregando.definir(1.0, "Pronto")
 	carregando.sumir()
 
-	if modo_teste:
+	if modo_teste and "--teste-colisao" in OS.get_cmdline_user_args():
+		_teste_colisao()
+	elif modo_teste:
 		_teste_voo()
 	elif modo_prints:
 		_tirar_prints()
@@ -714,6 +716,106 @@ func _teste_voo() -> void:
 	get_tree().quit()
 
 
+# ---------- teste de colisão: passa rente ao tronco, debaixo do galho, e bate de frente ----------
+
+## folga do caminho A->B para uma esfera de raio r (galhos/objetos e folhas). true = livre
+func _caminho_livre(a: Vector3, b: Vector3, r: float) -> bool:
+	var esp := get_world_3d().direct_space_state
+	var q := PhysicsShapeQueryParameters3D.new()
+	var sph := SphereShape3D.new()
+	sph.radius = r
+	q.shape = sph
+	q.transform = Transform3D(Basis(), a)
+	q.motion = b - a
+	q.exclude = [drone.get_rid()]
+	var res := esp.cast_motion(q)
+	if res.size() == 0 or res[0] < 1.0:
+		return false
+	var passos := int(a.distance_to(b) / 0.05)
+	for i in passos + 1:
+		var c := a.lerp(b, float(i) / passos)
+		if mapa.folha_em(c):
+			return false
+		for k in 8:
+			var ang := TAU * k / 8.0
+			for dy: float in [-0.03, 0.03]:
+				if mapa.folha_em(c + Vector3(cos(ang) * r, dy, sin(ang) * r)):
+					return false
+	return true
+
+
+func _voar_reto(nome: String, a: Vector3, b: Vector3, vel_frac: float) -> bool:
+	var d := b - a
+	d.y = 0.0
+	var yaw := atan2(-d.x, -d.z)
+	drone.recomecar(a, yaw)
+	drone.armar()
+	drone.estado = "voando"
+	drone.altura_ref = a.y
+	await _esperar(1.0)
+	drone.e_pitch = vel_frac
+	var t := 0.0
+	while t < 12.0:
+		await _esperar(0.1)
+		t += 0.1
+		var p := drone.global_position
+		if (p - a).dot(d.normalized()) > d.length() + 0.5:
+			break
+		if drone.helice_ok.count(false) > 0 or drone.estado == "caido":
+			break
+	drone.e_pitch = 0.0
+	var ok := drone.helice_ok.count(false) == 0 and drone.estado != "caido"
+	print("%-40s %s  (chegou a %.1f de %.1f m, hélices=%s)" % [nome, "PASSOU" if ok else "BATEU", (drone.global_position - a).dot(d.normalized()), d.length(), str(drone.helice_ok)])
+	return ok
+
+
+func _teste_colisao() -> void:
+	await _esperar(1.0)
+	drone.marcha = 1
+	var arvores := [Vector2(-33, -20), Vector2(-72, -98), Vector2(14, -158), Vector2(90, -58), Vector2(-66, -38)]
+	for c: Vector2 in arvores:
+		var y0 := mapa.altura(c.x, c.y)
+		# 1) de frente no tronco a 1,2 m de altura: tem que bater
+		var a := Vector3(c.x, y0 + 1.2, c.y + 9.0)
+		await _voar_reto("árvore %s: de frente no tronco" % str(c), a, Vector3(c.x, y0 + 1.2, c.y), 0.5)
+		# 2) procura um caminho rente (folga de 25 cm até casca/folha) e um por baixo dos galhos
+		var achou_rente := false
+		var achou_baixo := false
+		for alt: float in [1.0, 1.6, 2.2, 3.0, 4.0, 5.0]:
+			for lado in range(4, 60):
+				var off := lado * 0.1
+				var p1 := Vector3(c.x + off, y0 + alt, c.y + 10.0)
+				var p2 := Vector3(c.x + off, y0 + alt, c.y - 10.0)
+				if not _caminho_livre(p1, p2, 0.25):
+					continue
+				# rente: o mesmo caminho 15 cm mais perto já encosta
+				var q1 := p1 - Vector3(0.15, 0, 0)
+				var q2 := p2 - Vector3(0.15, 0, 0)
+				var rente := not _caminho_livre(q1, q2, 0.25)
+				var debaixo := false
+				# debaixo do galho: existe casca/folha logo acima do caminho (até 1 m)
+				var esp := get_world_3d().direct_space_state
+				for k in 20:
+					var m := p1.lerp(p2, k / 19.0)
+					var rq := PhysicsRayQueryParameters3D.create(m, m + Vector3(0, 1.0, 0))
+					if not esp.intersect_ray(rq).is_empty() or mapa.folha_em(m + Vector3(0, 0.6, 0)):
+						debaixo = true
+						break
+				if rente and not achou_rente:
+					achou_rente = true
+					await _voar_reto("árvore %s: rente a %.1f m de altura (desvio %.1f m)" % [str(c), alt, off], p1, p2, 0.5)
+				if debaixo and not achou_baixo:
+					achou_baixo = true
+					await _voar_reto("árvore %s: debaixo do galho a %.1f m" % [str(c), alt], p1, p2, 0.5)
+				if rente or debaixo:
+					break
+			if achou_rente and achou_baixo:
+				break
+	# galpão: passa a 25 cm da parede lateral e bate de frente
+	print("TESTE FIM")
+	get_tree().quit()
+
+
 func _salvar_print(nome: String) -> void:
 	var pasta := ProjectSettings.globalize_path("res://prints")
 	DirAccess.make_dir_recursive_absolute(pasta)
@@ -730,6 +832,27 @@ func _quadros(n: int) -> void:
 func _tirar_prints() -> void:
 	# no servidor sem placa de vídeo cada quadro demora: posiciona o drone direto
 	hud.ajuda.visible = false
+	# --vistas=arquivo: cada linha "nome x z altura_acima_do_chao yaw_graus dist_camera alt_camera"
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--vistas="):
+			drone.freeze = true
+			if "--ver-colisao" in OS.get_cmdline_user_args():
+				mapa.mostrar_folhas_perto(Vector3(-33, 0, -20), 60.0 if "--ver-colisao" in OS.get_cmdline_user_args() else 0.0)
+			for linha in FileAccess.get_file_as_string(a.get_slice("=", 1)).split("\n", false):
+				var c := linha.split(" ", false)
+				if c.size() < 5:
+					continue
+				var x := float(c[1])
+				var z := float(c[2])
+				drone.global_transform = Transform3D(Basis(Vector3.UP, deg_to_rad(float(c[4]))), Vector3(x, mapa.altura(x, z) + float(c[3]), z))
+				if c.size() >= 7:
+					camera.distancia = float(c[5])
+					camera.altura = float(c[6])
+				camera.posicionar_ja()
+				await _quadros(6)
+				_salvar_print(c[0])
+			get_tree().quit()
+			return
 	await _quadros(4)
 	_salvar_print("01_no_chao")
 	var base := mapa.ponto_partida()

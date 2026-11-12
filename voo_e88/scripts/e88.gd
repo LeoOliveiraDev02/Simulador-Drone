@@ -85,6 +85,9 @@ var rng := RandomNumberGenerator.new()
 var inercia := Vector3(0.00042, 0.00078, 0.00045)
 var ultima_vel_impacto := 0.0
 var _passo_turb := 0
+var _passo_folha := 0
+var tempo_folha: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var em_folha := false
 var _nivel_paredes := 0.0
 var _esteira := 0.0
 
@@ -533,18 +536,30 @@ func _integrate_forces(st: PhysicsDirectBodyState3D) -> void:
 	if peso_extra > 0.0:
 		st.apply_central_force(Vector3.DOWN * peso_extra * G)
 
-	# ------------------ folhagem: entrar na copa de uma árvore ou num arbusto freia e sacode o drone
-	if mapa and mapa.has_method("folhagem_em"):
-		var folha: float = mapa.folhagem_em(pos)
-		if folha > 0.0:
-			st.apply_central_force(-v * folha * 0.22)
-			var sacode := Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * folha * 0.0045
-			st.apply_torque(sacode)
-			# batendo rápido nos galhos, uma hélice pode quebrar
-			if v.length() > 3.5 and folha > 0.45 and randf() < dt * 1.5 * folha:
-				var k := randi() % 4
-				if helice_ok[k]:
-					quebrar_helice(k, "bateu nos galhos")
+	# ------------------ folhas: só conta quando uma hélice encosta numa folha de verdade
+	# (o mapa sabe onde há folha; o vão entre os galhos e debaixo da copa é ar livre)
+	if mapa and mapa.has_method("folha_em"):
+		_passo_folha += 1
+		if _passo_folha % 2 == 0:
+			var alguma := false
+			for k in 4:
+				var ponta := pos + b * (motores[k] + Vector3(0, 0.004, 0))
+				var dentro: bool = mapa.folha_em(ponta)
+				if dentro:
+					alguma = true
+					if helice_ok[k] and rps[k] > 40.0:
+						tempo_folha[k] += dt * 2.0
+						# girando e batendo de verdade (andando ou parada lá dentro): quebra e cai
+						if v.length() > 0.8 or tempo_folha[k] > 0.25:
+							quebrar_helice(k, "a hélice bateu nas folhas")
+						elif travada[k] <= 0.0:
+							travada[k] = 0.25
+							mensagem.emit("A hélice raspou nas folhas!", 1.2)
+				else:
+					tempo_folha[k] = 0.0
+			em_folha = alguma
+		if em_folha:
+			st.apply_central_force(-v * 0.12)
 
 	v_anterior = v
 
@@ -737,11 +752,11 @@ func _turbulencia(st: PhysicsDirectBodyState3D, b: Basis, pos: Vector3, h: float
 		_nivel_paredes = 0.0
 		var espaco := st.get_space_state()
 		for d: Vector3 in [Vector3.RIGHT, Vector3.LEFT, Vector3.FORWARD, Vector3.BACK, Vector3.UP]:
-			var q := PhysicsRayQueryParameters3D.create(pos, pos + d * 1.2)
+			var q := PhysicsRayQueryParameters3D.create(pos, pos + d * 0.45)
 			q.exclude = [get_rid()]
 			var r := espaco.intersect_ray(q)
 			if not r.is_empty():
-				_nivel_paredes = maxf(_nivel_paredes, 1.0 - pos.distance_to(r.position) / 1.2)
+				_nivel_paredes = maxf(_nivel_paredes, (1.0 - pos.distance_to(r.position) / 0.45) * 0.5)
 		_esteira = vento.esteira(pos) if vento and vento.has_method("esteira") else 0.0
 	var nivel := _nivel_paredes
 	# no chão o vento das hélices bate e volta

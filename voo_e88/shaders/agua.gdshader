@@ -28,10 +28,12 @@ void fragment() {
 	float d_cena = texture(prof, SCREEN_UV).r;
 	vec4 p = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, d_cena, 1.0);
 	p.xyz /= p.w;
-	float espessura = clamp(-p.z - (-VERTEX.z), 0.0, 20.0);
+	// caminho do olhar dentro da água (de lado o raio atravessa muita água)
+	float espessura = clamp(length(p.xyz) - length(VERTEX), 0.0, 40.0);
+	float dist = length(VERTEX);
 
-	// refração: desloca um pouco o fundo conforme as ondas
-	vec2 desloc = nm.xy * 0.02 * clamp(espessura, 0.0, 1.0);
+	// refração: desloca um pouco o fundo conforme as ondas (menos ao longe, para não riscar)
+	vec2 desloc = nm.xy * 0.02 * clamp(espessura, 0.0, 1.0) / (1.0 + dist * 0.08);
 	vec3 fundo = textureLod(tela, SCREEN_UV + desloc, 0.0).rgb;
 	float absorve = 1.0 - exp(-espessura * turbidez);
 	vec3 agua = mix(fundo * vec3(0.75, 0.85, 0.78), mix(cor_rasa, cor_funda, clamp(espessura / 3.0, 0.0, 1.0)), absorve);
@@ -40,10 +42,11 @@ void fragment() {
 	float espuma = (1.0 - smoothstep(0.0, 0.18, espessura)) * smoothstep(0.35, 0.7, n3.r + 0.15 * sin(TIME * 1.5 + wpos.x * 2.0));
 	agua = mix(agua, vec3(0.85, 0.85, 0.8), espuma * 0.6);
 
-	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 5.0);
-	// a cor vai na emissão (o fundo já vem iluminado); o reflexo do céu vem do brilho especular
+	// Fresnel: olhando de cima vê o fundo; olhando de lado a água vira espelho do céu
+	// (a parte refletida vem do brilho especular do motor; aqui só some o que está por baixo)
+	float fres = 0.02 + 0.98 * pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 5.0);
 	ALBEDO = vec3(0.0);
-	EMISSION = agua * (1.0 - fres * 0.6);
+	EMISSION = agua * (1.0 - fres);
 	ROUGHNESS = mix(0.03, 0.4, espuma);
 	METALLIC = 0.0;
 	SPECULAR = 0.6;

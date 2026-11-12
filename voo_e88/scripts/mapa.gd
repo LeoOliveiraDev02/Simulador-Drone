@@ -47,7 +47,7 @@ var biruta_pano: MeshInstance3D
 var pos_portais: Array[Vector2] = []
 var portais: Array = []   # [centro, normal] de cada aro
 var pontos_pouso: Array = []  # [nome, ponto em cima] para o desafio de pouso
-var folhagens: Array = []   # [centro, raio, densidade] — copas e arbustos (atravessáveis)
+var folhagens: Array = []   # [inverso do transform, dados das folhas, caixa] — copas e arbustos
 var pano_ceu: PanoramaSkyMaterial
 var hora_atual := 0
 var nuvem_desloc := Vector2.ZERO
@@ -86,7 +86,7 @@ func montar(baixa := false) -> void:
 	ruido_c.fractal_octaves = 2
 	altura_centro = _altura_bruta(0.0, 0.0)
 	altura_galpao = _altura_bruta(GALPAO_C.x, GALPAO_C.y)
-	nivel_agua = _altura_bruta(ACUDE_C.x, ACUDE_C.y) - 0.9
+	nivel_agua = _altura_bruta(ACUDE_C.x, ACUDE_C.y) - 0.6
 
 	corpo_estatico = StaticBody3D.new()
 	corpo_estatico.name = "Colisao"
@@ -441,7 +441,7 @@ func _montar_agua() -> void:
 	var sm := ShaderMaterial.new()
 	sm.shader = load("res://shaders/agua.gdshader")
 	sm.set_shader_parameter("ondas", _ruido_tex(0.03, true, 256))
-	_malha(disco, sm, Vector3(ACUDE_C.x, nivel_agua, ACUDE_C.y), Vector3.ZERO, Vector3(ACUDE_R.x * 1.05, 1.0, ACUDE_R.y * 1.05))
+	_malha(disco, sm, Vector3(ACUDE_C.x, nivel_agua, ACUDE_C.y), Vector3.ZERO, Vector3(ACUDE_R.x * 1.12, 1.0, ACUDE_R.y * 1.12))
 
 
 # ------------------------------------------------------------------ grama
@@ -512,7 +512,7 @@ func _montar_grama() -> void:
 					continue
 				if distancia_estrada(p) < 3.6 + rng.randf() * 1.2:
 					continue
-				if _acude_e(x, z) < 1.05:
+				if _acude_e(x, z) < 1.16:
 					continue
 				if p.distance_to(GALPAO_C) < 10.0 + rng.randf() * 3.0:
 					continue
@@ -568,9 +568,10 @@ func _montar_biruta() -> void:
 	var z := 3.0
 	var y := altura(x, z)
 	var metal := _mat_cor(Color(0.72, 0.72, 0.7), 0.45, 0.8)
-	_malha(_cilindro(0.045, 0.06, 6.2, 12), metal, Vector3(x, y + 3.1, z))
-	_col_cilindro(0.06, 6.2, Transform3D(Basis(), Vector3(x, y + 3.1, z)))
-	_col_cilindro(0.36, 0.25, Transform3D(Basis(), Vector3(x, y + 0.1, z)))
+	var mastro := _cilindro(0.045, 0.06, 6.2, 12)
+	_malha(mastro, metal, Vector3(x, y + 3.1, z))
+	_col_convexa(mastro, Transform3D(Basis(), Vector3(x, y + 3.1, z)))
+	_col_cilindro(0.35, 0.25, Transform3D(Basis(), Vector3(x, y + 0.1, z)))
 	_malha(_cilindro(0.35, 0.35, 0.25, 24), _mat_pbr("concrete_floor_worn_001", 1.0), Vector3(x, y + 0.1, z))
 	# a biruta aponta para onde o vento vai
 	biruta = Node3D.new()
@@ -720,13 +721,13 @@ func _montar_cercas() -> void:
 				var inc := Basis(Vector3.FORWARD, rng.randf_range(-0.06, 0.06)).rotated(Vector3.RIGHT, rng.randf_range(-0.05, 0.05))
 				var topo := Vector3(p.x, y, p.y)
 				tm.append(Transform3D(inc, topo + Vector3(0, 0.62, 0)))
-				_col_cilindro(0.075, 1.45, Transform3D(inc, topo + Vector3(0, 0.62, 0)))
+				_col_convexa(mourao, Transform3D(inc, topo + Vector3(0, 0.62, 0)))
 				if anterior != Vector3.INF:
 					for alt: float in [0.45, 0.85, 1.2]:
 						var p1: Vector3 = anterior + Vector3(0, alt, 0)
 						var p2: Vector3 = topo + Vector3(0, alt, 0)
 						tf.append(_segmento(p1, p2, 1.0))
-						_col_segmento(p1, p2, 0.012)
+						_col_segmento(p1, p2, 0.006)
 				anterior = topo
 	mm_m.instance_count = tm.size()
 	for i in tm.size():
@@ -784,7 +785,7 @@ func _montar_postes() -> void:
 			var bas := Basis(Vector3.UP, yaw)
 			tp.append(Transform3D(bas.rotated(Vector3.RIGHT, rng.randf_range(-0.02, 0.02)), base + Vector3(0, 4.75, 0)))
 			tc.append(Transform3D(bas, base + Vector3(0, 8.9, 0)))
-			_col_cilindro(0.15, 9.5, tp[tp.size() - 1])
+			_col_convexa(poste, tp[tp.size() - 1])
 			_col_caixa(Vector3(2.4, 0.12, 0.12), Transform3D(bas, base + Vector3(0, 8.9, 0)))
 			var pontos: Array = []
 			for off: float in [-1.0, 0.0, 1.0]:
@@ -801,7 +802,7 @@ func _montar_postes() -> void:
 						var t := float(s) / partes
 						var q := p1.lerp(p2, t) - Vector3(0, 1.1 * 4.0 * t * (1.0 - t), 0)
 						tf.append(_segmento(ant, q, 0.018))
-						_col_segmento(ant, q, 0.015)
+						_col_segmento(ant, q, 0.009)
 						ant = q
 			pontos_ant = pontos
 			proximo += 48.0
@@ -844,11 +845,8 @@ func _montar_portais() -> void:
 		var mi_aro := _malha(aro, laranja, Vector3(p.x, y + 2.35, p.y), Vector3(PI / 2, deg_to_rad(8), 0))
 		pos_portais.append(p)
 		portais.append([mi_aro.position, (mi_aro.basis * Vector3.UP).normalized()])
-		# o aro é feito de esferas pequenas (bater na borda derruba o drone)
-		for k in 28:
-			var a := TAU * k / 28.0
-			var local := Vector3(cos(a) * 2.2, 0, sin(a) * 2.2)
-			_col_esfera(0.17, Transform3D(Basis(), mi_aro.transform * local))
+		# o aro com o formato exato (tubo de 15 cm de raio): só bate se encostar
+		_add_forma(_forma_exata(aro), mi_aro.transform)
 		for s: float in [-1.0, 1.0]:
 			_malha(_caixa(Vector3(0.9, 0.12, 0.25)), preto, Vector3(p.x + s * 0.75, y + 0.06, p.y))
 			_col_caixa(Vector3(0.9, 0.12, 0.25), Transform3D(Basis(), Vector3(p.x + s * 0.75, y + 0.06, p.y)))
@@ -1110,30 +1108,118 @@ func _col_segmento(p1: Vector3, p2: Vector3, r: float) -> void:
 	_add_forma(c, Transform3D(Basis(x, y, z), (p1 + p2) * 0.5))
 
 
+var _formas_exatas := {}
+
+
+## forma de colisão exata (triângulo por triângulo) de cada malha, reaproveitada entre cópias
+func _forma_exata(mesh: Mesh) -> Shape3D:
+	if not _formas_exatas.has(mesh):
+		var f := mesh.create_trimesh_shape()
+		if f is ConcavePolygonShape3D:
+			(f as ConcavePolygonShape3D).backface_collision = true
+		_formas_exatas[mesh] = f
+	return _formas_exatas[mesh]
+
+
+## forma convexa exata de uma malha simples (cilindro afinando, cone): reaproveitada
+func _col_convexa(mesh: Mesh, xf: Transform3D) -> void:
+	if not _formas_exatas.has(mesh):
+		_formas_exatas[mesh] = mesh.create_convex_shape(true, false)
+	_add_forma(_formas_exatas[mesh], xf)
+
+
 func _colidir_filhos_rec(no: Node) -> void:
+	# objetos (píer, mesa, tronco caído, barris, caixotes, pedras): o formato de verdade,
+	# com os vãos abertos (dá para passar debaixo do píer e da mesa)
 	for f in no.get_children():
 		if f is MeshInstance3D:
 			var mi := f as MeshInstance3D
-			_add_forma(mi.mesh.create_convex_shape(true, true), mi.global_transform)
+			_add_forma(_forma_exata(mi.mesh), mi.global_transform)
 		_colidir_filhos_rec(f)
 
 
-## quanto de folhagem há no ponto (0 = ar livre, 1 = dentro da copa)
-func folhagem_em(p: Vector3) -> float:
-	var d := 0.0
+## folhas: cada item é [inverso do transform da árvore, dados, caixa no mundo]
+## (os dados vêm de recursos/colisao/<nome>.res, gerados por ferramentas/gerar_colisao_arvores.gd)
+var _dados_arvore := {}
+
+
+func _dados_colisao(nome: String) -> ConcavePolygonShape3D:
+	if not _dados_arvore.has(nome):
+		var caminho := REC + "colisao/%s.res" % nome
+		_dados_arvore[nome] = load(caminho) if ResourceLoader.exists(caminho) else null
+	return _dados_arvore[nome]
+
+
+## true se o ponto está encostando numa folha de verdade
+func folha_em(p: Vector3) -> bool:
 	for f in folhagens:
-		var c: Vector3 = f[0]
-		var r: float = f[1]
-		var dx := p.x - c.x
-		if absf(dx) > r:
+		var cx: AABB = f[2]
+		if not cx.has_point(p):
 			continue
-		var dz := p.z - c.z
-		if absf(dz) > r:
+		var d: ConcavePolygonShape3D = f[1]
+		var local: Vector3 = (f[0] as Transform3D) * p
+		var cel: float = d.get_meta("cel")
+		var q := Vector3i(((local - (d.get_meta("origem") as Vector3)) / cel).floor())
+		var dims: Vector3i = d.get_meta("dims")
+		if q.x < 0 or q.y < 0 or q.z < 0 or q.x >= dims.x or q.y >= dims.y or q.z >= dims.z:
 			continue
-		var q := (dx * dx + dz * dz + (p.y - c.y) * (p.y - c.y)) / (r * r)
-		if q < 1.0:
-			d = maxf(d, (1.0 - q) * float(f[2]))
-	return d
+		var chave := q.x + q.y * dims.x + q.z * dims.x * dims.y
+		var lista: PackedInt32Array = d.get_meta("folhas")
+		var i := lista.bsearch(chave)
+		if i < lista.size() and lista[i] == chave:
+			return true
+	return false
+
+
+## depuração (--ver-colisao): desenha as células de folha das plantas perto de um ponto
+func mostrar_folhas_perto(centro: Vector3, raio: float) -> void:
+	var xs: Array[Transform3D] = []
+	for f in folhagens:
+		var cx: AABB = f[2]
+		if cx.get_center().distance_to(centro) > raio:
+			continue
+		var d: ConcavePolygonShape3D = f[1]
+		var inv: Transform3D = f[0]
+		var xf := inv.affine_inverse()
+		var cel: float = d.get_meta("cel")
+		var org: Vector3 = d.get_meta("origem")
+		var dims: Vector3i = d.get_meta("dims")
+		for chave in (d.get_meta("folhas") as PackedInt32Array):
+			var ix := chave % dims.x
+			var iy := (chave / dims.x) % dims.y
+			var iz := chave / (dims.x * dims.y)
+			var local := org + (Vector3(ix, iy, iz) + Vector3.ONE * 0.5) * cel
+			xs.append(Transform3D(xf.basis * Basis.from_scale(Vector3.ONE * cel), xf * local))
+	var m := _mat_cor(Color(1.0, 0.1, 0.6), 0.8)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color.a = 0.45
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_multimesh(_caixa(Vector3.ONE), m, xs)
+	print("células de folha mostradas: ", xs.size())
+	# formas de colisão (menos o chão) perto do ponto, em azul
+	var mc := _mat_cor(Color(0.1, 0.8, 1.0), 0.8)
+	mc.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mc.no_depth_test = true
+	var n := 0
+	for corpo in get_children():
+		if not (corpo is StaticBody3D) or corpo.name == "Colisao":
+			continue
+		for cs in corpo.get_children():
+			var c := cs as CollisionShape3D
+			if c == null or c.shape is HeightMapShape3D or c.global_position.distance_to(centro) > raio:
+				continue
+			var mi := MeshInstance3D.new()
+			mi.mesh = c.shape.get_debug_mesh()
+			mi.material_override = mc
+			add_child(mi)
+			mi.global_transform = c.global_transform
+			n += 1
+	print("formas de colisão mostradas: ", n)
+
+
+## compatibilidade (desafios: balão não nasce dentro de folha)
+func folhagem_em(p: Vector3) -> float:
+	return 1.0 if folha_em(p) else 0.0
 
 
 func _colidir_filhos(no: Node3D) -> void:
@@ -1162,35 +1248,25 @@ func _colidir_planta(no: Node3D, nome: String) -> void:
 	var c := _caixa_global(no)
 	if c.size.y < 0.25:
 		return
-	var centro := c.get_center()
-	var base_y := no.position.y
-	if nome.contains("tree"):
-		var alt := c.end.y - base_y
-		var r_copa := minf(c.size.x, c.size.z) * 0.42
-		var y_copa := c.end.y - r_copa * 1.05
-		# tronco
-		var r_tronco := clampf(alt * 0.035, 0.12, 0.45)
-		var h_tronco := maxf(y_copa - base_y, 1.0)
-		var cap := CapsuleShape3D.new()
-		cap.radius = r_tronco
-		cap.height = h_tronco + r_tronco * 2.0
-		_add_forma(cap, Transform3D(Basis(), Vector3(no.position.x, base_y + h_tronco * 0.5, no.position.z)))
-		# copa: não é parede. O drone entra nas folhas, é freado, balança e pode quebrar hélice
-		folhagens.append([Vector3(centro.x, y_copa, centro.z), r_copa * 1.05, 1.0])
-		folhagens.append([Vector3(centro.x, y_copa + r_copa * 0.6, centro.z), r_copa * 0.75, 1.0])
-		obstaculos.append([Vector2(centro.x, centro.z), r_copa, c.end.y])
-	elif nome.begins_with("shrub"):
-		var r := maxf(c.size.x, c.size.z) * 0.45
-		folhagens.append([Vector3(centro.x, c.position.y + c.size.y * 0.45, centro.z), r, 0.7])
+	var dados := _dados_colisao(nome)
+	if dados:
+		# tronco e galhos: o formato exato da casca (passa rente ao tronco, debaixo do galho, no meio da forquilha)
+		if dados.get_faces().size() > 0:
+			_add_forma(dados, no.global_transform)
+		# folhas: só encosta onde existe folha de verdade
+		var cf: AABB = no.global_transform * (dados.get_meta("caixa_folhas") as AABB)
+		folhagens.append([no.global_transform.affine_inverse(), dados, cf.grow(0.05)])
+		if nome.contains("tree"):
+			obstaculos.append([Vector2(c.get_center().x, c.get_center().z), minf(c.size.x, c.size.z) * 0.4, c.end.y])
 	else:
-		# pedras: colisão com o formato de verdade (casca convexa da malha)
+		# pedras: o formato de verdade
 		_colidir_filhos_rec(no)
 
 
 # ------------------------------------------------------------------ consultas do voo
 
 func na_agua(p: Vector3) -> bool:
-	return _acude_e(p.x, p.z) < 1.0 and p.y < nivel_agua + 0.03
+	return _acude_e(p.x, p.z) < 1.3 and p.y < nivel_agua + 0.03 and altura(p.x, p.z) < nivel_agua
 
 
 func ponto_partida() -> Vector3:
@@ -1443,7 +1519,7 @@ func _montar_flores() -> void:
 				var mancha := ruido_b.get_noise_2d(x * 0.045 + 100.0, z * 0.045) * 0.5 + 0.5
 				if mancha < 0.52 or rng.randf() > (mancha - 0.45) * 2.2:
 					continue
-				if distancia_estrada(p) < 4.0 or _acude_e(x, z) < 1.1 or p.distance_to(GALPAO_C) < 11.0:
+				if distancia_estrada(p) < 4.0 or _acude_e(x, z) < 1.2 or p.distance_to(GALPAO_C) < 11.0:
 					continue
 				var alt := rng.randf_range(0.22, 0.5)
 				var bas := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(1.0, alt, 1.0) * rng.randf_range(0.8, 1.25))
