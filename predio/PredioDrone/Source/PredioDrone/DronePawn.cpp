@@ -169,6 +169,7 @@ void ADronePawn::Recomecar(const FTransform& Onde)
 	AlturaAlvo = Onde.GetLocation().Z;
 	bCaido = false;
 	TempoCaido = 0.f;
+	Batidas = 0;
 }
 
 void ADronePawn::LerControles(float Dt)
@@ -388,16 +389,27 @@ void ADronePawn::MoverComColisao(float h)
 			Velocidade -= (1.f + 0.25f) * Vn * N;
 			Velocidade *= 0.82f;
 			const float Agora = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-			if (!bCaido && Impacto > 520.f && Agora - UltimoImpacto > 0.3f)
+			// cada batida conta (encostar de leve não); na 3ª o drone quebra.
+			// Batida muito forte (> 5,2 m/s contra a parede) quebra na hora.
+			const bool bConta = !bCaido && Impacto > 120.f && Agora - UltimaBatida > 0.5f;
+			if (bConta)
 			{
-				bCaido = true;
-				TempoCaido = 0.f;
+				UltimaBatida = Agora;
+				Batidas = (Impacto > 520.f) ? MaxBatidas : Batidas + 1;
 				AudioImpacto.store(1);
-				MostrarMensagem(TEXT("BATEU! Hélice quebrada…"), 2.2f);
+				if (Batidas >= MaxBatidas)
+				{
+					bCaido = true;
+					TempoCaido = 0.f;
+					MostrarMensagem(TEXT("QUEBROU! Hélice partida…"), 2.2f);
+				}
+				else
+				{
+					MostrarMensagem(FString::Printf(TEXT("BATIDA %d/%d — cuidado!"), Batidas, MaxBatidas), 1.6f);
+				}
 			}
-			else if (Impacto > 150.f)
+			if (!bCaido && Impacto > 150.f)
 			{
-				if (Impacto > 250.f) AudioImpacto.store(1);
 				const FRotator Chute(FMath::FRandRange(-12.f, 12.f), FMath::FRandRange(-8.f, 8.f), FMath::FRandRange(-12.f, 12.f));
 				Orientacao = (Orientacao * Chute.Quaternion()).GetNormalized();
 			}

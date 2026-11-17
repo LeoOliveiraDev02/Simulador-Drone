@@ -46,6 +46,11 @@ void ADroneHUD::DrawHUD()
 	if (!D || !GM) return;
 	if (GM->bMenuAberto)
 	{
+		if (!GM->bMenuJaDesenhado && !D->bModoTour)
+		{
+			GM->bMenuJaDesenhado = true;
+			GM->Registrar(TEXT("HUD desenhou o menu"));
+		}
 		DesenharMenu(GM);
 		return;
 	}
@@ -63,6 +68,12 @@ void ADroneHUD::DrawHUD()
 	Texto(D->Modo == EModoVoo::Acro ? TEXT("ACRO") : TEXT("ESTAB"), M, M, 1.0f * E, D->Modo == EModoVoo::Acro ? Amarelo : Branco);
 	const float V = D->Bateria;
 	Texto(FString::Printf(TEXT("%.2fV"), V), M, M + 34.f * E, 1.0f * E, V < 3.5f ? Vermelho : Branco);
+	{
+		// estado das hélices: cada batida apaga uma; na terceira o drone quebra
+		const int32 Restam = FMath::Max(0, ADronePawn::MaxBatidas - D->Batidas);
+		const FString Hel = FString::Printf(TEXT("HÉLICES %d/%d"), Restam, ADronePawn::MaxBatidas);
+		Texto(Hel, M, M + 62.f * E, 0.75f * E, Restam >= ADronePawn::MaxBatidas ? Branco : (Restam == 1 ? Vermelho : Amarelo));
+	}
 	Texto(GM->TextoAndar(GM->AndarAtual), W - M, M, 1.0f * E, Branco, false, true);
 	const int32 Min = FMath::FloorToInt(D->TempoVoo / 60.f), Seg = FMath::FloorToInt(D->TempoVoo) % 60;
 	Texto(FString::Printf(TEXT("%02d:%02d"), Min, Seg), W - M, M + 34.f * E, 1.0f * E, Branco, false, true);
@@ -95,7 +106,7 @@ void ADroneHUD::DrawHUD()
 	{
 		const bool bFG = APredioGameMode::GeradorLigado();
 		const bool bFSR = APredioGameMode::FSRLigado();
-		const float X = M, Y = M + 90.f * E;
+		const float X = M, Y = M + 104.f * E;
 		Caixa(X - 8.f * E, Y - 6.f * E, 430.f * E, 112.f * E, FLinearColor(0, 0, 0, 0.35f));
 		const FLinearColor CorFPS = GM->FPSBase >= 59.f ? Verde : (GM->FPSBase >= 50.f ? Amarelo : Vermelho);
 		FString L1 = FString::Printf(TEXT("FPS base %.0f"), GM->FPSBase);

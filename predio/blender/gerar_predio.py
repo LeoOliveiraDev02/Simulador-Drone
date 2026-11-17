@@ -857,7 +857,8 @@ def andar(k):
             reb = 1 if (k == 0 and abs(y0 - y1) < 1e-6) else 0
             parede_de_blocos(g, x0, y0, x1, y1, z0, alt_par, abre, completo if k == 2 else 1.0, reb)
         for (x0, y0, x1, y1, abre) in PAREDES_FACHADA:
-            parede_de_blocos(g, x0, y0, x1, y1, z0, alt_par, abre, completo)
+            # térreo sem janelas na fachada: ninguém sai do prédio perto do ponto de partida
+            parede_de_blocos(g, x0, y0, x1, y1, z0, alt_par, [] if k == 0 else abre, completo)
 
     random.seed(100 + k)
     entulho(k, 320 if k < 3 else 140)
@@ -1069,9 +1070,6 @@ def andar_1(g, z0):
     pc = (POCO[0] + POCO[2]) / 2
     portal(4, pc, POCO[1] - 0.45, z0 + 1.05, math.radians(-90), esc=0.45)  # sai do poço no 1º andar
     portal(5, 15.0, 7.4, z0 + 1.05, math.radians(-90), esc=0.42)          # entra no apto sudeste
-    portal(6, 15.0, 0.5, z0 + 1.6, math.radians(-90), esc=0.55)          # sai pela janela para o andaime
-    portal(7, 7.0, -0.85, z0 + 1.2, math.radians(180), esc=0.45)           # corredor do andaime (entre a parede e a tela)
-    portal(8, 3.0, -0.2, z0 + 1.6, math.radians(90), esc=0.55)            # volta pela janela
     portal(9, 3.0, 6.6, z0 + 1.05, math.radians(90), esc=0.42)                          # corredor até a escada
     portal(95, 10.2, 7.8, z0 + 1.2, 0.0, esc=0.6)
     portal(10, 9.85, 10.3, z0 + 1.15, math.radians(90), esc=0.5)          # sobe a escada

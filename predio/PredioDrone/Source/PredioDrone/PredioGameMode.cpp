@@ -13,6 +13,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/FileHelper.h"
+#include "HAL/FileManager.h"
 #include "Misc/Paths.h"
 #include "Misc/App.h"
 #include "HAL/PlatformMisc.h"
@@ -94,10 +95,11 @@ void APredioGameMode::BeginPlay()
 	ColetarAtores();
 	AtualizarAndares(true);
 
-	// Limites de voo (cm, eixos do Unreal: X = x do Blender, Y = -y). O prédio tem 24 x 16 m e a
-	// tela fica 1,6 m para fora das paredes (ondula até 9 cm): o drone (raio 11 cm) para 1,35 m fora.
-	// Teto: a tela da cobertura vai até 16,6 m; o drone para em 15,9 m, então por cima dela só se vê céu.
-	LimitesVoo = FBox(FVector(-135.f, -1735.f, -500.f), FVector(2535.f, 135.f, 1590.f));
+	// Limites de voo (cm, eixos do Unreal: X = x do Blender, Y = -y). O drone fica DENTRO do prédio:
+	// as fachadas ficam em x = 0,15 / 23,85 e y = 0,15 / 15,85 m (blocos de 14 cm); o centro do drone
+	// para 45 cm para dentro delas, em todos os andares (no 2º as paredes são baixas e no 3º/cobertura
+	// não há parede — o limite segura do mesmo jeito). Teto: 15,9 m (a tela vai até 16,6 m).
+	LimitesVoo = FBox(FVector(45.f, -1555.f, -500.f), FVector(2355.f, -45.f, 1590.f));
 	if (ADronePawn* D = Drone())
 	{
 		D->Limites = LimitesVoo;
@@ -252,6 +254,44 @@ void APredioGameMode::AtualizarAndares(bool bForcar)
 	}
 }
 
+
+// ------------------------------------------------------------------ teclas
+
+static const FKey TeclasVigiadas[] = {
+	EKeys::Escape, EKeys::Gamepad_Special_Right, EKeys::Gamepad_Special_Left, EKeys::Gamepad_FaceButton_Right,
+	EKeys::Gamepad_FaceButton_Bottom, EKeys::BackSpace, EKeys::Enter, EKeys::SpaceBar,
+	EKeys::Up, EKeys::Down, EKeys::Left, EKeys::Right, EKeys::W, EKeys::S, EKeys::A, EKeys::D,
+	EKeys::Gamepad_DPad_Up, EKeys::Gamepad_DPad_Down, EKeys::Gamepad_DPad_Left, EKeys::Gamepad_DPad_Right,
+	EKeys::Gamepad_LeftShoulder, EKeys::Gamepad_RightShoulder, EKeys::Q, EKeys::E, EKeys::Tab,
+	EKeys::LeftMouseButton, EKeys::RightMouseButton,
+	EKeys::F1, EKeys::F2, EKeys::F3, EKeys::F4, EKeys::F5, EKeys::F6 };
+
+void APredioGameMode::AtualizarTeclas()
+{
+	TeclaAgora.Reset();
+	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (!PC) return;
+	for (const FKey& K : TeclasVigiadas)
+	{
+		const bool bDown = PC->IsInputKeyDown(K);
+		const bool bAntes = TeclaAntes.FindRef(K);
+		if (bDown && !bAntes) TeclaAgora.Add(K);
+		TeclaAntes.Add(K, bDown);
+	}
+}
+
+bool APredioGameMode::Apertou(const FKey& K) const
+{
+	return TeclaAgora.Contains(K);
+}
+
+void APredioGameMode::Registrar(const FString& Linha) const
+{
+	const FString Arq = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()) / TEXT("menu_log.txt");
+	FFileHelper::SaveStringToFile(FString::Printf(TEXT("%s  %s\r\n"), *FDateTime::Now().ToString(TEXT("%H:%M:%S")), *Linha),
+		*Arq, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM, &IFileManager::Get(), FILEWRITE_Append);
+}
+
 // ------------------------------------------------------------------ menu
 
 ECategoriaMenu APredioGameMode::CategoriaDoItem(int32 I)
@@ -404,7 +444,11 @@ FString APredioGameMode::ValorItem(int32 I) const
 
 void APredioGameMode::AbrirMenu(bool bAbrir)
 {
+	if (bMenuAberto == bAbrir) return;
 	bMenuAberto = bAbrir;
+	MenuMudouEm = FPlatformTime::Seconds();
+	bMenuJaDesenhado = false;
+	if (!bTour) Registrar(bAbrir ? TEXT("menu ABERTO") : TEXT("menu fechado"));
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	ADronePawn* D = Drone();
 	if (bAbrir)
@@ -541,14 +585,17 @@ void APredioGameMode::TickMenu(float Dt)
 {
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	if (!PC) return;
-	auto Apertou = [PC](std::initializer_list<FKey> Teclas)
+	auto Apertou = [this](std::initializer_list<FKey> Teclas)
 	{
-		for (const FKey& K : Teclas) if (PC->WasInputKeyJustPressed(K)) return true;
+		for (const FKey& K : Teclas) if (this->Apertou(K)) return true;
 		return false;
 	};
+	// logo depois de abrir, ignora as teclas de fechar (o mesmo toque não fecha o menu)
+	const bool bPodeFechar = FPlatformTime::Seconds() - MenuMudouEm > 0.3;
 
-	if (Apertou({ EKeys::Escape, EKeys::Gamepad_Special_Right, EKeys::Gamepad_FaceButton_Right, EKeys::BackSpace }))
+	if (bPodeFechar && Apertou({ EKeys::Escape, EKeys::Gamepad_Special_Right, EKeys::Gamepad_FaceButton_Right, EKeys::BackSpace }))
 	{
+		Registrar(TEXT("fechar pedido por Esc / Start / B"));
 		AbrirMenu(false);
 		return;
 	}
@@ -592,7 +639,7 @@ void APredioGameMode::TickMenu(float Dt)
 
 	if (V != 0) MenuIndice = (MenuIndice + V + N) % N;
 	if (Hz != 0) MudarItem(Hz, false);
-	if (Apertou({ EKeys::Enter, EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom }))
+	if (bPodeFechar && Apertou({ EKeys::Enter, EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom }))
 	{
 		MudarItem(0, true);
 		if (!bMenuAberto) return;
@@ -611,7 +658,7 @@ void APredioGameMode::TickMenu(float Dt)
 			if (AreaItens[i].bIsValid && AreaItens[i].IsInside(M)) { Sob = i; break; }
 		}
 		if (Sob != INDEX_NONE && bMexeu) MenuIndice = Sob;
-		if (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+		if (bPodeFechar && Apertou(EKeys::LeftMouseButton))
 		{
 			if (AreaFechar.bIsValid && AreaFechar.IsInside(M))
 			{
@@ -633,7 +680,7 @@ void APredioGameMode::TickMenu(float Dt)
 				if (!bMenuAberto) return;
 			}
 		}
-		if (Sob != INDEX_NONE && PC->WasInputKeyJustPressed(EKeys::RightMouseButton))
+		if (Sob != INDEX_NONE && Apertou(EKeys::RightMouseButton))
 		{
 			MenuIndice = Sob;
 			MudarItem(-1, false);
@@ -653,17 +700,18 @@ void APredioGameMode::TeclasAtalho()
 	if (!PC || !D) return;
 	FAjustesDrone& C = FAjustesDrone::Get();
 
-	if (PC->WasInputKeyJustPressed(EKeys::Escape) || PC->WasInputKeyJustPressed(EKeys::Gamepad_Special_Right))
+	if ((Apertou(EKeys::Escape) || Apertou(EKeys::Gamepad_Special_Right)) && FPlatformTime::Seconds() - MenuMudouEm > 0.3)
 	{
 		bMostrarAjuda = false;
+		Registrar(Apertou(EKeys::Escape) ? TEXT("Esc apertado") : TEXT("Start apertado"));
 		AbrirMenu(true);
 		return;
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::F1) || PC->WasInputKeyJustPressed(EKeys::Gamepad_Special_Left))
+	if (Apertou(EKeys::F1) || Apertou(EKeys::Gamepad_Special_Left))
 	{
 		bMostrarAjuda = !bMostrarAjuda;
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::F2))
+	if (Apertou(EKeys::F2))
 	{
 		C.ModoFSR = (C.ModoFSR + 1) % 4;
 		C.AplicarGraficos();
@@ -672,25 +720,25 @@ void APredioGameMode::TeclasAtalho()
 		C.Salvar();
 		D->MostrarMensagem(FString::Printf(TEXT("FSR 4: %s"), NomesModo[C.ModoFSR]));
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::F3))
+	if (Apertou(EKeys::F3))
 	{
 		C.bGerador = !C.bGerador;
 		C.AplicarGraficos();
 		C.Salvar();
 		D->MostrarMensagem(C.bGerador ? TEXT("Gerador de quadros AMD LIGADO") : TEXT("Gerador de quadros AMD desligado"));
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::F4))
+	if (Apertou(EKeys::F4))
 	{
 		const bool bNovo = !FSRLigado();
 		SetInt(TEXT("r.FidelityFX.FSR.Enabled"), bNovo ? 1 : 0);
 		D->MostrarMensagem(bNovo ? TEXT("FSR 4 (IA) LIGADO") : TEXT("FSR desligado — usando o TSR do Unreal para comparar"));
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::F5))
+	if (Apertou(EKeys::F5))
 	{
 		C.bPainel = !C.bPainel;
 		C.Salvar();
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::F6))
+	if (Apertou(EKeys::F6))
 	{
 		C.bAjusteAuto = !C.bAjusteAuto;
 		NivelAjuste = 0;
@@ -750,6 +798,7 @@ void APredioGameMode::Tick(float DeltaSeconds)
 	MsJogo = FPlatformTime::ToMilliseconds(GGameThreadTime);
 
 	AtualizarAndares(false);
+	AtualizarTeclas();
 	if (bTour)
 	{
 		TickTour(DeltaSeconds);

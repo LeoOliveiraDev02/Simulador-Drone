@@ -41,6 +41,8 @@ public:
 	float TempoVoo = 0.f;
 	float Acelerador = 0.f;
 	bool bCaido = false;
+	int32 Batidas = 0;            // batidas desde o último início (3 = quebra)
+	static constexpr int32 MaxBatidas = 3;
 	float TempoCaido = 0.f;
 	FString Mensagem;
 	float TempoMensagem = 0.f;
@@ -91,6 +93,7 @@ private:
 	float AlturaAlvo = 0.f;
 	float TremorFase = 0.f;
 	float UltimoImpacto = 0.f;
+	float UltimaBatida = -10.f;
 
 	// áudio (thread de áudio)
 	std::atomic<float> AudioAcel{ 0.f };

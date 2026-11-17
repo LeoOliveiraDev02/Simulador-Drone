@@ -80,6 +80,8 @@ public:
 	int32 NivelAjuste = 0;   // 0 = máximo; sobe quando precisa aliviar
 
 	bool bMenuAberto = false;
+	bool bMenuJaDesenhado = false;
+	void Registrar(const FString& Linha) const;
 	int32 MenuIndice = 0;
 	FString NomeItem(int32 I) const;
 	FString DescricaoItem(int32 I) const;
@@ -123,6 +125,13 @@ private:
 	TArray<TPair<int32, FTransform>> Rota; // pontos invisíveis do voo de teste
 	float AlturaAndar = 300.f;
 	float CotaTerreo = 0.f;
+
+	// teclas: borda de apertar calculada aqui (estado atual x anterior), funciona igual com o jogo pausado
+	void AtualizarTeclas();
+	bool Apertou(const FKey& K) const;
+	TMap<FKey, bool> TeclaAntes;
+	TSet<FKey> TeclaAgora;
+	double MenuMudouEm = -10.0;   // hora real da última abertura/fechamento (evita abrir e fechar no mesmo toque)
 
 	// menu
 	FVector2D UltimoMouse = FVector2D::ZeroVector;

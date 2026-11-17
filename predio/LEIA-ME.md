@@ -44,10 +44,14 @@ deixar de ser preciso (sem isso o vizinho e as luzes dele ligavam/desligavam e a
 A laje de baixo também fica visível (vista pelos buracos). Na cobertura o 3º andar fica sempre desenhado.
 
 ## Limites de voo
-O drone não sai do prédio: para 1,35 m fora das paredes (por dentro da tela, que fica a 1,6 m) e
-não sobe acima de 15,9 m (a tela da cobertura vai até 16,6 m, então por cima dela só aparece céu).
-Encostar no limite é como encostar na tela: o drone volta devagar, sem quebrar. Tudo fica carregado na memória de vídeo,
-então a troca é instantânea (não aparece "carregando"). As luzes de cada andar apagam junto.
+O drone não sai do prédio: o centro dele para 45 cm para dentro das fachadas em todos os andares
+(no 2º as paredes são baixas, no 3º e na cobertura não há parede — o limite segura igual) e não sobe
+acima de 15,9 m (a tela da cobertura vai até 16,6 m, então por cima dela só aparece céu).
+O térreo não tem janelas na fachada (a janela atrás do ponto de partida deixava sair).
+
+## Batidas
+Cada batida conta (encostar de leve não): o OSD mostra HÉLICES 3/3 → 2/3 → 1/3 e na terceira o
+drone quebra e volta ao início. Batida muito forte (mais de 5,2 m/s contra a parede) quebra na hora.
 
 ## Tecnologias
 - Lumen com ray tracing por hardware (RX 9060 XT), Nanite em tudo, sombras virtuais, névoa volumétrica.
