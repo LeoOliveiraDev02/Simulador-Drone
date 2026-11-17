@@ -45,6 +45,7 @@ void FAjustesDrone::Carregar()
 		else if (K == TEXT("VSync")) bVSync = B;
 		else if (K == TEXT("Painel")) bPainel = B;
 		else if (K == TEXT("AjusteAuto")) bAjusteAuto = B;
+		else if (K == TEXT("EscalaInterface")) EscalaInterface = FMath::Clamp(F, 0.7f, 1.6f);
 	}
 }
 
@@ -64,6 +65,7 @@ void FAjustesDrone::Salvar() const
 	L.Add(FString::Printf(TEXT("VSync=%d"), bVSync ? 1 : 0));
 	L.Add(FString::Printf(TEXT("Painel=%d"), bPainel ? 1 : 0));
 	L.Add(FString::Printf(TEXT("AjusteAuto=%d"), bAjusteAuto ? 1 : 0));
+	L.Add(FString::Printf(TEXT("EscalaInterface=%.2f"), EscalaInterface));
 	FFileHelper::SaveStringArrayToFile(L, *Arquivo());
 }
 

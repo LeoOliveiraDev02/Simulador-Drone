@@ -48,6 +48,10 @@ public:
 	bool bModoTour = false;
 	bool bCongelado = false; // menu aberto
 
+	// caixa onde o drone pode voar (por dentro da tela de proteção, abaixo do teto)
+	FBox Limites = FBox(ForceInit);
+	bool bUsarLimites = false;
+
 	void Recomecar(const FTransform& Onde);
 	void MostrarMensagem(const FString& Texto, float Segundos = 2.5f);
 	void TrocarModo();
@@ -69,6 +73,7 @@ private:
 	void LerControles(float Dt);
 	void PassoFisica(float h);
 	void MoverComColisao(float h);
+	void PrenderNosLimites();
 	void AtualizarCamera(float Dt);
 	void GerarAudio(USoundWaveProcedural* W, int32 Amostras);
 

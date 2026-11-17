@@ -7,6 +7,10 @@
 #include "Engine/Font.h"
 #include "CanvasItem.h"
 #include "GameFramework/PlayerController.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Fonts/FontMeasure.h"
+#include "Rendering/SlateRenderer.h"
+#include "RenderUtils.h"
 
 void ADroneHUD::Texto(const FString& S, float X, float Y, float Escala, const FLinearColor& Cor, bool bCentro, bool bDireita)
 {
@@ -38,12 +42,17 @@ void ADroneHUD::DrawHUD()
 
 	const APlayerController* PC = GetOwningPlayerController();
 	const ADronePawn* D = PC ? Cast<ADronePawn>(PC->GetPawn()) : nullptr;
-	const APredioGameMode* GM = GetWorld() ? Cast<APredioGameMode>(GetWorld()->GetAuthGameMode()) : nullptr;
+	APredioGameMode* GM = GetWorld() ? Cast<APredioGameMode>(GetWorld()->GetAuthGameMode()) : nullptr;
 	if (!D || !GM) return;
+	if (GM->bMenuAberto)
+	{
+		DesenharMenu(GM);
+		return;
+	}
 	if (D->bModoTour) return; // prints limpos no voo de teste
 
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	const float E = FMath::Clamp(H / 1080.f, 0.6f, 2.f); // escala da interface
+	const float E = FMath::Clamp(H / 1080.f, 0.6f, 2.f) * FAjustesDrone::Get().EscalaInterface; // escala da interface
 	const FLinearColor Branco(1, 1, 1, 0.95f);
 	const FLinearColor Amarelo(1.f, 0.85f, 0.2f, 1.f);
 	const FLinearColor Vermelho(1.f, 0.25f, 0.2f, 1.f);
@@ -82,7 +91,7 @@ void ADroneHUD::DrawHUD()
 	}
 
 	// --- painel de desempenho (F5) ---
-	if (FAjustesDrone::Get().bPainel && !GM->bMenuAberto)
+	if (FAjustesDrone::Get().bPainel)
 	{
 		const bool bFG = APredioGameMode::GeradorLigado();
 		const bool bFSR = APredioGameMode::FSRLigado();
@@ -107,7 +116,7 @@ void ADroneHUD::DrawHUD()
 			TEXT("Controle (modo 2):  analógico esquerdo ↑↓ sobe/desce (acelerador no ACRO), ←→ gira"),
 			TEXT("                    analógico direito ↑↓ frente/trás, ←→ lados"),
 			TEXT("                    Y troca ESTABILIZADO/ACRO    X volta ao início"),
-			TEXT("                    START abre o MENU (sensibilidade, inverter eixos, som, AMD)"),
+			TEXT("                    START abre o MENU e pausa (sensibilidade, inverter eixos, som, AMD)"),
 			TEXT("Teclado:  W/S sobe/desce   A/D gira   setas (ou I J K L) frente/trás/lados"),
 			TEXT("          M modo   R volta ao início   Esc menu   F1 esta ajuda"),
 			TEXT(""),
@@ -126,32 +135,534 @@ void ADroneHUD::DrawHUD()
 			Y += 30.f * E;
 		}
 	}
+}
 
-	// --- menu (Start / Esc) ---
-	if (GM->bMenuAberto)
+// =====================================================================================
+// MENU — painel escuro com detalhes azuis, categorias à esquerda e opções à direita
+// =====================================================================================
+namespace
+{
+	enum EIcone
 	{
-		Caixa(0, 0, W, H, FLinearColor(0, 0, 0, 0.45f));
-		const int32 N = (int32)EItemMenu::Total;
-		const float Lh = 36.f * E;
-		const float Lw = 760.f * E;
-		const float X0 = W * 0.5f - Lw * 0.5f;
-		const float Y0 = H * 0.5f - (N * Lh + 110.f * E) * 0.5f;
-		Caixa(X0 - 20.f * E, Y0 - 20.f * E, Lw + 40.f * E, N * Lh + 150.f * E, FLinearColor(0.02f, 0.02f, 0.025f, 0.86f));
-		Texto(TEXT("MENU"), W * 0.5f, Y0, 1.15f * E, Amarelo, true);
-		float Y = Y0 + 56.f * E;
-		for (int32 i = 0; i < N; ++i)
+		IcMonitor, IcMira, IcControle, IcSetasH, IcSetasV, IcGiro, IcLados, IcOlho, IcDrone, IcChip, IcQuadro,
+		IcMedidor, IcEngrenagem, IcRecarregar, IcEstrela, IcEnergia, IcTexto, IcSliders, IcAltoFalante,
+		IcAcessib, IcChave, IcDocumento, IcMonitorSync
+	};
+	const int32 IconeItem[] = {
+		IcMonitor,      // Continuar
+		IcOlho,         // Modo de voo
+		IcRecarregar,   // Voltar ao início
+		IcMira,         // Sensibilidade
+		IcControle,     // Expo
+		IcChip,         // FSR
+		IcQuadro,       // Gerador
+		IcMonitorSync,  // VSync
+		IcMedidor,      // Painel
+		IcEngrenagem,   // Ajuste automático
+		IcDrone,        // Volume
+		IcSetasH,       // Inverter frente/trás
+		IcSetasV,       // Inverter subir/descer
+		IcGiro,         // Inverter giro
+		IcLados,        // Inverter lados
+		IcTexto,        // Tamanho da interface
+		IcEstrela,      // Restaurar padrões
+		IcEnergia,      // Sair
+	};
+	const int32 IconeCategoria[] = { IcControle, IcSliders, IcMira, IcMonitor, IcAltoFalante, IcSetasH, IcAcessib, IcChave, IcDocumento };
+
+	// cores escritas em sRGB (0–255, como num editor de imagem) e convertidas para o Canvas
+	FLinearColor Cor255(uint8 R, uint8 G, uint8 B, uint8 A = 255) { return FLinearColor(FColor(R, G, B, A)); }
+	const FLinearColor AzulClaro = Cor255(94, 160, 255);
+	const FLinearColor AzulTexto = Cor255(143, 184, 255);
+	const FLinearColor Branco = Cor255(236, 243, 255);
+	const FLinearColor Cinza = Cor255(120, 140, 172);
+	const FLinearColor Apagado = Cor255(80, 96, 122);
+
+	FVector2D Polar(FVector2D C, float R, float Graus)
+	{
+		const float A = FMath::DegreesToRadians(Graus);
+		return C + FVector2D(FMath::Cos(A), -FMath::Sin(A)) * R; // ângulo matemático, y da tela para baixo
+	}
+}
+
+FSlateFontInfo ADroneHUD::Fonte(float Px, const TCHAR* Face) const
+{
+	UFont* F = Roboto ? Roboto.Get() : GEngine->GetLargeFont();
+	return FSlateFontInfo(F, FMath::Max(4.f, Px * 0.75f), FName(Face));
+}
+
+FVector2D ADroneHUD::Medir(const FString& S, const FSlateFontInfo& F) const
+{
+	if (FSlateApplication::IsInitialized())
+	{
+		const TSharedRef<FSlateFontMeasure> M = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+		const FVector2D R = M->Measure(S, F);
+		return R;
+	}
+	return FVector2D(S.Len() * F.Size * 0.7f, F.Size * 1.3f);
+}
+
+float ADroneHUD::T(const FString& S, float X, float Y, float Px, const TCHAR* Face, const FLinearColor& Cor, int32 Alinh, float Espaco)
+{
+	if (S.IsEmpty()) return 0.f;
+	const FSlateFontInfo F = Fonte(Px, Face);
+	if (Espaco <= 0.f)
+	{
+		const FVector2D Tam = Medir(S, F);
+		if (Alinh == 1) X -= Tam.X * 0.5f;
+		if (Alinh == 2) X -= Tam.X;
+		FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(S), F, Cor);
+		Item.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Item);
+		return Tam.X;
+	}
+	// letras espaçadas (títulos)
+	TArray<float> Larg;
+	float Total = 0.f;
+	for (int32 i = 0; i < S.Len(); ++i)
+	{
+		const float L = Medir(S.Mid(i, 1), F).X;
+		Larg.Add(L);
+		Total += L + (i + 1 < S.Len() ? Espaco : 0.f);
+	}
+	if (Alinh == 1) X -= Total * 0.5f;
+	if (Alinh == 2) X -= Total;
+	for (int32 i = 0; i < S.Len(); ++i)
+	{
+		FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(S.Mid(i, 1)), F, Cor);
+		Item.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Item);
+		X += Larg[i] + Espaco;
+	}
+	return Total;
+}
+
+void ADroneHUD::Linha(FVector2D A, FVector2D B, float Esp, const FLinearColor& Cor)
+{
+	FVector2D D = B - A;
+	const float Len = D.Size();
+	if (Len < 0.01f) return;
+	D /= Len;
+	const FVector2D N(-D.Y * Esp * 0.5f, D.X * Esp * 0.5f);
+	Tri(A + N, B + N, B - N, Cor);
+	Tri(A + N, B - N, A - N, Cor);
+}
+
+void ADroneHUD::Tri(FVector2D A, FVector2D B, FVector2D C, const FLinearColor& Cor)
+{
+	FCanvasUVTri T3;
+	T3.V0_Pos = A; T3.V1_Pos = B; T3.V2_Pos = C;
+	T3.V0_UV = T3.V1_UV = T3.V2_UV = FVector2D::ZeroVector;
+	T3.V0_Color = T3.V1_Color = T3.V2_Color = Cor;
+	FCanvasTriangleItem Item(T3, GWhiteTexture);
+	Item.BlendMode = SE_BLEND_Translucent;
+	Canvas->DrawItem(Item);
+}
+
+void ADroneHUD::Arco(FVector2D C, float R, float Esp, const FLinearColor& Cor, float A0, float A1, int32 Segs)
+{
+	FVector2D Ant = Polar(C, R, A0);
+	for (int32 i = 1; i <= Segs; ++i)
+	{
+		const FVector2D P = Polar(C, R, FMath::Lerp(A0, A1, (float)i / Segs));
+		Linha(Ant, P, Esp, Cor);
+		Ant = P;
+	}
+}
+
+void ADroneHUD::Disco(FVector2D C, float R, const FLinearColor& Cor, int32 Segs)
+{
+	TArray<FCanvasUVTri> Lista;
+	for (int32 i = 0; i < Segs; ++i)
+	{
+		FCanvasUVTri T3;
+		T3.V0_Pos = C;
+		T3.V1_Pos = Polar(C, R, 360.f * i / Segs);
+		T3.V2_Pos = Polar(C, R, 360.f * (i + 1) / Segs);
+		T3.V0_UV = T3.V1_UV = T3.V2_UV = FVector2D::ZeroVector;
+		T3.V0_Color = T3.V1_Color = T3.V2_Color = Cor;
+		Lista.Add(T3);
+	}
+	FCanvasTriangleItem Item(Lista, GWhiteTexture);
+	Item.BlendMode = SE_BLEND_Translucent;
+	Canvas->DrawItem(Item);
+}
+
+static void PerimetroArred(TArray<FVector2D>& P, float X, float Y, float W, float H, float R)
+{
+	R = FMath::Min(R, FMath::Min(W, H) * 0.5f);
+	const FVector2D Cs[4] = { {X + W - R, Y + R}, {X + R, Y + R}, {X + R, Y + H - R}, {X + W - R, Y + H - R} };
+	for (int32 c = 0; c < 4; ++c)
+	{
+		for (int32 k = 0; k <= 6; ++k)
 		{
-			const bool bSel = i == GM->MenuIndice;
-			if (bSel) Caixa(X0 - 8.f * E, Y - 3.f * E, Lw + 16.f * E, Lh - 2.f * E, FLinearColor(1.f, 0.75f, 0.1f, 0.22f));
-			const FLinearColor Cor = bSel ? Amarelo : Branco;
-			Texto(GM->NomeItem(i), X0 + 6.f * E, Y, 0.8f * E, Cor);
-			const FString Val = GM->ValorItem(i);
-			if (!Val.IsEmpty())
-			{
-				Texto(bSel ? FString::Printf(TEXT("<  %s  >"), *Val) : Val, X0 + Lw - 6.f * E, Y, 0.8f * E, Cor, false, true);
-			}
-			Y += Lh;
+			P.Add(Polar(Cs[c], R, c * 90.f + 90.f * k / 6.f));
 		}
-		Texto(TEXT("↑↓ escolhe    ←→ muda    A / Enter confirma    B / Start / Esc fecha"), W * 0.5f, Y + 14.f * E, 0.65f * E, FLinearColor(1, 1, 1, 0.7f), true);
+	}
+}
+
+void ADroneHUD::RetArred(float X, float Y, float W, float H, float R, const FLinearColor& CorEsq, const FLinearColor& CorDir)
+{
+	TArray<FVector2D> P;
+	PerimetroArred(P, X, Y, W, H, R);
+	const FVector2D C(X + W * 0.5f, Y + H * 0.5f);
+	auto CorEm = [&](const FVector2D& Q) { return FMath::Lerp(CorEsq, CorDir, FMath::Clamp((Q.X - X) / FMath::Max(W, 1.f), 0.f, 1.f)); };
+	TArray<FCanvasUVTri> Lista;
+	for (int32 i = 0; i < P.Num(); ++i)
+	{
+		const FVector2D& A = P[i];
+		const FVector2D& B = P[(i + 1) % P.Num()];
+		FCanvasUVTri T3;
+		T3.V0_Pos = C; T3.V1_Pos = A; T3.V2_Pos = B;
+		T3.V0_UV = T3.V1_UV = T3.V2_UV = FVector2D::ZeroVector;
+		T3.V0_Color = CorEm(C); T3.V1_Color = CorEm(A); T3.V2_Color = CorEm(B);
+		Lista.Add(T3);
+	}
+	FCanvasTriangleItem Item(Lista, GWhiteTexture);
+	Item.BlendMode = SE_BLEND_Translucent;
+	Canvas->DrawItem(Item);
+}
+
+void ADroneHUD::ContornoArred(float X, float Y, float W, float H, float R, float Esp, const FLinearColor& Cor)
+{
+	TArray<FVector2D> P;
+	PerimetroArred(P, X, Y, W, H, R);
+	for (int32 i = 0; i < P.Num(); ++i)
+	{
+		Linha(P[i], P[(i + 1) % P.Num()], Esp, Cor);
+	}
+}
+
+void ADroneHUD::Seta(FVector2D De, FVector2D Para, float Esp, float Ponta, const FLinearColor& Cor)
+{
+	Linha(De, Para, Esp, Cor);
+	FVector2D D = Para - De;
+	if (D.IsNearlyZero()) return;
+	D.Normalize();
+	const FVector2D N(-D.Y, D.X);
+	Tri(Para + D * Esp * 0.6f, Para - D * Ponta + N * Ponta * 0.75f, Para - D * Ponta - N * Ponta * 0.75f, Cor);
+}
+
+void ADroneHUD::Icone(int32 Tipo, FVector2D C, float S, const FLinearColor& Cor)
+{
+	const float E = FMath::Max(1.4f, S * 0.13f);
+	auto P = [&](float X, float Y) { return C + FVector2D(X * S, Y * S); };
+	auto Monitor = [&]()
+	{
+		ContornoArred(C.X - S, C.Y - 0.75f * S, 2.f * S, 1.25f * S, 0.12f * S, E, Cor);
+		Linha(P(0, 0.5f), P(0, 0.78f), E, Cor);
+		Linha(P(-0.45f, 0.82f), P(0.45f, 0.82f), E, Cor);
+	};
+	switch (Tipo)
+	{
+	case IcMonitor: Monitor(); break;
+	case IcMonitorSync:
+		Monitor();
+		Arco(P(0, -0.12f), 0.3f * S, E, Cor, 30.f, 300.f, 14);
+		Tri(Polar(P(0, -0.12f), 0.3f * S, 30.f) + FVector2D(0.18f * S, 0), Polar(P(0, -0.12f), 0.3f * S, 30.f) - FVector2D(0.12f * S, 0.0f), Polar(P(0, -0.12f), 0.3f * S, 30.f) + FVector2D(0.02f * S, 0.2f * S), Cor);
+		break;
+	case IcMira:
+		Arco(C, 0.62f * S, E, Cor);
+		Linha(P(0, -1), P(0, -0.32f), E, Cor); Linha(P(0, 0.32f), P(0, 1), E, Cor);
+		Linha(P(-1, 0), P(-0.32f, 0), E, Cor); Linha(P(0.32f, 0), P(1, 0), E, Cor);
+		Disco(C, 0.12f * S, Cor, 10);
+		break;
+	case IcControle:
+		ContornoArred(C.X - S, C.Y - 0.58f * S, 2.f * S, 1.16f * S, 0.5f * S, E, Cor);
+		Linha(P(-0.62f, 0), P(-0.18f, 0), E, Cor); Linha(P(-0.4f, -0.22f), P(-0.4f, 0.22f), E, Cor);
+		Disco(P(0.35f, -0.12f), 0.1f * S, Cor, 8); Disco(P(0.58f, 0.12f), 0.1f * S, Cor, 8);
+		break;
+	case IcSetasH:
+		Seta(P(-0.15f, 0), P(-1, 0), E, 0.38f * S, Cor); Seta(P(0.15f, 0), P(1, 0), E, 0.38f * S, Cor);
+		Linha(P(-0.2f, 0), P(0.2f, 0), E, Cor);
+		break;
+	case IcSetasV:
+		Seta(P(-0.35f, 0.85f), P(-0.35f, -0.85f), E, 0.36f * S, Cor);
+		Seta(P(0.35f, -0.85f), P(0.35f, 0.85f), E, 0.36f * S, Cor);
+		break;
+	case IcGiro:
+	case IcRecarregar:
+	{
+		const float A1 = Tipo == IcGiro ? 300.f : 330.f;
+		Arco(C, 0.72f * S, E, Cor, 40.f, A1, 22);
+		const FVector2D Fim = Polar(C, 0.72f * S, A1);
+		const FVector2D Tang = Polar(FVector2D::ZeroVector, 1.f, A1 + 90.f);
+		Seta(Fim - Tang * 0.05f * S, Fim + Tang * 0.25f * S, E, 0.32f * S, Cor);
+		if (Tipo == IcRecarregar)
+		{
+			const FVector2D Ini = Polar(C, 0.72f * S, 40.f);
+			const FVector2D Tang2 = Polar(FVector2D::ZeroVector, 1.f, 40.f - 90.f);
+			Seta(Ini - Tang2 * 0.05f * S, Ini + Tang2 * 0.25f * S, E, 0.32f * S, Cor);
+		}
+		break;
+	}
+	case IcLados:
+		Arco(C, 0.9f * S, E, Cor);
+		Seta(P(-0.1f, 0), P(-0.55f, 0), E, 0.25f * S, Cor); Seta(P(0.1f, 0), P(0.55f, 0), E, 0.25f * S, Cor);
+		Linha(P(-0.15f, 0), P(0.15f, 0), E, Cor);
+		break;
+	case IcOlho:
+	{
+		FVector2D Ant = P(1, 0);
+		for (int32 i = 1; i <= 24; ++i)
+		{
+			const float A = 2.f * PI * i / 24.f;
+			const FVector2D Q = P(FMath::Cos(A), 0.55f * FMath::Sin(A));
+			Linha(Ant, Q, E, Cor);
+			Ant = Q;
+		}
+		Arco(C, 0.3f * S, E, Cor, 0.f, 360.f, 16);
+		Disco(C, 0.12f * S, Cor, 8);
+		break;
+	}
+	case IcDrone:
+		for (int32 sx = -1; sx <= 1; sx += 2)
+			for (int32 sy = -1; sy <= 1; sy += 2)
+			{
+				Linha(P(0.18f * sx, 0.18f * sy), P(0.55f * sx, 0.55f * sy), E, Cor);
+				Arco(P(0.62f * sx, 0.62f * sy), 0.33f * S, E, Cor, 0.f, 360.f, 14);
+			}
+		ContornoArred(C.X - 0.22f * S, C.Y - 0.22f * S, 0.44f * S, 0.44f * S, 0.08f * S, E, Cor);
+		break;
+	case IcChip:
+		ContornoArred(C.X - 0.62f * S, C.Y - 0.62f * S, 1.24f * S, 1.24f * S, 0.12f * S, E, Cor);
+		ContornoArred(C.X - 0.28f * S, C.Y - 0.28f * S, 0.56f * S, 0.56f * S, 0.05f * S, E, Cor);
+		for (float k : { -0.35f, 0.f, 0.35f })
+		{
+			Linha(P(k, -0.62f), P(k, -0.95f), E, Cor); Linha(P(k, 0.62f), P(k, 0.95f), E, Cor);
+			Linha(P(-0.62f, k), P(-0.95f, k), E, Cor); Linha(P(0.62f, k), P(0.95f, k), E, Cor);
+		}
+		break;
+	case IcQuadro:
+		for (int32 sx = -1; sx <= 1; sx += 2)
+			for (int32 sy = -1; sy <= 1; sy += 2)
+			{
+				Linha(P(sx * 0.9f, sy * 0.9f), P(sx * 0.4f, sy * 0.9f), E, Cor);
+				Linha(P(sx * 0.9f, sy * 0.9f), P(sx * 0.9f, sy * 0.4f), E, Cor);
+			}
+		Arco(C, 0.3f * S, E, Cor, 0.f, 360.f, 14);
+		break;
+	case IcMedidor:
+		Arco(P(0, 0.2f), 0.85f * S, E, Cor, -20.f, 200.f, 22);
+		Linha(P(0, 0.2f), Polar(P(0, 0.2f), 0.6f * S, 55.f), E, Cor);
+		Disco(P(0, 0.2f), 0.13f * S, Cor, 10);
+		break;
+	case IcEngrenagem:
+		Arco(C, 0.55f * S, E, Cor, 0.f, 360.f, 20);
+		Arco(C, 0.2f * S, E, Cor, 0.f, 360.f, 12);
+		for (int32 i = 0; i < 8; ++i)
+		{
+			Linha(Polar(C, 0.55f * S, i * 45.f), Polar(C, 0.9f * S, i * 45.f), E * 2.2f, Cor);
+		}
+		break;
+	case IcEstrela:
+	{
+		TArray<FVector2D> Pt;
+		for (int32 i = 0; i < 10; ++i) Pt.Add(Polar(C, (i % 2 == 0 ? 0.95f : 0.42f) * S, 90.f + i * 36.f));
+		for (int32 i = 0; i < 10; ++i) Linha(Pt[i], Pt[(i + 1) % 10], E, Cor);
+		break;
+	}
+	case IcEnergia:
+		Arco(C, 0.72f * S, E, Cor, 125.f, 415.f, 22);
+		Linha(P(0, -1.f), P(0, -0.1f), E, Cor);
+		break;
+	case IcTexto:
+		T(TEXT("Aa"), C.X, C.Y - 0.85f * S, 1.6f * S, TEXT("Bold"), Cor, 1);
+		break;
+	case IcSliders:
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const float Y = (i - 1) * 0.6f;
+			Linha(P(-1, Y), P(1, Y), E, Cor);
+			Disco(P(i == 0 ? 0.45f : (i == 1 ? -0.35f : 0.15f), Y), 0.2f * S, Cor, 10);
+		}
+		break;
+	case IcAltoFalante:
+		Linha(P(-0.95f, -0.3f), P(-0.95f, 0.3f), E, Cor);
+		Linha(P(-0.95f, -0.3f), P(-0.55f, -0.3f), E, Cor); Linha(P(-0.95f, 0.3f), P(-0.55f, 0.3f), E, Cor);
+		Linha(P(-0.55f, -0.3f), P(-0.05f, -0.75f), E, Cor); Linha(P(-0.55f, 0.3f), P(-0.05f, 0.75f), E, Cor);
+		Linha(P(-0.05f, -0.75f), P(-0.05f, 0.75f), E, Cor);
+		Arco(P(0.0f, 0), 0.45f * S, E, Cor, -45.f, 45.f, 8);
+		Arco(P(0.0f, 0), 0.82f * S, E, Cor, -50.f, 50.f, 10);
+		break;
+	case IcAcessib:
+		Monitor();
+		Disco(P(0, -0.42f), 0.12f * S, Cor, 8);
+		Linha(P(-0.35f, -0.2f), P(0.35f, -0.2f), E, Cor);
+		Linha(P(0, -0.25f), P(0, 0.05f), E, Cor);
+		Linha(P(0, 0.05f), P(-0.2f, 0.32f), E, Cor); Linha(P(0, 0.05f), P(0.2f, 0.32f), E, Cor);
+		break;
+	case IcChave:
+		Linha(P(-0.8f, 0.8f), P(0.15f, -0.15f), E * 1.8f, Cor);
+		Arco(P(0.42f, -0.42f), 0.38f * S, E * 1.3f, Cor, 100.f, 350.f, 14);
+		break;
+	case IcDocumento:
+		ContornoArred(C.X - 0.7f * S, C.Y - S, 1.4f * S, 2.f * S, 0.15f * S, E, Cor);
+		for (float Y : { -0.45f, 0.f, 0.45f }) Linha(P(-0.38f, Y), P(0.38f, Y), E, Cor);
+		break;
+	default: break;
+	}
+}
+
+void ADroneHUD::DesenharMenu(APredioGameMode* GM)
+{
+	if (!Roboto)
+	{
+		Roboto = LoadObject<UFont>(nullptr, TEXT("/Engine/EngineFonts/Roboto.Roboto"));
+	}
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	// projeto em unidades de 1280 x 960 (painel 1280 x 900 + rodapé), centralizado na tela
+	Esc = FMath::Min(W * 0.90f / 1280.f, H * 0.94f / 960.f);
+	const float OX = (W - 1280.f * Esc) * 0.5f;
+	const float OY = (H - 960.f * Esc) * 0.5f;
+	auto X = [&](float V) { return OX + V * Esc; };
+	auto Y = [&](float V) { return OY + V * Esc; };
+	auto Pt = [&](float A, float B) { return FVector2D(X(A), Y(B)); };
+	const float e = Esc;
+
+	// escurece o simulador pausado
+	Caixa(0, 0, W, H, Cor255(2, 5, 12, 150));
+
+	// painel
+	RetArred(X(0), Y(0), 1280 * e, 900 * e, 10 * e, Cor255(7, 13, 25, 246), Cor255(9, 20, 38, 246));
+	ContornoArred(X(0), Y(0), 1280 * e, 900 * e, 10 * e, FMath::Max(1.f, 1.4f * e), Cor255(52, 104, 190, 170));
+	// brilho azul no topo
+	Linha(Pt(40, 1), Pt(620, 1), 2.f * e, Cor255(80, 150, 255, 140));
+
+	// título
+	Linha(Pt(22, 66), Pt(88, 66), 2.2f * e, Cor255(70, 140, 255, 220));
+	T(TEXT("MENU"), X(96), Y(14), 76 * e, TEXT("Bold Italic"), Branco);
+	T(TEXT("CONFIGURAÇÕES DO JOGO"), X(100), Y(104), 18 * e, TEXT("Italic"), AzulTexto, 0, 4.5f * e);
+
+	// canto de cima: engrenagem + DESEMPENHO • QUALIDADE • CONTROLE + fechar
+	{
+		const float LargT = T(TEXT("DESEMPENHO • QUALIDADE • CONTROLE"), X(1232), Y(70), 14 * e, TEXT("Italic"), AzulTexto, 2, 3.2f * e);
+		const float XB = X(1232) - LargT - 16 * e;
+		Linha(FVector2D(XB, Y(64)), FVector2D(XB, Y(96)), 2.f * e, Cor255(70, 140, 255));
+		Icone(IcEngrenagem, FVector2D(XB - 26 * e, Y(80)), 13 * e, AzulTexto);
+	}
+	{
+		const FVector2D CF = Pt(1238, 40);
+		Linha(CF + FVector2D(-11, -11) * e, CF + FVector2D(11, 11) * e, 2.4f * e, Branco);
+		Linha(CF + FVector2D(-11, 11) * e, CF + FVector2D(11, -11) * e, 2.4f * e, Branco);
+		GM->AreaFechar = FBox2D(CF - FVector2D(20, 20) * e, CF + FVector2D(20, 20) * e);
+	}
+
+	// coluna da esquerda: categorias
+	const int32 NC = (int32)ECategoriaMenu::Total;
+	const ECategoriaMenu CatSel = APredioGameMode::CategoriaDoItem(GM->MenuIndice);
+	GM->AreaCategorias.SetNum(NC);
+	for (int32 c = 0; c < NC; ++c)
+	{
+		const float CY = 150.f + c * 64.f;
+		const bool bSel = (ECategoriaMenu)c == CatSel;
+		if (bSel)
+		{
+			RetArred(X(22), Y(CY), 250 * e, 56 * e, 7 * e, Cor255(26, 102, 232), Cor255(14, 58, 150));
+			ContornoArred(X(22), Y(CY), 250 * e, 56 * e, 7 * e, FMath::Max(1.f, 1.3f * e), Cor255(100, 165, 255));
+			Linha(Pt(250, CY + 20), Pt(257, CY + 28), 2.f * e, Branco);
+			Linha(Pt(257, CY + 28), Pt(250, CY + 36), 2.f * e, Branco);
+		}
+		else
+		{
+			Linha(Pt(30, CY + 60), Pt(268, CY + 60), FMath::Max(1.f, e), Cor255(30, 45, 70, 200));
+		}
+		const FLinearColor Cor = bSel ? Branco : AzulTexto;
+		Icone(IconeCategoria[c], Pt(56, CY + 28), 13 * e, Cor);
+		T(APredioGameMode::NomeCategoria((ECategoriaMenu)c), X(92), Y(CY + 15), 19 * e, TEXT("Regular"), Cor);
+		GM->AreaCategorias[c] = FBox2D(Pt(22, CY), Pt(272, CY + 56));
+	}
+
+	// lema no canto de baixo
+	Linha(Pt(40, 772), Pt(40, 858), 2.f * e, Cor255(70, 140, 255));
+	T(TEXT("VOE"), X(58), Y(770), 16 * e, TEXT("Italic"), AzulTexto, 0, 5.f * e);
+	T(TEXT("EXPLORE"), X(58), Y(797), 16 * e, TEXT("Italic"), AzulTexto, 0, 5.f * e);
+	T(TEXT("DOMINE"), X(58), Y(824), 16 * e, TEXT("Italic"), AzulTexto, 0, 5.f * e);
+
+	// lista de opções
+	const int32 N = (int32)EItemMenu::Total;
+	const float L0 = 300.f, L1 = 1228.f, Topo = 148.f, Base = 880.f;
+	const float RH = (Base - Topo) / N;
+	GM->AreaItens.SetNum(N);
+	for (int32 i = 0; i < N; ++i)
+	{
+		const float RY = Topo + i * RH;
+		const bool bSel = i == GM->MenuIndice;
+		if (bSel)
+		{
+			RetArred(X(L0), Y(RY + 1), (L1 - L0) * e, (RH - 3) * e, 6 * e, Cor255(21, 87, 214), Cor255(11, 38, 92));
+			ContornoArred(X(L0), Y(RY + 1), (L1 - L0) * e, (RH - 3) * e, 6 * e, FMath::Max(1.f, 1.4f * e), Cor255(76, 149, 255));
+		}
+		else
+		{
+			RetArred(X(L0), Y(RY + 1), (L1 - L0) * e, (RH - 3) * e, 5 * e, Cor255(13, 23, 39, 235), Cor255(11, 19, 33, 235));
+		}
+		const float CY = RY + (RH - 2) * 0.5f;
+		Icone(IconeItem[i], Pt(L0 + 32, CY), 11.5f * e, bSel ? Branco : Cor255(205, 218, 238));
+		T(GM->NomeItem(i), X(L0 + 66), Y(RY + 3), 16.5f * e, TEXT("Regular"), Branco);
+		T(GM->DescricaoItem(i), X(L0 + 66), Y(RY + 21.5f), 11.5f * e, TEXT("Regular"), bSel ? Cor255(170, 195, 235) : Cinza);
+
+		const ETipoValor Tipo = GM->TipoItem(i);
+		const FString Val = GM->ValorItem(i);
+		const bool bTemSeta = Tipo != ETipoValor::Chave;
+		if (bTemSeta)
+		{
+			const FLinearColor CS = Tipo == ETipoValor::Acao ? Apagado : Branco;
+			Linha(Pt(L1 - 26, CY - 6), Pt(L1 - 20, CY), 1.8f * e, CS);
+			Linha(Pt(L1 - 20, CY), Pt(L1 - 26, CY + 6), 1.8f * e, CS);
+		}
+		const float VY = CY - 11.f;
+		switch (Tipo)
+		{
+		case ETipoValor::Nenhum: // Continuar: botão de play
+		{
+			RetArred(X(L1 - 150), Y(CY - 13), 92 * e, 26 * e, 13 * e, Cor255(40, 120, 255), Cor255(25, 90, 230));
+			const FVector2D PC = Pt(L1 - 104, CY);
+			Tri(PC + FVector2D(-6, -8) * e, PC + FVector2D(-6, 8) * e, PC + FVector2D(8, 0) * e, Branco);
+			break;
+		}
+		case ETipoValor::Chave:
+		{
+			const bool bLig = GM->ChaveLigada(i);
+			T(Val, X(L1 - 88), Y(VY), 16.5f * e, TEXT("Regular"), Branco, 2);
+			const float SX0 = L1 - 72, SW = 44, SH = 22;
+			RetArred(X(SX0), Y(CY - SH * 0.5f), SW * e, SH * e, SH * 0.5f * e,
+				bLig ? Cor255(40, 125, 255) : Cor255(52, 62, 80),
+				bLig ? Cor255(60, 145, 255) : Cor255(60, 70, 88));
+			Disco(Pt(bLig ? SX0 + SW - SH * 0.5f : SX0 + SH * 0.5f, CY), (SH * 0.5f - 3) * e, Cor255(245, 249, 255), 16);
+			break;
+		}
+		case ETipoValor::Acao:
+			T(Val, X(L1 - 48), Y(VY), 16.5f * e, TEXT("Regular"), Cinza, 2);
+			break;
+		default:
+			T(Val, X(L1 - 48), Y(VY), 16.5f * e, TEXT("Regular"), Branco, 2);
+			break;
+		}
+		GM->AreaItens[i] = FBox2D(Pt(L0, RY), Pt(L1, RY + RH));
+	}
+	// barra de rolagem (tudo cabe, mas mantém o visual)
+	Linha(Pt(1244, Topo + 4), Pt(1244, Base - 4), 3.f * e, Cor255(25, 38, 60));
+	Linha(Pt(1244, Topo + 4), Pt(1244, Base - 60), 3.f * e, Cor255(60, 135, 255));
+
+	// rodapé com os botões
+	struct FDica { const TCHAR* Tecla; const TCHAR* Texto; };
+	const FDica Dicas[] = {
+		{ TEXT("↑↓"), TEXT("Selecionar") }, { TEXT("← →"), TEXT("Mudar") }, { TEXT("LB / RB"), TEXT("Categoria") },
+		{ TEXT("B / Esc"), TEXT("Voltar") }, { TEXT("A / Enter"), TEXT("Confirmar") } };
+	const FSlateFontInfo FT = Fonte(14 * e, TEXT("Bold"));
+	const FSlateFontInfo FL = Fonte(15.5f * e, TEXT("Regular"));
+	float Total = 0.f;
+	for (const FDica& Dc : Dicas) Total += Medir(Dc.Tecla, FT).X + 16 * e + 8 * e + Medir(Dc.Texto, FL).X + 34 * e;
+	float FX = W * 0.5f - Total * 0.5f;
+	const float FY = Y(918);
+	for (const FDica& Dc : Dicas)
+	{
+		const float TW = Medir(Dc.Tecla, FT).X;
+		ContornoArred(FX, FY - 2 * e, TW + 16 * e, 26 * e, 4 * e, FMath::Max(1.f, 1.2f * e), Cor255(190, 205, 230, 220));
+		T(Dc.Tecla, FX + 8 * e, FY + 2 * e, 14 * e, TEXT("Bold"), Branco);
+		FX += TW + 16 * e + 8 * e;
+		T(Dc.Texto, FX, FY + 1 * e, 15.5f * e, TEXT("Regular"), Cor255(220, 230, 250));
+		FX += Medir(Dc.Texto, FL).X + 34 * e;
 	}
 }

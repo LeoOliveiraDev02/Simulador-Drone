@@ -18,6 +18,7 @@ struct FAjustesDrone
 	bool bVSync = false;
 	bool bPainel = true;
 	bool bAjusteAuto = true;
+	float EscalaInterface = 1.0f; // tamanho do OSD (acessibilidade)
 
 	static FAjustesDrone& Get();
 	static FString Arquivo();

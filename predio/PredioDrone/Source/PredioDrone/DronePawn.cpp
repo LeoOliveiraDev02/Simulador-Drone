@@ -341,7 +341,34 @@ void ADronePawn::PassoFisica(float h)
 	Velocidade += Forca / Massa * 100.f * h;
 
 	MoverComColisao(h);
+	PrenderNosLimites();
 	SetActorRotation(Orientacao);
+}
+
+void ADronePawn::PrenderNosLimites()
+{
+	if (!bUsarLimites || !Limites.IsValid) return;
+	const FVector P = GetActorLocation();
+	FVector Q = P;
+	for (int32 E = 0; E < 3; ++E)
+	{
+		if (Q[E] < Limites.Min[E])
+		{
+			Q[E] = Limites.Min[E];
+			if (Velocidade[E] < 0.f) Velocidade[E] = -Velocidade[E] * 0.3f; // encosta na tela e volta devagar
+		}
+		else if (Q[E] > Limites.Max[E])
+		{
+			Q[E] = Limites.Max[E];
+			if (Velocidade[E] > 0.f) Velocidade[E] = -Velocidade[E] * 0.3f;
+		}
+	}
+	if (!Q.Equals(P, 0.01f))
+	{
+		Velocidade *= 0.97f;
+		if (Q.Z < P.Z) AlturaAlvo = FMath::Min(AlturaAlvo, Limites.Max.Z); // estabilizado não insiste no teto
+		SetActorLocation(Q, false, nullptr, ETeleportType::None);
+	}
 }
 
 void ADronePawn::MoverComColisao(float h)

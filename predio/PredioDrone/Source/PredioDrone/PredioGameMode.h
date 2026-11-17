@@ -19,28 +19,37 @@ struct FConexao
 	float Raio = 700.f;
 };
 
-/** Itens do menu (Start / Esc). */
+/** Itens do menu (Start / Esc), agrupados pelas categorias da coluna da esquerda. */
 enum class EItemMenu : uint8
 {
-	Continuar,
-	Sensibilidade,
+	Continuar,      // CONTINUAR
+	ModoVoo,        // JOGABILIDADE
+	VoltarInicio,
+	Sensibilidade,  // SENSIBILIDADE
 	Expo,
-	InvFrente,
-	InvSubir,
-	InvGiro,
-	InvLados,
-	ModoVoo,
-	Volume,
-	ModoFSR,
+	ModoFSR,        // VÍDEO
 	Gerador,
 	VSync,
 	Painel,
 	AjusteAuto,
-	VoltarInicio,
-	Padrao,
-	Sair,
+	Volume,         // ÁUDIO
+	InvFrente,      // CONTROLES
+	InvSubir,
+	InvGiro,
+	InvLados,
+	EscalaHUD,      // ACESSIBILIDADE
+	Padrao,         // AVANÇADO
+	Sair,           // SAIR DO JOGO
 	Total
 };
+
+enum class ECategoriaMenu : uint8
+{
+	Continuar, Jogabilidade, Sensibilidade, Video, Audio, Controles, Acessibilidade, Avancado, Sair, Total
+};
+
+/** Como o valor do item aparece no menu. */
+enum class ETipoValor : uint8 { Acao, Texto, Chave, Nenhum };
 
 /**
  * Regras do mapa do prédio:
@@ -73,7 +82,21 @@ public:
 	bool bMenuAberto = false;
 	int32 MenuIndice = 0;
 	FString NomeItem(int32 I) const;
+	FString DescricaoItem(int32 I) const;
 	FString ValorItem(int32 I) const;
+	ETipoValor TipoItem(int32 I) const;
+	bool ChaveLigada(int32 I) const;
+	static ECategoriaMenu CategoriaDoItem(int32 I);
+	static int32 PrimeiroItemDa(ECategoriaMenu C);
+	static FString NomeCategoria(ECategoriaMenu C);
+
+	// áreas clicáveis do menu (o HUD preenche ao desenhar; o mouse usa no quadro seguinte)
+	TArray<FBox2D> AreaItens;
+	TArray<FBox2D> AreaCategorias;
+	FBox2D AreaFechar = FBox2D(ForceInit);
+
+	// limites de voo: por dentro da tela de proteção e abaixo da borda de cima dela
+	FBox LimitesVoo;
 
 	static FString NomeModoFSR();
 	static bool FSRLigado();
@@ -102,6 +125,7 @@ private:
 	float CotaTerreo = 0.f;
 
 	// menu
+	FVector2D UltimoMouse = FVector2D::ZeroVector;
 	float RepeticaoV = 0.f;
 	float RepeticaoH = 0.f;
 	int32 UltimaDirVert = 0;
@@ -123,4 +147,6 @@ private:
 	TArray<FString> TourLinhas;
 	FString PastaTestes;
 	int32 UltimoPontoFoto = -1;
+	int32 TourFase = 0;      // 1 = fim do percurso, abre o menu para fotografar
+	float TourFimT = 0.f;
 };

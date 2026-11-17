@@ -6,13 +6,19 @@ Foco: gráfico bonito em visão FPV (óculos de drone), voando por dentro de um 
 ## Como jogar (no PC do Leonardo)
 - Tudo do mapa fica em **`D:\DronePredio`** (nada no disco C): projeto, conteúdo, recursos, cache do
   Unreal (`DDC`), logs, testes e o jogo empacotado (`jogo\Windows`).
-- `D:\DronePredio\JOGAR_PREDIO.bat` abre o jogo (com `-NotInstalled`, para os arquivos salvos ficarem no D).
+- Atalho **"Drone - Predio em Obra"** na área de trabalho (aponta para o jogo no D, com `-NotInstalled`;
+  é recriado a cada atualização). `D:\DronePredio\JOGAR_PREDIO.bat` faz o mesmo.
+- `ATUALIZAR_JOGO.bat`: compila + empacota + atalho + voo de teste, sem remontar o mapa (~6 min).
+  Regra combinada com o Leonardo: toda mudança pedida termina com o jogo atualizado.
 - Controle (modo 2): esquerdo ↑↓ sobe/desce (acelerador no ACRO), ←→ gira; direito frente/trás/lados.
   Y troca ESTABILIZADO/ACRO, X volta ao início, **Start abre o MENU**, Back ajuda.
   Teclado: W/S, A/D, setas, M, R, Esc (menu), F1 (ajuda).
-- MENU: sensibilidade, suavidade no centro (expo), inverter frente/trás (já vem invertido, como o
+- MENU (pausa de verdade): visual escuro com detalhes azuis, categorias à esquerda (Continuar,
+  Jogabilidade, Sensibilidade, Vídeo, Áudio, Controles, Acessibilidade, Avançado, Sair), ícones,
+  chaves liga/desliga; funciona com controle (LB/RB troca categoria), teclado e mouse. Opções: sensibilidade, suavidade no centro (expo), inverter frente/trás (já vem invertido, como o
   controle do Leonardo pede), inverter subir/descer, giro e lados, modo de voo, volume do drone,
-  modo do FSR 4, gerador de quadros, VSync, painel de FPS, ajuste automático, voltar ao início, sair.
+  modo do FSR 4, gerador de quadros, VSync, painel de FPS, ajuste automático, tamanho da interface,
+  voltar ao início, restaurar padrões, sair.
   Fica salvo em `jogo\Windows\PredioDrone\Configuracoes_Drone.txt`.
 - AMD: F2 modo do FSR 4, F3 gerador de quadros, F4 liga/desliga FSR (comparar com TSR),
   F5 painel de FPS, F6 ajuste automático para manter 60 FPS de base.
@@ -35,7 +41,12 @@ Cada andar é um grupo (`Andar0..4`) e cada laje outro (`Laje0..4`, piso de um a
 O `PredioGameMode` mostra só o andar atual; o vizinho aparece quando o drone chega perto do poço,
 da escada ou de um buraco (raio de 7 m) ou atravessa a laje. Cada andar fica aceso 1,5 s depois de
 deixar de ser preciso (sem isso o vizinho e as luzes dele ligavam/desligavam e a tela piscava).
-A laje de baixo também fica visível (vista pelos buracos). Tudo fica carregado na memória de vídeo,
+A laje de baixo também fica visível (vista pelos buracos). Na cobertura o 3º andar fica sempre desenhado.
+
+## Limites de voo
+O drone não sai do prédio: para 1,35 m fora das paredes (por dentro da tela, que fica a 1,6 m) e
+não sobe acima de 15,9 m (a tela da cobertura vai até 16,6 m, então por cima dela só aparece céu).
+Encostar no limite é como encostar na tela: o drone volta devagar, sem quebrar. Tudo fica carregado na memória de vídeo,
 então a troca é instantânea (não aparece "carregando"). As luzes de cada andar apagam junto.
 
 ## Tecnologias
