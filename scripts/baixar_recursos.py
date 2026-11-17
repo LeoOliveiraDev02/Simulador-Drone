@@ -37,9 +37,18 @@ MODELOS = {
     "rock_07": "1k",
     "stone_01": "1k",
     "grass_medium_01": "1k",
+    # usados pelo mapa do voo do E88 (faltavam no pacote de 10/11)
+    "Barrel_01": "1k",
+    "dead_tree_trunk_02": "1k",
+    "jacaranda_tree": "1k",
+    "modular_wooden_pier": "1k",
+    "wooden_crate_01": "1k",
+    "wooden_picnic_table": "1k",
 }
 
 HDRI = ("farm_field_puresky", "4k")
+# céus das 3 horas do dia do voo do E88 (mapa.gd, HORAS): salvos como <nome>_godot.hdr (2k basta)
+HDRIS_VOO = ["kloofendal_48d_partly_cloudy_puresky", "kloppenheim_06_puresky", "farm_field_puresky"]
 
 
 def baixar(url, destino):
@@ -86,6 +95,9 @@ def main():
     nome, res = HDRI
     h = info(nome)["hdri"][res]["hdr"]
     baixar(h["url"], os.path.join(rec, "ceu", f"{nome}.hdr"))
+    for nome in HDRIS_VOO:
+        h = info(nome)["hdri"]["2k"]["hdr"]
+        baixar(h["url"], os.path.join(rec, "ceu", f"{nome}_godot.hdr"))
     print("Pronto.")
 
 

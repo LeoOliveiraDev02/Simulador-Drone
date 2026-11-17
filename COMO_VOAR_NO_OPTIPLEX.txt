@@ -1,0 +1,35 @@
+SIMULADOR DE DRONE — VOO DO E88 NO OPTIPLEX (UBUNTU)
+=====================================================
+
+PARA QUAL PC
+  Dell OptiPlex 7010: Intel Core i5-3470, 8 GB de RAM, Intel HD Graphics 2500 (IVB GT1),
+  Ubuntu 26.04 (Wayland). Serve para outros PCs com vídeo integrado antigo no Linux.
+
+COMO ABRIR
+  1. Extraia o zip numa pasta (por exemplo, na pasta pessoal).
+  2. Abra o Terminal dentro dessa pasta (botão direito no espaço vazio > "Abrir no terminal").
+  3. Digite:   ./VOAR_E88_OPTIPLEX.sh   e aperte Enter.
+     (se disser "permissão negada", rode antes:  chmod +x VOAR_E88_OPTIPLEX.sh )
+  Na primeira vez ele prepara as texturas para a placa de vídeo (alguns minutos).
+  Os controles são os mesmos do COMO_VOAR_E88.txt.
+
+O QUE ESSE MODO FAZ (liga sozinho)
+  - Renderizador de Compatibilidade (OpenGL 3.3): é o que a HD 2500 roda.
+    (o Forward+ e o Mobile do Godot precisam de Vulkan, que essa Intel não tem completo)
+  - Mapa leve (o mesmo do celular): menos capim, árvores mais simples, sombra só perto.
+  - Sombra do sol em 2048 px (o normal é 8192, que não cabe na memória dessa placa).
+  - Física a 120 Hz e no máximo 60 FPS.
+  - FSR 1 da AMD feito à mão: o 3D é desenhado menor (50% a 85% da tela), o EASU aumenta
+    seguindo as bordas e o RCAS devolve a nitidez. Fica mais nítido que só esticar a imagem.
+  - Resolução automática: abaixo de 32 FPS por 3 s a imagem 3D diminui; com folga (55+), aumenta.
+  - No canto do painel aparece "FSR 1 (AMD) • 3D em XX%" e o FPS.
+
+TECLAS NOVAS
+  F8   liga/desliga o FSR 1 (desligado = aumento bilinear simples, para comparar)
+  Esc  configurações: "Qualidade gráfica" troca BAIXA/MÉDIA/ALTA (= 3D em 50/67/85%)
+
+O QUE NÃO TEM NESSA PLACA (e por quê)
+  - Gerador de quadros (FSR 3/4 ou XeSS): precisa de DirectX 12 ou Vulkan moderno.
+  - XeSS (Intel): precisa de DirectX 12 e placa com Shader Model 6.4 (DP4a).
+  - DirectX 12: não existe no Linux, e a HD 2500 (2012) não tem DirectX 12 nem no Windows.
+  Essas três ficam para a versão do PC com placa de vídeo moderna.

@@ -1,6 +1,6 @@
 SIMULADOR DE DRONE — ONDE PARAMOS
 =================================
-Atualizado: 10/11/2026 04:15 (trabalho noturno)
+Atualizado: 17/11/2026 (versão para o OptiPlex; seção no fim)
 
 >>> FOCO ATUAL (decidido por Leonardo em 10/11, 00:18): SÓ O DRONE E88 (dobrável) <<<
 Trabalho noturno autônomo: refinar o E88, fazer toda a física de voo e o mapa.
@@ -95,3 +95,44 @@ PRÓXIMOS PASSOS (sugestões)
 - Leonardo testar no PC (VOAR_E88.bat) e dizer como ficou a sensação de voo e o desempenho
 - Rádio via USB (aparece como joystick; ajustar eixos/canais do modelo dele)
 - Montagem peça por peça do E88 (Fase 2) usando o mesmo modelo do Blender
+
+
+==================================================
+VERSÃO OPTIPLEX (17/11/2026) — Linux, vídeo integrado antigo
+==================================================
+PEDIDO: rodar o voo do E88 no Dell OptiPlex 7010 (i5-3470, 8 GB, Intel HD Graphics 2500, Ubuntu 26.04,
+Wayland) "o importante é rodar", com FSR, gerador de quadros, XeSS e DirectX 12 "vai que funciona".
+DECIDIDO COM O LEONARDO: versão Linux só com o que roda lá. DirectX 12 não existe no Linux e a HD 2500
+não tem nem no Windows; XeSS 2.1 (upscaling + gerador) exige DirectX 12 + Shader Model 6.4; os geradores
+de quadros (FSR 3/4, XeSS) precisam de DX12/Vulkan moderno. No jogo, F9 e o menu explicam isso.
+
+PACOTE: SimuladorDrone-OptiPlex.zip (259 MB) entregue no chat e em C:\drone.
+  Abrir: extrair, terminal na pasta, ./VOAR_E88_OPTIPLEX.sh (instruções em COMO_VOAR_NO_OPTIPLEX.txt)
+  Gerar de novo: scripts/empacotar_optiplex.sh PASTA_RECURSOS GODOT_LINUX PASTA_NODE SAIDA.zip
+
+MODO OPTIPLEX (voo.gd, variável optiplex): liga sozinho no renderizador de Compatibilidade (OpenGL)
+  ou com --optiplex; --sem-optiplex desliga; --grafico=0/1/2 fixa o nível.
+  - mapa do celular (mapa.movel), qualidade_baixa, física 120 Hz, máx. 60 FPS, sombra do sol 2048 px
+  - nível começa em BAIXO (3D 50%, sem sombra/neblina/árvores longe) e sobe sozinho com 55+ FPS por 12 s;
+    MÉDIO = 67% com sombra e eucaliptal; ALTO = 85%
+  - FSR 1 feito à mão (scripts/fsr1_compat.gd + shaders/fsr1_easu.gdshader e fsr1_rcas.gdshader, portados do
+    ffx_fsr1.h da AMD): 3D num SubViewport menor com uma cópia da câmera, EASU aumenta, RCAS dá nitidez;
+    a tela principal fica com disable_3d. F8 liga/desliga (bilinear para comparar). Teste: erro médio contra
+    a imagem nativa 3,21 (FSR 1) x 3,55 (bilinear).
+  - números no servidor (prints): BAIXO ~0,8-1,1 milhão de triângulos, MÉDIO ~2 milhões, ~360 MB de vídeo.
+    FPS de verdade só no OptiPlex (o servidor não tem placa de vídeo). O painel mostra FPS e "FSR 1 • 3D em X%".
+
+RECURSOS (não ficam no Git):
+  - o voo_e88_recursos.zip de C:\drone (10/11) estava velho para o código atual: faltavam os céus
+    *_godot.hdr e 6 modelos (Barrel_01, dead_tree_trunk_02, jacaranda_tree, modular_wooden_pier,
+    wooden_crate_01, wooden_picnic_table). Agora o scripts/baixar_recursos.py baixa tudo (céus em 2k).
+  - modelos_movel: plantas e pedras pelo blender/modelos_celular.py (rodado com "pip install bpy");
+    árvores pelo scripts/arvores_optiplex.sh (gltfpack -sa: copa mais cheia que o Decimate; jacarandá de
+    3,9 milhões -> 101 mil; eucalipto -> 31 mil) + optiplex/copiar_alpha.mjs (devolve o BLEND das folhas,
+    senão o shader das folhas não é aplicado) + optiplex/regravar_glb.mjs (JPEGs do Blender que o Godot recusa).
+  - texturas: compressão S3TC + mipmaps só no pacote do OptiPlex.
+
+PENDENTE:
+  - Leonardo testar no OptiPlex e mandar o FPS de cada nível (BAIXO/MÉDIO).
+  - Erros "Compound hierarchy is too deep" na colisão das árvores originais (só com os modelos pesados; no
+    modo OptiPlex sumiram).

@@ -5,6 +5,9 @@ extends Node3D
 ##   --qualidade=baixa   menos grama/árvores e sem efeitos pesados (PC fraco)
 ##   --teste-voo         voo automático sem tela, imprime os números (para testar a física)
 ##   --prints            tira prints do voo e fecha
+##   --optiplex          PC com vídeo integrado antigo (Intel HD 2500 etc.): mapa leve + FSR 1 feito à mão.
+##                       Liga sozinho quando o jogo abre no renderizador de Compatibilidade (OpenGL);
+##                       --sem-optiplex desliga; --grafico=0/1/2 fixa o nível (baixo/médio/alto).
 
 const ZONA_MORTA := 0.08
 const ORDENS_RADIO := [["A", "E", "T", "R"], ["T", "A", "E", "R"], ["A", "E", "R", "T"]]
@@ -17,6 +20,8 @@ var camera: CameraSegue
 var hud: Hud
 var toque: ControleToque
 var movel_ativo := false
+var optiplex := false            # PC fraco no OpenGL (ver --optiplex)
+var fsr1: Fsr1Compat
 var grafico := 1                  # celular: 0 baixo, 1 médio, 2 alto (ajusta sozinho se o FPS cair)
 var grafico_auto := true
 var _tempo_fps_baixo := 0.0
@@ -77,7 +82,28 @@ func _ready() -> void:
 			modo_prints = true
 		elif a == "--previa":
 			qualidade_baixa = true
+		elif a == "--optiplex":
+			optiplex = true
 	var movel := OS.has_feature("mobile") or "--movel" in OS.get_cmdline_user_args()
+	if not movel and RenderingServer.get_current_rendering_method() == "gl_compatibility" \
+			and not "--sem-optiplex" in OS.get_cmdline_user_args():
+		optiplex = true
+	if optiplex and not movel:
+		# PC com vídeo integrado antigo: mapa do celular (menos capim, árvores simples, sombra curta),
+		# física a 120 Hz e no máximo 60 quadros; o 3D passa pelo FSR 1 feito à mão (Fsr1Compat)
+		qualidade_baixa = true
+		Engine.physics_ticks_per_second = 120
+		Engine.max_physics_steps_per_frame = 4
+		Engine.max_fps = 60
+		# sombra do sol: o projeto usa 8192 px (placa dedicada); 2048 cabe na memória da Intel
+		RenderingServer.directional_shadow_atlas_set_size(2048, true)
+		grafico = 0   # começa com o 3D em 50% e sobe sozinho se sobrar FPS
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--grafico="):   # 0 baixo, 1 médio, 2 alto (fixo, sem ajuste automático)
+				grafico = clampi(int(a.get_slice("=", 1)), 0, 2)
+				grafico_auto = false
+	else:
+		optiplex = false
 	if movel:
 		qualidade_baixa = true
 		# celular: física a 120 Hz (sem acumular passos atrasados), 3D em 70% da
@@ -107,7 +133,7 @@ func _ready() -> void:
 	mapa = Mapa.new()
 	mapa.name = "Mapa"
 	mapa.previa = "--previa" in OS.get_cmdline_user_args()
-	mapa.movel = movel
+	mapa.movel = movel or optiplex
 	mapa.progresso.connect(carregando.definir)
 	add_child(mapa)
 	await mapa.montar(qualidade_baixa or modo_teste)
@@ -146,6 +172,12 @@ func _ready() -> void:
 	camera.alvo = drone
 	camera.current = true
 	camera.posicionar_ja()
+	if optiplex:
+		fsr1 = Fsr1Compat.new()
+		fsr1.name = "FSR1"
+		fsr1.camera_origem = camera
+		add_child(fsr1)
+		_aplicar_grafico()
 
 	hud = Hud.new()
 	add_child(hud)
@@ -342,11 +374,16 @@ func _unhandled_input(ev: InputEvent) -> void:
 				else:
 					hud.mostrar("Para inverter frente/trás use Shift+F7", 2.5)
 			KEY_F8:
-				if not movel_ativo:
+				if optiplex:
+					ciclar_modo_pc()
+					hud.mostrar("Imagem: " + texto_modo_pc() + "  (F8 troca)", 2.5)
+				elif not movel_ativo:
 					ciclar_modo_pc()
 					hud.mostrar("Imagem: " + texto_modo_pc() + "  (F8 troca)", 2.5)
 			KEY_F9:
-				if not movel_ativo:
+				if optiplex:
+					hud.mostrar("Gerador de quadros: " + texto_gerador(), 5.0)
+				elif not movel_ativo:
 					alternar_gerador_menu()
 					hud.mostrar("Gerador de quadros: " + texto_gerador(), 4.0)
 			KEY_F11:
@@ -391,7 +428,10 @@ func _botao_toque(nome: String) -> void:
 
 
 func _aplicar_grafico() -> void:
-	get_viewport().scaling_3d_scale = ESCALA_3D[grafico]
+	if fsr1:
+		fsr1.definir_escala(ESCALA_3D[grafico])
+	else:
+		get_viewport().scaling_3d_scale = ESCALA_3D[grafico]
 	mapa.nivel_grafico(grafico)
 
 
@@ -405,7 +445,7 @@ func _ajuste_automatico(delta: float) -> void:
 			mapa.nivel_grafico_pc(qualidade_pc)
 			hud.mostrar("Qualidade gráfica ajustada para " + NOMES_QUALIDADE[qualidade_pc] + " (FPS baixo). Esc para escolher.", 3.0)
 	# mínimo de 30 FPS: se ficar abaixo de 32 por 3 s, baixa o gráfico; se sobrar folga (55+) por 12 s, sobe
-	if not movel_ativo or not grafico_auto:
+	if not (movel_ativo or optiplex) or not grafico_auto:
 		return
 	var fps := Engine.get_frames_per_second()
 	_tempo_fps_baixo = _tempo_fps_baixo + delta if fps < 32 else 0.0
@@ -530,6 +570,8 @@ func _process(_delta: float) -> void:
 			nome += "  •  FRENTE/TRÁS INVERTIDO (Shift+F7)"
 		if inverter_acel:
 			nome += "  •  ACELERADOR INVERTIDO (Shift+F6)"
+		if fsr1:
+			nome += "  •  " + fsr1.texto()
 		hud.atualizar(drone, vento, camera, nome, dist, Mapa.LIMITE)
 		mapa.aplicar_vento(vento.direcao, vento.velocidade, vento.rajada_atual)
 
@@ -850,7 +892,11 @@ func _salvar_print(nome: String) -> void:
 	DirAccess.make_dir_recursive_absolute(pasta)
 	var img := get_viewport().get_texture().get_image()
 	img.save_png(pasta.path_join(nome + ".png"))
-	print("print salvo: ", nome)
+	# números do quadro (para comparar versões): memória de vídeo e triângulos desenhados
+	print("print salvo: ", nome, "  |  vídeo %d MB, %d mil triângulos, %d chamadas de desenho" % [
+		Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0,
+		Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME) / 1000.0,
+		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)])
 
 
 func _quadros(n: int) -> void:
@@ -973,16 +1019,23 @@ func _aplicar_vsync() -> void:
 
 
 func texto_modo_pc() -> String:
+	if fsr1:
+		return fsr1.texto()
 	return MODOS_PC[modo_pc][0]
 
 
 func ciclar_modo_pc() -> void:
+	if fsr1:
+		fsr1.alternar()
+		return
 	modo_pc = (modo_pc + 1) % MODOS_PC.size()
 	_aplicar_modo_pc(false)
 	_salvar_cfg_pc()
 
 
 func texto_gerador() -> String:
+	if optiplex:
+		return "indisponível nesta placa (precisa de DirectX 12 ou Vulkan moderno)"
 	var ligado := bool(ProjectSettings.get_setting("rendering/amd_fsr/frame_generation", false))
 	if not ligado:
 		return "DESLIGADO"
@@ -990,6 +1043,9 @@ func texto_gerador() -> String:
 
 
 func alternar_gerador_menu() -> void:
+	if optiplex:
+		hud.mostrar("Gerador de quadros " + texto_gerador(), 5.0)
+		return
 	var ligado := not bool(ProjectSettings.get_setting("rendering/amd_fsr/frame_generation", false))
 	ProjectSettings.set_setting("rendering/amd_fsr/frame_generation", ligado)
 	if ligado and modo_pc == 0:
@@ -1009,10 +1065,17 @@ func reabrir_jogo() -> void:
 
 
 func texto_qualidade_pc() -> String:
+	if optiplex:
+		return ["BAIXA", "MÉDIA", "ALTA"][grafico] + (" (automática)" if grafico_auto else "")
 	return NOMES_QUALIDADE[qualidade_pc] + (" (automática)" if qualidade_pc_auto else "")
 
 
 func ciclar_qualidade_pc() -> void:
+	if optiplex:
+		grafico = (grafico + 1) % 3
+		grafico_auto = false
+		_aplicar_grafico()
+		return
 	qualidade_pc = (qualidade_pc + 1) % 4
 	qualidade_pc_auto = false
 	if mapa:

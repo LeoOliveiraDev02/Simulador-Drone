@@ -55,7 +55,7 @@ func _ready() -> void:
 	_linha(func(): return "Continuar o voo", fechar)
 	_linha(func(): return "Desafio: " + voo.texto_desafio() + "  (J troca)", voo.ciclar_desafio)
 	_linha(func(): return "Imagem: " + voo.texto_modo_pc(), voo.ciclar_modo_pc)
-	_linha(func(): return "Gerador de quadros FSR: " + voo.texto_gerador(), voo.alternar_gerador_menu)
+	_linha(func(): return ("Gerador de quadros: " if voo.optiplex else "Gerador de quadros FSR: ") + voo.texto_gerador(), voo.alternar_gerador_menu)
 	_linha(func(): return "Qualidade gráfica: " + voo.texto_qualidade_pc(), voo.ciclar_qualidade_pc)
 	_linha(func(): return "Hora do dia: " + voo.texto_hora(), voo.ciclar_hora)
 	_linha(func(): return "Velocidade do drone: " + voo.texto_marcha(), voo.ciclar_marcha)
