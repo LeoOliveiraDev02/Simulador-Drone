@@ -46,3 +46,13 @@ O Unreal pedia o ".NET Framework SDK" só para um módulo do editor que já vem 
 (precisa de administrador), foi criada uma chave do usuário apontando para uma pasta vazia
 (`CORRIGIR_E_COMPILAR.bat`). Para desfazer: `reg delete "HKCU\SOFTWARE\Microsoft\Microsoft SDKs\NETFXSDK\4.8" /f`.
 O certo, quando der, é instalar o ".NET Framework 4.8.1 Developer Pack".
+
+## Teste automático (17/11, 17:36) — executável Shipping, janela 1920x1080, RX 9060 XT
+- FSR 4.1.2 (upscaling por IA, modo Qualidade) e gerador de quadros FSR 4.0.2 iniciados.
+- FPS de base médio 80 (≈160 com o gerador), mínimo por foto 77; pior 1% dos quadros 50 (picos na troca de andar).
+- Otimização que resolveu: lâmpadas da gambiarra sem sombra/névoa (só as luzes de obra fazem sombra).
+
+## Para melhorar depois (ideias)
+- Tela de proteção ainda puxa para o azul na sombra (luz do céu); malha poderia ser mais fina.
+- Som dos motores, partículas de poeira no ar, rádio via USB (só teclado e controle por enquanto).
+- Pequenos travamentos (1%) na troca de andar: pré-aquecer o Lumen dos andares vizinhos.
