@@ -5,7 +5,6 @@
 #include "PredioGameMode.generated.h"
 
 class ADronePawn;
-class UMaterialInstanceDynamic;
 
 struct FGrupoVisivel
 {
@@ -17,24 +16,38 @@ struct FConexao
 {
 	int32 AndarDeBaixo = 0;   // liga AndarDeBaixo e AndarDeBaixo+1
 	FVector Posicao = FVector::ZeroVector;
-	float Raio = 450.f;
+	float Raio = 700.f;
 };
 
-struct FPortal
+/** Itens do menu (Start / Esc). */
+enum class EItemMenu : uint8
 {
-	TWeakObjectPtr<AActor> Ator;
-	TArray<UMaterialInstanceDynamic*> Materiais;
-	int32 Numero = 0;
-	bool bPassou = false;
+	Continuar,
+	Sensibilidade,
+	Expo,
+	InvFrente,
+	InvSubir,
+	InvGiro,
+	InvLados,
+	ModoVoo,
+	Volume,
+	ModoFSR,
+	Gerador,
+	VSync,
+	Painel,
+	AjusteAuto,
+	VoltarInicio,
+	Padrao,
+	Sair,
+	Total
 };
 
 /**
  * Regras do mapa do prédio:
- *  - só renderiza o andar onde o drone está (+ o vizinho quando ele chega perto
- *    do poço do elevador, da escada ou de um buraco na laje) — troca instantânea,
- *    tudo já está carregado na memória de vídeo;
- *  - portais de treino com cronômetro;
- *  - atalhos das tecnologias AMD (FSR 4 + gerador de quadros + Anti-Lag 2);
+ *  - só renderiza o andar onde o drone está (+ o vizinho perto do poço do
+ *    elevador, da escada ou de um buraco na laje) — troca instantânea;
+ *  - menu de configurações (controle, sensibilidade, som, AMD);
+ *  - tecnologias AMD (FSR 4 + gerador de quadros + Anti-Lag 2);
  *  - ajuste automático para manter 60 FPS de base;
  *  - voo automático de teste (-tour) que tira prints e mede o FPS.
  */
@@ -51,18 +64,16 @@ public:
 	// lidos pelo HUD
 	int32 AndarAtual = 0;
 	int32 NumAndares = 1;
-	int32 ProximoPortal = 1;
-	int32 TotalPortais = 0;
-	bool bCronometroLigado = false;
-	float Cronometro = 0.f;
-	float MelhorTempo = 0.f;
 	float FPSBase = 0.f;
 	float MsGPU = 0.f;
 	float MsJogo = 0.f;
-	bool bAjusteAuto = true;
 	bool bMostrarAjuda = false;
-	bool bMostrarDesempenho = true;
 	int32 NivelAjuste = 0;   // 0 = máximo; sobe quando precisa aliviar
+
+	bool bMenuAberto = false;
+	int32 MenuIndice = 0;
+	FString NomeItem(int32 I) const;
+	FString ValorItem(int32 I) const;
 
 	static FString NomeModoFSR();
 	static bool FSRLigado();
@@ -72,8 +83,10 @@ public:
 private:
 	void ColetarAtores();
 	void AtualizarAndares(bool bForcar);
-	void AtualizarPortais();
 	void TeclasAtalho();
+	void AbrirMenu(bool bAbrir);
+	void TickMenu(float Dt);
+	void MudarItem(int32 Direcao, bool bConfirmar);
 	void AjusteAutomatico(float Dt);
 	void AplicarNivelAjuste();
 	void TickTour(float Dt);
@@ -83,21 +96,27 @@ private:
 
 	TMap<FName, FGrupoVisivel> Grupos;   // "Andar0", "Laje1", ...
 	TArray<FConexao> Conexoes;
-	TArray<FPortal> Portais;
+	TMap<int32, double> AndarPedido; // última vez que cada andar precisou aparecer (evita pisca-pisca)
+	TArray<TPair<int32, FTransform>> Rota; // pontos invisíveis do voo de teste
 	float AlturaAndar = 300.f;
 	float CotaTerreo = 0.f;
+
+	// menu
+	float RepeticaoV = 0.f;
+	float RepeticaoH = 0.f;
+	int32 UltimaDirVert = 0;
+	int32 UltimaDirHoriz = 0;
 
 	// desempenho
 	float AcumBaixo = 0.f;
 	float AcumAlto = 0.f;
 	float SuavDt = 1.f / 60.f;
-	float TempoAteSair = -1.f;
 
 	// tour
 	bool bTour = false;
 	TArray<FVector> TourPontos;
 	TArray<int32> TourFotoNoPonto;
-	float TourS = 0.f;          // posição ao longo do caminho (índice + fração)
+	float TourS = 0.f;
 	float TourEspera = 0.f;
 	int32 TourFotos = 0;
 	TArray<float> TourFrames;   // ms

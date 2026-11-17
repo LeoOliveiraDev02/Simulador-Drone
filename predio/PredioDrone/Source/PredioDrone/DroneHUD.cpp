@@ -1,6 +1,7 @@
 ﻿#include "DroneHUD.h"
 #include "DronePawn.h"
 #include "PredioGameMode.h"
+#include "AjustesDrone.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -69,15 +70,6 @@ void ADroneHUD::DrawHUD()
 	Caixa(W * 0.5f + 4.f * E, H * 0.5f - 1.f * E, 10.f * E, 2.f * E, Mira);
 	Caixa(W * 0.5f - 1.f * E, H * 0.5f + 4.f * E, 2.f * E, 8.f * E, Mira);
 
-	// portais / cronômetro
-	if (GM->TotalPortais > 0)
-	{
-		FString P = FString::Printf(TEXT("PORTAL %d/%d"), GM->ProximoPortal, GM->TotalPortais);
-		if (GM->bCronometroLigado) P += FString::Printf(TEXT("   %.1f s"), GM->Cronometro);
-		if (GM->MelhorTempo > 0.f) P += FString::Printf(TEXT("   recorde %.1f s"), GM->MelhorTempo);
-		Texto(P, W * 0.5f, M, 0.9f * E, Amarelo, true);
-	}
-
 	// mensagens
 	if (D->TempoMensagem > 0.f && !D->Mensagem.IsEmpty())
 	{
@@ -90,7 +82,7 @@ void ADroneHUD::DrawHUD()
 	}
 
 	// --- painel de desempenho (F5) ---
-	if (GM->bMostrarDesempenho)
+	if (FAjustesDrone::Get().bPainel && !GM->bMenuAberto)
 	{
 		const bool bFG = APredioGameMode::GeradorLigado();
 		const bool bFSR = APredioGameMode::FSRLigado();
@@ -102,7 +94,7 @@ void ADroneHUD::DrawHUD()
 		Texto(L1, X, Y, 0.75f * E, CorFPS);
 		Texto(FString::Printf(TEXT("GPU %.1f ms   jogo %.1f ms"), GM->MsGPU, GM->MsJogo), X, Y + 24.f * E, 0.7f * E, Branco);
 		Texto(bFSR ? FString::Printf(TEXT("AMD FSR 4 (IA): %s"), *APredioGameMode::NomeModoFSR()) : FString(TEXT("FSR desligado (TSR)")), X, Y + 48.f * E, 0.7f * E, bFSR ? Verde : Amarelo);
-		Texto(FString::Printf(TEXT("Gerador de quadros AMD: %s   Ajuste 60 FPS: %s"), bFG ? TEXT("LIGADO") : TEXT("desligado"), GM->bAjusteAuto ? TEXT("auto") : TEXT("manual")), X, Y + 72.f * E, 0.7f * E, bFG ? Verde : Branco);
+		Texto(FString::Printf(TEXT("Gerador de quadros AMD: %s   Ajuste 60 FPS: %s"), bFG ? TEXT("LIGADO") : TEXT("desligado"), FAjustesDrone::Get().bAjusteAuto ? TEXT("auto") : TEXT("manual")), X, Y + 72.f * E, 0.7f * E, bFG ? Verde : Branco);
 	}
 
 	// --- ajuda (F1) ---
@@ -114,22 +106,52 @@ void ADroneHUD::DrawHUD()
 			TEXT(""),
 			TEXT("Controle (modo 2):  analógico esquerdo ↑↓ sobe/desce (acelerador no ACRO), ←→ gira"),
 			TEXT("                    analógico direito ↑↓ frente/trás, ←→ lados"),
-			TEXT("                    Y troca ESTABILIZADO/ACRO    X volta ao último portal    Start ajuda"),
+			TEXT("                    Y troca ESTABILIZADO/ACRO    X volta ao início"),
+			TEXT("                    START abre o MENU (sensibilidade, inverter eixos, som, AMD)"),
 			TEXT("Teclado:  W/S sobe/desce   A/D gira   setas (ou I J K L) frente/trás/lados"),
-			TEXT("          M modo   R volta ao portal   Esc sair (duas vezes)"),
+			TEXT("          M modo   R volta ao início   Esc menu   F1 esta ajuda"),
 			TEXT(""),
 			TEXT("AMD:  F2 modo do FSR 4   F3 gerador de quadros   F4 FSR liga/desliga (comparar)"),
 			TEXT("      F5 painel de FPS   F6 ajuste automático para manter 60 FPS de base"),
 			TEXT(""),
-			TEXT("Siga os portais laranja: corredores, poço do elevador, escada e buracos na laje."),
+			TEXT("Voe pelos corredores, pelo poço do elevador, pela escada e pelos buracos na laje."),
 			TEXT("Só o andar onde você está é desenhado — o vizinho aparece quando chega perto"),
-			TEXT("do poço, da escada ou de um buraco. Bateu forte = hélice quebra e volta ao portal."),
+			TEXT("do poço, da escada ou de um buraco. Bateu forte = hélice quebra e volta ao início."),
 		};
+
 		float Y = H * 0.19f;
 		for (const TCHAR* L : Linhas)
 		{
 			Texto(L, W * 0.21f, Y, 0.8f * E, Branco);
 			Y += 30.f * E;
 		}
+	}
+
+	// --- menu (Start / Esc) ---
+	if (GM->bMenuAberto)
+	{
+		Caixa(0, 0, W, H, FLinearColor(0, 0, 0, 0.45f));
+		const int32 N = (int32)EItemMenu::Total;
+		const float Lh = 36.f * E;
+		const float Lw = 760.f * E;
+		const float X0 = W * 0.5f - Lw * 0.5f;
+		const float Y0 = H * 0.5f - (N * Lh + 110.f * E) * 0.5f;
+		Caixa(X0 - 20.f * E, Y0 - 20.f * E, Lw + 40.f * E, N * Lh + 150.f * E, FLinearColor(0.02f, 0.02f, 0.025f, 0.86f));
+		Texto(TEXT("MENU"), W * 0.5f, Y0, 1.15f * E, Amarelo, true);
+		float Y = Y0 + 56.f * E;
+		for (int32 i = 0; i < N; ++i)
+		{
+			const bool bSel = i == GM->MenuIndice;
+			if (bSel) Caixa(X0 - 8.f * E, Y - 3.f * E, Lw + 16.f * E, Lh - 2.f * E, FLinearColor(1.f, 0.75f, 0.1f, 0.22f));
+			const FLinearColor Cor = bSel ? Amarelo : Branco;
+			Texto(GM->NomeItem(i), X0 + 6.f * E, Y, 0.8f * E, Cor);
+			const FString Val = GM->ValorItem(i);
+			if (!Val.IsEmpty())
+			{
+				Texto(bSel ? FString::Printf(TEXT("<  %s  >"), *Val) : Val, X0 + Lw - 6.f * E, Y, 0.8f * E, Cor, false, true);
+			}
+			Y += Lh;
+		}
+		Texto(TEXT("↑↓ escolhe    ←→ muda    A / Enter confirma    B / Start / Esc fecha"), W * 0.5f, Y + 14.f * E, 0.65f * E, FLinearColor(1, 1, 1, 0.7f), true);
 	}
 }

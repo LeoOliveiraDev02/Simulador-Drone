@@ -6,7 +6,6 @@ from mathutils import Vector
 
 saida, grupos, cam, alvo = sys.argv[1], sys.argv[2].split(","), [float(v) for v in sys.argv[3].split(",")], [float(v) for v in sys.argv[4].split(",")]
 bpy.ops.wm.read_factory_settings(use_empty=True)
-gp.malha_portal()
 for k in range(gp.N_ANDARES):
     gp.andar(k)
 for n in grupos:

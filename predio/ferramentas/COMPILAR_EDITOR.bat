@@ -7,5 +7,7 @@ if not "%~1"=="log" (
   echo FIM %date% %time% >> "%~dp0logs\%~n0.log"
   exit /b
 )
-call "D:\JOGOS\UE_5.8\Engine\Build\BatchFiles\Build.bat" PredioDroneEditor Win64 Development -Project="C:\drone\predio\PredioDrone\PredioDrone.uproject" -WaitMutex -NoHotReloadFromIDE
+rem cache do Unreal (shaders etc.) fica no D, na pasta do projeto
+set "UE-LocalDataCachePath=D:\DronePredio\DDC"
+call "D:\JOGOS\UE_5.8\Engine\Build\BatchFiles\Build.bat" PredioDroneEditor Win64 Development -Project="D:\DronePredio\PredioDrone\PredioDrone.uproject" -WaitMutex -NoHotReloadFromIDE
 echo codigo=%errorlevel%

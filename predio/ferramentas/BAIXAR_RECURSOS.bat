@@ -12,4 +12,4 @@ if not exist %PY% (
   for /d %%D in ("C:\Program Files\Blender Foundation\Blender 5.2\*") do if exist "%%D\python\bin\python.exe" set PY="%%D\python\bin\python.exe"
 )
 echo usando %PY%
-%PY% -I "C:\drone\predio\ferramentas\baixar_recursos_predio.py" "C:\drone\predio\recursos"
+%PY% -I "D:\DronePredio\ferramentas\baixar_recursos_predio.py" "D:\DronePredio\recursos"

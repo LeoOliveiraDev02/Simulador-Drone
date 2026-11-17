@@ -7,8 +7,8 @@ if not "%~1"=="log" (
   echo FIM %date% %time% >> "%~dp0logs\%~n0.log"
   exit /b
 )
-if not exist "C:\drone\predio\testes" mkdir "C:\drone\predio\testes"
-del /q "C:\drone\predio\testes\*.*" >nul 2>&1
-start "" /wait "D:\JOGOS\UE_5.8\_PredioDrone_jogo\Windows\PredioDrone.exe" -tour -pastatestes=C:/drone/predio/testes -windowed -resx=1920 -resy=1080
-type "C:\drone\predio\testes\tour_resultado.txt"
-dir "C:\drone\predio\testes"
+if not exist "D:\DronePredio\testes" mkdir "D:\DronePredio\testes"
+del /q "D:\DronePredio\testes\*.*" >nul 2>&1
+start "" /wait "D:\DronePredio\jogo\Windows\PredioDrone.exe" -NotInstalled -tour -pastatestes=D:/DronePredio/testes -windowed -resx=1920 -resy=1080
+type "D:\DronePredio\testes\tour_resultado.txt"
+dir "D:\DronePredio\testes"

@@ -7,12 +7,14 @@ if not "%~1"=="log" (
   echo FIM %date% %time% >> "%~dp0logs\%~n0.log"
   exit /b
 )
+rem cache do Unreal (shaders etc.) fica no D, na pasta do projeto
+set "UE-LocalDataCachePath=D:\DronePredio\DDC"
 taskkill /im UnrealEditor.exe /f >nul 2>&1
-call "D:\JOGOS\UE_5.8\Engine\Build\BatchFiles\Build.bat" PredioDroneEditor Win64 Development -Project="C:\drone\predio\PredioDrone\PredioDrone.uproject" -WaitMutex -NoHotReloadFromIDE
+call "D:\JOGOS\UE_5.8\Engine\Build\BatchFiles\Build.bat" PredioDroneEditor Win64 Development -Project="D:\DronePredio\PredioDrone\PredioDrone.uproject" -WaitMutex -NoHotReloadFromIDE
 if errorlevel 1 (
   echo COMPILACAO FALHOU
   exit /b 1
 )
-start "" /wait "D:\JOGOS\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "C:\drone\predio\PredioDrone\PredioDrone.uproject" -ExecutePythonScript="C:/drone/predio/unreal/construir_mapa.py" -unattended -nosplash -NoLiveCoding
+start "" /wait "D:\JOGOS\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "D:\DronePredio\PredioDrone\PredioDrone.uproject" -ExecutePythonScript="D:/DronePredio/unreal/construir_mapa.py" -unattended -nosplash -NoLiveCoding
 echo editor=%errorlevel%
-type "C:\drone\predio\logs\construir_mapa_progresso.txt"
+type "D:\DronePredio\logs\construir_mapa_progresso.txt"

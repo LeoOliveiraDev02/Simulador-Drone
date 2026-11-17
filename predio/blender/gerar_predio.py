@@ -1,8 +1,8 @@
 """Gera o PRÉDIO EM CONSTRUÇÃO andar por andar (Blender 5.2, bpy).
 
 Uso:  python gerar_predio.py PASTA_SAIDA
-Saída: um .fbx por grupo (Andar0..Andar4, Laje0..Laje4, Portal) + layout.json com
-props (modelos do Poly Haven), luzes, portais, ligações verticais e início.
+Saída: um .fbx por grupo (Andar0..Andar4, Laje0..Laje4) + layout.json com
+props (modelos do Poly Haven), luzes, pontos de rota, ligações verticais e início.
 
 Unidades: metros, Z para cima. Prédio de 24 x 16 m, pé-direito (piso a piso) 3,00 m.
 Cada grupo vira um Static Mesh Nanite no Unreal; o jogo mostra só o andar do drone.
@@ -66,7 +66,7 @@ def G(nome):
     return GRUPOS[nome]
 
 
-LAYOUT = {"props": [], "luzes": [], "portais": [], "conexoes": [], "inicio": None, "decalques": [],
+LAYOUT = {"props": [], "luzes": [], "rota": [], "conexoes": [], "inicio": None, "decalques": [],
           "altura_andar": H, "n_andares": N_ANDARES}
 
 
@@ -140,8 +140,9 @@ def cilindro(r, h, n=10, r2=None):
     return v, f
 
 
-def torno(perfil, n=24):
-    """Sólido de revolução em Z a partir de [(raio, z), ...] (de baixo para cima)."""
+def torno(perfil, n=24, tampar=True):
+    """Sólido de revolução em Z a partir de [(raio, z), ...] (de baixo para cima).
+    tampar=True fecha as pontas que não terminam no eixo (nada de ver através)."""
     v, f = [], []
     m = len(perfil)
     for i in range(n):
@@ -152,7 +153,20 @@ def torno(perfil, n=24):
         j = (i + 1) % n
         for k in range(m - 1):
             f.append((i * m + k, j * m + k, j * m + k + 1, i * m + k + 1))
+    if tampar:
+        if perfil[0][0] > 1e-4:
+            f.append(tuple(i * m for i in range(n - 1, -1, -1)))
+        if perfil[-1][0] > 1e-4:
+            f.append(tuple(i * m + m - 1 for i in range(n)))
     return v, f
+
+
+def torno_casca(perfil, esp, n=24):
+    """Peça oca com parede de verdade (tambor, bacia): lado de fora + lado de dentro + borda."""
+    dentro = []
+    for idx, (r, z) in enumerate(perfil):
+        dentro.append((max(r - esp, 0.004), z + (esp if idx == 0 else 0.0)))
+    return torno(list(perfil) + list(reversed(dentro)), n, tampar=True)
 
 
 def transformar(verts, loc=(0, 0, 0), rot=(0, 0, 0), esc=(1, 1, 1)):
@@ -673,8 +687,8 @@ def armadura_cobertura():
 
 # ----------------------------------------------------------------------------- objetos modelados
 def betoneira(g, x, y, z, ang):
-    perfil = [(0.02, 0.0), (0.35, 0.05), (0.45, 0.35), (0.42, 0.55), (0.28, 0.80), (0.18, 0.86)]
-    v, f = torno(perfil, 28)
+    perfil = [(0.0, 0.0), (0.35, 0.05), (0.45, 0.35), (0.42, 0.55), (0.28, 0.80), (0.18, 0.86)]
+    v, f = torno_casca(perfil, 0.018, 28)
     v = transformar(v, (0, 0, 0), (math.radians(-35), 0, 0))
     v = transformar(v, (x, y, z + 0.55), (0, 0, ang))
     G(g).add(v, f, "METAL_ESCORA", cor=(0.75, 0.42, 0.05))
@@ -691,7 +705,7 @@ def betoneira(g, x, y, z, ang):
 
 def carrinho_de_mao(g, x, y, z, ang):
     perfil = [(0.0, 0.0), (0.25, 0.02), (0.36, 0.18), (0.38, 0.2)]
-    v, f = torno(perfil, 16)
+    v, f = torno_casca(perfil, 0.012, 20)
     v = transformar(v, (0, 0, 0), (0, 0, 0), (1.3, 0.9, 1.0))
     G(g).add(transformar(v, (x, y, z + 0.38), (0, 0, ang)), f, "METAL_ESCORA", cor=(0.1, 0.35, 0.12))
     ca, sa = math.cos(ang), math.sin(ang)
@@ -703,7 +717,7 @@ def carrinho_de_mao(g, x, y, z, ang):
 
 
 def balde(g, x, y, z, cor=(0.15, 0.15, 0.15)):
-    v, f = torno([(0.0, 0.0), (0.13, 0.0), (0.16, 0.3), (0.165, 0.31), (0.155, 0.31), (0.12, 0.03)], 20)
+    v, f = torno([(0.0, 0.0), (0.13, 0.0), (0.16, 0.3), (0.165, 0.31), (0.155, 0.31), (0.12, 0.03), (0.0, 0.03)], 20)
     G(g).add(transformar(v, (x, y, z)), f, "BALDE", cor=cor)
 
 
@@ -798,8 +812,9 @@ def prop(nome, k, x, y, z, ang=0.0, esc=1.0):
 
 
 def portal(n, x, y, z, ang, inclinacao=0.0, esc=0.5):
-    LAYOUT["portais"].append({"n": n, "x": x, "y": y, "z": z, "yaw": math.degrees(ang),
-                              "pitch": math.degrees(inclinacao), "escala": esc})
+    """Ponto de rota invisível (sem aro, sem luz, sem colisão): só guia o voo de teste automático."""
+    LAYOUT["rota"].append({"n": n, "x": x, "y": y, "z": z, "yaw": math.degrees(ang),
+                           "pitch": math.degrees(inclinacao)})
 
 
 # ----------------------------------------------------------------------------- andares
@@ -958,10 +973,49 @@ def manchas(k):
 
 
 def luz_obra(k, x, y, z, ang, lum=6000):
-    prop("flood_lights", k, x, y, z, ang)
-    LAYOUT["luzes"].append({"grupo": f"Andar{k}", "tipo": "spot", "x": x + 0.15 * math.cos(ang),
-                            "y": y + 0.15 * math.sin(ang), "z": z + 1.55, "yaw": math.degrees(ang), "pitch": -25,
-                            "lumens": lum, "kelvin": 5200, "raio": 16.0, "cone": 55})
+    """Refletor de obra modelado: tripé, haste, travessa e duas cúpulas com a lente acesa.
+    A luz (spot) nasce exatamente na frente das lentes, para toda luz ter de onde vir."""
+    g = f"Andar{k}"
+    ca, sa = math.cos(ang), math.sin(ang)
+    topo = z + 1.62
+    preto = (0.08, 0.08, 0.08)
+    amarelo = (0.85, 0.62, 0.06)
+    # tripé
+    for i in range(3):
+        a = ang + math.pi + (i - 1) * 2.0944
+        tubo(g, (x, y, z + 0.62), (x + 0.42 * math.cos(a), y + 0.42 * math.sin(a), z + 0.01), 0.013, "METAL_ESCORA", n=8, cor=amarelo)
+        caixa_c(g, (x + 0.43 * math.cos(a), y + 0.43 * math.sin(a), z + 0.012), (0.06, 0.06, 0.024), "BORRACHA", c=0.004)
+    tubo(g, (x, y, z + 0.55), (x, y, topo + 0.05), 0.017, "METAL_ESCORA", n=10, cor=amarelo)
+    # travessa (perpendicular à direção da luz)
+    px, py = -sa, ca
+    tubo(g, (x - px * 0.34, y - py * 0.34, topo), (x + px * 0.34, y + py * 0.34, topo), 0.014, "METAL_ESCORA", n=8, cor=amarelo)
+    incl = math.radians(25)
+    for s_ in (-0.19, 0.19):
+        cx, cy = x + px * s_, y + py * s_
+        # cúpula (caixa) inclinada para baixo, apontando para "ang"
+        cen = (cx + ca * 0.02, cy + sa * 0.02, topo - 0.01)
+        caixa_c(g, cen, (0.12, 0.30, 0.24), "METAL_ESCORA", c=0.012, rot=(0, incl, ang), cor=preto)
+        # aletas de dissipação atrás
+        for t in (-0.08, -0.04, 0.0, 0.04, 0.08):
+            v, f = caixa_chanfrada(0.03, 0.26, 0.006, 0.0)
+            v = transformar(v, (-0.075, 0.0, t), (0, 0, 0))
+            v = transformar(v, (0, 0, 0), (0, incl, 0))
+            v = transformar(v, cen, (0, 0, ang))
+            G(g).add(v, f, "METAL_GALV", cor=(0.35, 0.35, 0.35))
+        # lente acesa na frente
+        v, f = caixa_chanfrada(0.012, 0.25, 0.19, 0.0)
+        v = transformar(v, (0.062, 0.0, 0.0), (0, 0, 0))
+        v = transformar(v, (0, 0, 0), (0, incl, 0))
+        v = transformar(v, cen, (0, 0, ang))
+        G(g).add(v, f, "LAMPADA")
+    # cabo descendo até o chão
+    tubo(g, (x, y, topo - 0.1), (x - ca * 0.05, y - sa * 0.05, z + 0.3), 0.005, "BORRACHA", n=5)
+    tubo(g, (x - ca * 0.05, y - sa * 0.05, z + 0.3), (x - ca * 0.6, y - sa * 0.6, z + 0.006), 0.005, "BORRACHA", n=5)
+    # a luz: no meio das duas lentes, 3 cm à frente, mesma inclinação
+    frente = 0.02 + 0.062 * math.cos(incl) + 0.03
+    LAYOUT["luzes"].append({"grupo": g, "tipo": "spot", "x": x + ca * frente, "y": y + sa * frente,
+                            "z": topo - 0.01 - 0.062 * math.sin(incl), "yaw": math.degrees(ang), "pitch": -25,
+                            "lumens": lum, "kelvin": 5200, "raio": 16.0, "cone": 60})
 
 
 def andar_terreo(g, z0):
@@ -1096,27 +1150,6 @@ def andar_4(g, z0):
     luz_obra(4, 23.0, 15.0, z0, math.radians(-135), 3000)
 
 
-# ----------------------------------------------------------------------------- portal (malha)
-def malha_portal():
-    """Aro do portal: 1,7 m de diâmetro interno, tubo com faixas (vira mesh separado)."""
-    g = "Portal"
-    R, r = 0.92, 0.045
-    n, m = 64, 12
-    v, f = [], []
-    for i in range(n):
-        a = 2 * math.pi * i / n
-        for j in range(m):
-            b = 2 * math.pi * j / m
-            rr = R + r * math.cos(b)
-            v.append((0.0, rr * math.cos(a), rr * math.sin(a) + 0.0 + r * 0 + 0.0))
-            v[-1] = (r * math.sin(b), rr * math.cos(a), rr * math.sin(a))
-    for i in range(n):
-        for j in range(m):
-            a0, a1 = i * m + j, ((i + 1) % n) * m + j
-            f.append((a0, a1, ((i + 1) % n) * m + (j + 1) % m, i * m + (j + 1) % m))
-    G(g).add(v, f, "PORTAL")
-
-
 # ----------------------------------------------------------------------------- saída
 def construir_objeto(grupo):
     me = bpy.data.meshes.new(grupo.nome)
@@ -1164,7 +1197,6 @@ def construir_objeto(grupo):
 
 def exportar():
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    malha_portal()
     for k in range(N_ANDARES):
         andar(k)
     # objeto marcador para conferir eixos/escala no Unreal (caixa em x=20, y=5)
@@ -1183,7 +1215,7 @@ def exportar():
         resumo[nome] = {"vertices": len(gr.v), "faces": len(gr.f)}
         bpy.data.objects.remove(ob)
     LAYOUT["grupos"] = resumo
-    for i, p in enumerate(LAYOUT["portais"]):
+    for i, p in enumerate(LAYOUT["rota"]):
         p["n"] = i + 1
     with open(os.path.join(SAIDA, "layout.json"), "w", encoding="utf-8") as fp:
         json.dump(LAYOUT, fp, ensure_ascii=False, indent=1)

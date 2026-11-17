@@ -4,7 +4,7 @@
 2. importa os andares (FBX do Blender) como Nanite, colisão complexa
 3. importa os objetos do Poly Haven (glTF) e põe no lugar
 4. luzes de obra, sol de fim de tarde, céu, névoa volumétrica, pós-processo
-5. portais, ligações verticais, início do drone
+5. pontos de rota (invisíveis, só para o voo de teste), ligações verticais, início do drone
 6. salva /Game/Mapas/Predio e fecha o editor
 
 Tudo é refeito do zero a cada execução (apaga /Game/Predio e o mapa).
@@ -17,7 +17,7 @@ import traceback
 
 import unreal
 
-RAIZ = "C:/drone/predio"
+RAIZ = os.environ.get("PREDIO_RAIZ", "D:/DronePredio").replace("\\", "/")
 CONTEUDO = RAIZ + "/conteudo"          # FBX + layout.json do Blender
 RECURSOS = RAIZ + "/recursos"          # texturas / modelos baixados
 LOG = RAIZ + "/logs/construir_mapa_progresso.txt"
@@ -414,6 +414,8 @@ def importar_malhas(mis):
         if not arq.lower().endswith(".fbx"):
             continue
         nome = arq[:-4]
+        if nome == "Portal":
+            continue  # aros antigos: não existem mais
         caminhos = importar(CONTEUDO + "/" + arq, PASTA + "/Malhas/" + nome)
         sm = None
         for p in caminhos:
@@ -552,31 +554,13 @@ def montar_mapa(layout, malhas, props, mis):
         tag(a, l["grupo"])
     log("luzes", len(layout["luzes"]))
 
-    # portais
-    sm_portal = malhas.get("Portal")
-    for p in layout["portais"]:
-        andar = max(0, min(layout["n_andares"] - 1, int(math.floor(p["z"] / H + 0.02))))
-        a = eas.spawn_actor_from_object(sm_portal, P(p["x"], p["y"], p["z"]),
-                                        unreal.Rotator(roll=0, pitch=p.get("pitch", 0.0), yaw=yaw(p["yaw"])))
-        e = p.get("escala", 0.5)
-        a.set_actor_scale3d(unreal.Vector(e, e, e))
-        a.set_actor_label("Portal_%02d" % p["n"])
-        smc = a.get_component_by_class(unreal.StaticMeshComponent)
-        smc.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
-        por(smc, "cast_shadow", False)
-        tag(a, "Portal_%d" % p["n"], "Andar%d" % andar)
-        # luz do portal (brilho laranja nas paredes)
-        lp = eas.spawn_actor_from_class(unreal.PointLight, P(p["x"], p["y"], p["z"]), unreal.Rotator(0, 0, 0))
-        c = lp.get_component_by_class(unreal.PointLightComponent)
-        por(c, "intensity_units", unreal.LightUnits.LUMENS)
-        por(c, "intensity", 260.0)
-        por(c, "light_color", unreal.Color(255, 110, 20, 255))
-        por(c, "attenuation_radius", 350.0)
-        por(c, "cast_shadows", False)
-        por(c, "mobility", unreal.ComponentMobility.MOVABLE)
-        lp.set_actor_label("LuzPortal_%02d" % p["n"])
-        tag(lp, "Andar%d" % andar)
-    log("portais", len(layout["portais"]))
+    # pontos de rota: invisíveis, sem colisão e sem luz (só o voo de teste automático usa)
+    for p in layout.get("rota", []):
+        a = eas.spawn_actor_from_class(unreal.TargetPoint, P(p["x"], p["y"], p["z"]),
+                                       unreal.Rotator(roll=0, pitch=p.get("pitch", 0.0), yaw=yaw(p["yaw"])))
+        a.set_actor_label("Rota_%02d" % p["n"])
+        tag(a, "Rota_%d" % p["n"])
+    log("pontos de rota", len(layout.get("rota", [])))
 
     # decalques (escorridos, manchas)
     dmis = {}

@@ -2,15 +2,13 @@
 #include "PredioDrone.h"
 #include "DronePawn.h"
 #include "DroneHUD.h"
+#include "AjustesDrone.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "GameFramework/PlayerController.h"
-#include "GameFramework/PlayerStart.h"
-#include "Components/PrimitiveComponent.h"
-#include "Components/StaticMeshComponent.h"
 #include "Components/LightComponent.h"
-#include "Materials/MaterialInstanceDynamic.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -43,6 +41,8 @@ namespace
 		return Padrao;
 	}
 	const TCHAR* NomesModo[] = { TEXT("AA Nativo"), TEXT("Qualidade"), TEXT("Equilibrado"), TEXT("Desempenho"), TEXT("Ultra Desempenho") };
+	const TCHAR* SimNao(bool b) { return b ? TEXT("SIM") : TEXT("NÃO"); }
+	const TCHAR* LigDesl(bool b) { return b ? TEXT("LIGADO") : TEXT("DESLIGADO"); }
 }
 
 APredioGameMode::APredioGameMode()
@@ -80,9 +80,8 @@ void APredioGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// tecnologias AMD ligadas por padrão (também ficam no DefaultEngine.ini)
-	SetInt(TEXT("r.FidelityFX.FSR.Enabled"), 1);
-	SetInt(TEXT("r.FidelityFX.FI.Enabled"), 1);
+	FAjustesDrone& Cfg = FAjustesDrone::Get();
+	Cfg.AplicarGraficos();
 
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
@@ -101,40 +100,44 @@ void APredioGameMode::BeginPlay()
 	}
 	if (bTour)
 	{
-		bAjusteAuto = false;
 		NivelAjuste = 0;
-		AplicarNivelAjuste();
+		SetInt(TEXT("r.FidelityFX.FSR.QualityMode"), 1);
+		SetInt(TEXT("r.FidelityFX.FI.Enabled"), 1);
+		SetInt(TEXT("r.VSync"), 0);
+		SetInt(TEXT("r.Lumen.HardwareRayTracing"), 1);
 		if (ADronePawn* D = Drone()) D->bModoTour = true;
 		TourPontos.Reset();
 		TourFotoNoPonto.Reset();
 		if (ADronePawn* D = Drone()) { TourPontos.Add(D->GetActorLocation()); TourFotoNoPonto.Add(1); }
-		for (const FPortal& P : Portais)
+		for (const TPair<int32, FTransform>& R : Rota)
 		{
-			if (P.Ator.IsValid())
-			{
-				const FVector C = P.Ator->GetActorLocation();
-				const FVector F = P.Ator->GetActorForwardVector();
-				TourPontos.Add(C - F * 120.f);
-				TourFotoNoPonto.Add(1);
-				TourPontos.Add(C + F * 120.f);
-				TourFotoNoPonto.Add(0);
-			}
+			const FVector C = R.Value.GetLocation();
+			const FVector F = R.Value.GetRotation().GetForwardVector();
+			TourPontos.Add(C - F * 120.f);
+			TourFotoNoPonto.Add(1);
+			TourPontos.Add(C + F * 120.f);
+			TourFotoNoPonto.Add(0);
 		}
 		IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
 		PF.CreateDirectoryTree(*PastaTestes);
 		TourLinhas.Add(FString::Printf(TEXT("TOUR %s  resolução da tela: %dx%d"), *FDateTime::Now().ToString(),
 			GEngine && GEngine->GameViewport ? (int32)GEngine->GameViewport->Viewport->GetSizeXY().X : 0,
 			GEngine && GEngine->GameViewport ? (int32)GEngine->GameViewport->Viewport->GetSizeXY().Y : 0));
-		TourEspera = 3.0f; // deixa os shaders/streaming assentarem
+		TourEspera = 3.0f;
 	}
-	UE_LOG(LogPredio, Log, TEXT("Predio: %d andares, %d portais, %d conexoes, tour=%d"), NumAndares, TotalPortais, Conexoes.Num(), bTour ? 1 : 0);
+	else
+	{
+		AplicarNivelAjuste();
+	}
+	UE_LOG(LogPredio, Log, TEXT("Predio: %d andares, %d pontos de rota, %d conexoes, tour=%d, ajustes em %s"),
+		NumAndares, Rota.Num(), Conexoes.Num(), bTour ? 1 : 0, *FAjustesDrone::Arquivo());
 }
 
 void APredioGameMode::ColetarAtores()
 {
 	Grupos.Reset();
 	Conexoes.Reset();
-	Portais.Reset();
+	Rota.Reset();
 	int32 MaiorAndar = 0;
 
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
@@ -158,24 +161,9 @@ void APredioGameMode::ColetarAtores()
 				C.Posicao = A->GetActorLocation();
 				Conexoes.Add(C);
 			}
-			else if (T.StartsWith(TEXT("Portal_")))
+			else if (T.StartsWith(TEXT("Rota_")))
 			{
-				FPortal P;
-				P.Ator = A;
-				P.Numero = FCString::Atoi(*T.RightChop(7));
-				TArray<UStaticMeshComponent*> Comps;
-				A->GetComponents(Comps);
-				for (UStaticMeshComponent* SM : Comps)
-				{
-					for (int32 i = 0; i < SM->GetNumMaterials(); ++i)
-					{
-						if (UMaterialInstanceDynamic* MID = SM->CreateAndSetMaterialInstanceDynamic(i))
-						{
-							P.Materiais.Add(MID);
-						}
-					}
-				}
-				Portais.Add(P);
+				Rota.Add(TPair<int32, FTransform>(FCString::Atoi(*T.RightChop(5)), A->GetActorTransform()));
 			}
 			else if (T.StartsWith(TEXT("AlturaAndar_")))
 			{
@@ -187,10 +175,8 @@ void APredioGameMode::ColetarAtores()
 			}
 		}
 	}
-	Portais.Sort([](const FPortal& A, const FPortal& B) { return A.Numero < B.Numero; });
-	TotalPortais = Portais.Num();
+	Rota.Sort([](const TPair<int32, FTransform>& A, const TPair<int32, FTransform>& B) { return A.Key < B.Key; });
 	NumAndares = MaiorAndar + 1;
-	ProximoPortal = 1;
 }
 
 void APredioGameMode::AtualizarAndares(bool bForcar)
@@ -203,19 +189,26 @@ void APredioGameMode::AtualizarAndares(bool bForcar)
 	AndarAtual = FMath::Clamp(FMath::FloorToInt(Rel + 0.02f), 0, NumAndares - 1);
 	const float Frac = Rel - AndarAtual;
 
-	// andares que devem aparecer
 	TSet<int32> Visiveis;
 	Visiveis.Add(AndarAtual);
-	// atravessando a laje (dentro do buraco/poço): mostra os dois lados
 	if (Frac < 0.18f && AndarAtual > 0) Visiveis.Add(AndarAtual - 1);
 	if (Frac > 0.80f && AndarAtual < NumAndares - 1) Visiveis.Add(AndarAtual + 1);
-	// perto de uma ligação vertical (poço do elevador, escada, buraco)
+	// perto de uma ligação vertical (poço do elevador, escada, buraco): o vizinho
+	// já está desenhado antes de dar para enxergar por ela
 	for (const FConexao& C : Conexoes)
 	{
-		const float Dist2D = FVector::Dist2D(C.Posicao, P);
-		if (Dist2D > C.Raio) continue;
+		if (FVector::Dist2D(C.Posicao, P) > C.Raio) continue;
 		if (C.AndarDeBaixo == AndarAtual) Visiveis.Add(AndarAtual + 1);
 		if (C.AndarDeBaixo + 1 == AndarAtual) Visiveis.Add(AndarAtual - 1);
+	}
+
+	// segura cada andar aceso por 1,5 s depois que deixou de ser preciso: sem isso, voando
+	// perto da altura de troca o andar vizinho (e as luzes dele) liga/desliga sem parar
+	const double Agora = FPlatformTime::Seconds();
+	for (int32 K : Visiveis) AndarPedido.Add(K, Agora);
+	for (const TPair<int32, double>& Ped : AndarPedido)
+	{
+		if (Agora - Ped.Value < 1.5) Visiveis.Add(Ped.Key);
 	}
 
 	for (TPair<FName, FGrupoVisivel>& Par : Grupos)
@@ -226,10 +219,10 @@ void APredioGameMode::AtualizarAndares(bool bForcar)
 		{
 			bVer = Visiveis.Contains(FCString::Atoi(*Nome.RightChop(5)));
 		}
-		else // LajeK = piso do andar K e teto do andar K-1
+		else // LajeK = piso do andar K e teto do andar K-1; a laje de baixo também fica (vista pelos buracos)
 		{
 			const int32 K = FCString::Atoi(*Nome.RightChop(4));
-			bVer = Visiveis.Contains(K) || Visiveis.Contains(K - 1);
+			bVer = Visiveis.Contains(K) || Visiveis.Contains(K - 1) || Visiveis.Contains(K + 1);
 		}
 		if (bForcar || bVer != Par.Value.bVisivel)
 		{
@@ -238,7 +231,6 @@ void APredioGameMode::AtualizarAndares(bool bForcar)
 			{
 				if (!A.IsValid()) continue;
 				A->SetActorHiddenInGame(!bVer);
-				// luzes do andar apagam junto (economiza sombra e iluminação)
 				TArray<ULightComponent*> Luzes;
 				A->GetComponents(Luzes);
 				for (ULightComponent* L : Luzes) L->SetVisibility(bVer);
@@ -247,57 +239,196 @@ void APredioGameMode::AtualizarAndares(bool bForcar)
 	}
 }
 
-void APredioGameMode::AtualizarPortais()
+// ------------------------------------------------------------------ menu
+
+FString APredioGameMode::NomeItem(int32 I) const
 {
-	ADronePawn* D = Drone();
-	if (!D || Portais.Num() == 0) return;
-
-	if (bCronometroLigado) Cronometro += GetWorld()->GetDeltaSeconds();
-
-	const int32 Idx = ProximoPortal - 1;
-	if (!Portais.IsValidIndex(Idx)) return;
-	FPortal& P = Portais[Idx];
-	if (!P.Ator.IsValid()) return;
-
-	const FVector C = P.Ator->GetActorLocation();
-	const FVector F = P.Ator->GetActorForwardVector();
-	const FVector Rel = D->GetActorLocation() - C;
-	const float AoLongo = FVector::DotProduct(Rel, F);
-	const float Lateral = (Rel - F * AoLongo).Size();
-	const float RaioPortal = 92.f * P.Ator->GetActorScale3D().Y; // aro de 92 cm na escala 1
-	if (FMath::Abs(AoLongo) < 35.f && Lateral < RaioPortal * 0.95f)
+	switch ((EItemMenu)I)
 	{
-		P.bPassou = true;
-		for (UMaterialInstanceDynamic* M : P.Materiais)
+	case EItemMenu::Continuar:     return TEXT("Continuar voando");
+	case EItemMenu::Sensibilidade: return TEXT("Sensibilidade dos analógicos");
+	case EItemMenu::Expo:          return TEXT("Suavidade no centro (expo)");
+	case EItemMenu::InvFrente:     return TEXT("Inverter frente / trás");
+	case EItemMenu::InvSubir:      return TEXT("Inverter subir / descer");
+	case EItemMenu::InvGiro:       return TEXT("Inverter giro");
+	case EItemMenu::InvLados:      return TEXT("Inverter lados");
+	case EItemMenu::ModoVoo:       return TEXT("Modo de voo");
+	case EItemMenu::Volume:        return TEXT("Volume do drone");
+	case EItemMenu::ModoFSR:       return TEXT("AMD FSR 4 (IA)");
+	case EItemMenu::Gerador:       return TEXT("Gerador de quadros AMD");
+	case EItemMenu::VSync:         return TEXT("VSync");
+	case EItemMenu::Painel:        return TEXT("Painel de FPS");
+	case EItemMenu::AjusteAuto:    return TEXT("Ajuste automático (60 FPS)");
+	case EItemMenu::VoltarInicio:  return TEXT("Voltar ao início");
+	case EItemMenu::Padrao:        return TEXT("Restaurar padrões");
+	case EItemMenu::Sair:          return TEXT("Sair do jogo");
+	default: return FString();
+	}
+}
+
+FString APredioGameMode::ValorItem(int32 I) const
+{
+	const FAjustesDrone& C = FAjustesDrone::Get();
+	const ADronePawn* D = Drone();
+	switch ((EItemMenu)I)
+	{
+	case EItemMenu::Sensibilidade: return FString::Printf(TEXT("%d%%"), FMath::RoundToInt(C.Sensibilidade * 100.f));
+	case EItemMenu::Expo:          return FString::Printf(TEXT("%d%%"), FMath::RoundToInt(C.Expo * 100.f));
+	case EItemMenu::InvFrente:     return SimNao(C.bInvArfagem);
+	case EItemMenu::InvSubir:      return SimNao(C.bInvAcelerador);
+	case EItemMenu::InvGiro:       return SimNao(C.bInvGuinada);
+	case EItemMenu::InvLados:      return SimNao(C.bInvRolagem);
+	case EItemMenu::ModoVoo:       return (D && D->Modo == EModoVoo::Acro) ? TEXT("ACRO (manual)") : TEXT("ESTABILIZADO");
+	case EItemMenu::Volume:        return FString::Printf(TEXT("%d%%"), FMath::RoundToInt(C.Volume * 100.f));
+	case EItemMenu::ModoFSR:       return NomesModo[FMath::Clamp(C.ModoFSR, 0, 3)];
+	case EItemMenu::Gerador:       return LigDesl(C.bGerador);
+	case EItemMenu::VSync:         return LigDesl(C.bVSync);
+	case EItemMenu::Painel:        return LigDesl(C.bPainel);
+	case EItemMenu::AjusteAuto:    return LigDesl(C.bAjusteAuto);
+	default: return FString();
+	}
+}
+
+void APredioGameMode::AbrirMenu(bool bAbrir)
+{
+	bMenuAberto = bAbrir;
+	if (bAbrir) MenuIndice = 0;
+	else FAjustesDrone::Get().Salvar();
+	if (ADronePawn* D = Drone()) D->bCongelado = bAbrir;
+	RepeticaoV = RepeticaoH = 0.3f;
+}
+
+void APredioGameMode::MudarItem(int32 Dir, bool bConfirmar)
+{
+	FAjustesDrone& C = FAjustesDrone::Get();
+	ADronePawn* D = Drone();
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const int32 Passo = Dir != 0 ? Dir : 1;
+	switch ((EItemMenu)MenuIndice)
+	{
+	case EItemMenu::Continuar:
+		if (bConfirmar) AbrirMenu(false);
+		return;
+	case EItemMenu::Sensibilidade:
+		if (Dir) C.Sensibilidade = FMath::Clamp(C.Sensibilidade + 0.05f * Dir, 0.30f, 2.00f);
+		break;
+	case EItemMenu::Expo:
+		if (Dir) C.Expo = FMath::Clamp(C.Expo + 0.05f * Dir, 0.f, 0.80f);
+		break;
+	case EItemMenu::InvFrente: C.bInvArfagem = !C.bInvArfagem; break;
+	case EItemMenu::InvSubir:  C.bInvAcelerador = !C.bInvAcelerador; break;
+	case EItemMenu::InvGiro:   C.bInvGuinada = !C.bInvGuinada; break;
+	case EItemMenu::InvLados:  C.bInvRolagem = !C.bInvRolagem; break;
+	case EItemMenu::ModoVoo:
+		if (D)
 		{
-			if (M) M->SetVectorParameterValue(TEXT("Cor"), FLinearColor(0.1f, 1.f, 0.25f));
+			D->TrocarModo();
+			C.bComecarAcro = D->Modo == EModoVoo::Acro;
 		}
-		D->UltimoCheckpoint = FTransform(F.Rotation(), C + F * 80.f);
-		if (ProximoPortal == 1)
+		break;
+	case EItemMenu::Volume:
+		if (Dir) C.Volume = FMath::Clamp(C.Volume + 0.05f * Dir, 0.f, 1.f);
+		break;
+	case EItemMenu::ModoFSR:
+		C.ModoFSR = (C.ModoFSR + Passo + 4) % 4;
+		NivelAjuste = 0;
+		C.AplicarGraficos();
+		AplicarNivelAjuste();
+		break;
+	case EItemMenu::Gerador:
+		C.bGerador = !C.bGerador;
+		C.AplicarGraficos();
+		break;
+	case EItemMenu::VSync:
+		C.bVSync = !C.bVSync;
+		C.AplicarGraficos();
+		break;
+	case EItemMenu::Painel:
+		C.bPainel = !C.bPainel;
+		break;
+	case EItemMenu::AjusteAuto:
+		C.bAjusteAuto = !C.bAjusteAuto;
+		NivelAjuste = 0;
+		AplicarNivelAjuste();
+		break;
+	case EItemMenu::VoltarInicio:
+		if (bConfirmar && D)
 		{
-			bCronometroLigado = true;
-			Cronometro = 0.f;
+			D->Recomecar(D->Inicio);
+			AbrirMenu(false);
+			D->MostrarMensagem(TEXT("Voltou para o início"));
 		}
-		if (ProximoPortal >= TotalPortais)
+		return;
+	case EItemMenu::Padrao:
+		if (bConfirmar)
 		{
-			bCronometroLigado = false;
-			if (MelhorTempo <= 0.f || Cronometro < MelhorTempo) MelhorTempo = Cronometro;
-			D->MostrarMensagem(FString::Printf(TEXT("PERCURSO COMPLETO!  %.2f s"), Cronometro), 6.f);
-			ProximoPortal = 1;
-			for (FPortal& Q : Portais)
-			{
-				Q.bPassou = false;
-				for (UMaterialInstanceDynamic* M : Q.Materiais)
-				{
-					if (M) M->SetVectorParameterValue(TEXT("Cor"), FLinearColor(1.f, 0.35f, 0.02f));
-				}
-			}
+			C = FAjustesDrone();
+			C.AplicarGraficos();
+			NivelAjuste = 0;
+			AplicarNivelAjuste();
+			if (D && D->Modo == EModoVoo::Acro) D->TrocarModo();
+			if (D) D->MostrarMensagem(TEXT("Configurações padrão restauradas"), 2.f);
 		}
-		else
+		break;
+	case EItemMenu::Sair:
+		if (bConfirmar)
 		{
-			D->MostrarMensagem(FString::Printf(TEXT("PORTAL %d/%d"), ProximoPortal, TotalPortais), 1.2f);
-			++ProximoPortal;
+			C.Salvar();
+			UKismetSystemLibrary::QuitGame(this, PC, EQuitPreference::Quit, false);
 		}
+		return;
+	default: break;
+	}
+	C.Salvar();
+}
+
+void APredioGameMode::TickMenu(float Dt)
+{
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC) return;
+	auto Apertou = [PC](std::initializer_list<FKey> Teclas)
+	{
+		for (const FKey& K : Teclas) if (PC->WasInputKeyJustPressed(K)) return true;
+		return false;
+	};
+
+	if (Apertou({ EKeys::Escape, EKeys::Gamepad_Special_Right, EKeys::Gamepad_FaceButton_Right, EKeys::BackSpace }))
+	{
+		AbrirMenu(false);
+		return;
+	}
+
+	const int32 N = (int32)EItemMenu::Total;
+	// direcional / setas / W-S
+	int32 V = 0, Hz = 0;
+	if (Apertou({ EKeys::Up, EKeys::W, EKeys::Gamepad_DPad_Up })) V = -1;
+	if (Apertou({ EKeys::Down, EKeys::S, EKeys::Gamepad_DPad_Down })) V = 1;
+	if (Apertou({ EKeys::Left, EKeys::A, EKeys::Gamepad_DPad_Left })) Hz = -1;
+	if (Apertou({ EKeys::Right, EKeys::D, EKeys::Gamepad_DPad_Right })) Hz = 1;
+
+	// analógico esquerdo com repetição ao segurar
+	const float SY = PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftY);
+	const float SX = PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftX);
+	const int32 DirV = SY > 0.6f ? -1 : (SY < -0.6f ? 1 : 0);
+	const int32 DirH = SX > 0.6f ? 1 : (SX < -0.6f ? -1 : 0);
+	if (DirV != 0)
+	{
+		if (DirV != UltimaDirVert) { V = DirV; RepeticaoV = 0.35f; }
+		else if ((RepeticaoV -= Dt) <= 0.f) { V = DirV; RepeticaoV = 0.12f; }
+	}
+	if (DirH != 0)
+	{
+		if (DirH != UltimaDirHoriz) { Hz = DirH; RepeticaoH = 0.35f; }
+		else if ((RepeticaoH -= Dt) <= 0.f) { Hz = DirH; RepeticaoH = 0.10f; }
+	}
+	UltimaDirVert = DirV;
+	UltimaDirHoriz = DirH;
+
+	if (V != 0) MenuIndice = (MenuIndice + V + N) % N;
+	if (Hz != 0) MudarItem(Hz, false);
+	if (Apertou({ EKeys::Enter, EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom }))
+	{
+		MudarItem(0, true);
 	}
 }
 
@@ -306,24 +437,33 @@ void APredioGameMode::TeclasAtalho()
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	ADronePawn* D = Drone();
 	if (!PC || !D) return;
+	FAjustesDrone& C = FAjustesDrone::Get();
 
-	if (PC->WasInputKeyJustPressed(EKeys::F1) || PC->WasInputKeyJustPressed(EKeys::Gamepad_Special_Right))
+	if (PC->WasInputKeyJustPressed(EKeys::Escape) || PC->WasInputKeyJustPressed(EKeys::Gamepad_Special_Right))
+	{
+		bMostrarAjuda = false;
+		AbrirMenu(true);
+		return;
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::F1) || PC->WasInputKeyJustPressed(EKeys::Gamepad_Special_Left))
 	{
 		bMostrarAjuda = !bMostrarAjuda;
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::F2))
 	{
-		int32 M = GetInt(TEXT("r.FidelityFX.FSR.QualityMode"), 1);
-		M = (M + 1) % 4;
-		SetInt(TEXT("r.FidelityFX.FSR.QualityMode"), M);
-		bAjusteAuto = false;
-		D->MostrarMensagem(FString::Printf(TEXT("FSR 4: %s  (ajuste automático desligado — F6 liga)"), NomesModo[M]));
+		C.ModoFSR = (C.ModoFSR + 1) % 4;
+		C.AplicarGraficos();
+		NivelAjuste = 0;
+		AplicarNivelAjuste();
+		C.Salvar();
+		D->MostrarMensagem(FString::Printf(TEXT("FSR 4: %s"), NomesModo[C.ModoFSR]));
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::F3))
 	{
-		const bool bNovo = !GeradorLigado();
-		SetInt(TEXT("r.FidelityFX.FI.Enabled"), bNovo ? 1 : 0);
-		D->MostrarMensagem(bNovo ? TEXT("Gerador de quadros AMD LIGADO") : TEXT("Gerador de quadros AMD desligado"));
+		C.bGerador = !C.bGerador;
+		C.AplicarGraficos();
+		C.Salvar();
+		D->MostrarMensagem(C.bGerador ? TEXT("Gerador de quadros AMD LIGADO") : TEXT("Gerador de quadros AMD desligado"));
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::F4))
 	{
@@ -333,37 +473,32 @@ void APredioGameMode::TeclasAtalho()
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::F5))
 	{
-		bMostrarDesempenho = !bMostrarDesempenho;
+		C.bPainel = !C.bPainel;
+		C.Salvar();
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::F6))
 	{
-		bAjusteAuto = !bAjusteAuto;
-		D->MostrarMensagem(bAjusteAuto ? TEXT("Ajuste automático para 60 FPS LIGADO") : TEXT("Ajuste automático desligado"));
+		C.bAjusteAuto = !C.bAjusteAuto;
+		NivelAjuste = 0;
+		AplicarNivelAjuste();
+		C.Salvar();
+		D->MostrarMensagem(C.bAjusteAuto ? TEXT("Ajuste automático para 60 FPS LIGADO") : TEXT("Ajuste automático desligado"));
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::Escape) || PC->WasInputKeyJustPressed(EKeys::Gamepad_Special_Left))
-	{
-		if (TempoAteSair > 0.f)
-		{
-			UKismetSystemLibrary::QuitGame(this, PC, EQuitPreference::Quit, false);
-		}
-		else
-		{
-			TempoAteSair = 2.5f;
-			D->MostrarMensagem(TEXT("Aperte Esc (ou Back) de novo para sair"), 2.5f);
-		}
-	}
-	if (TempoAteSair > 0.f) TempoAteSair -= GetWorld()->GetDeltaSeconds();
 }
+
+// ------------------------------------------------------------------ desempenho
 
 void APredioGameMode::AplicarNivelAjuste()
 {
-	// 0: FSR Qualidade + Lumen com ray tracing de hardware (máximo)
-	// 1: FSR Equilibrado
-	// 2: FSR Desempenho
+	// 0: modo do FSR escolhido no menu + Lumen com ray tracing de hardware
+	// 1: FSR no mínimo Equilibrado
+	// 2: FSR no mínimo Desempenho
 	// 3: + Lumen por software
 	// 4: + sombras e névoa um pouco mais leves
+	const int32 Base = FMath::Clamp(FAjustesDrone::Get().ModoFSR, 0, 3);
 	const int32 N = FMath::Clamp(NivelAjuste, 0, 4);
-	SetInt(TEXT("r.FidelityFX.FSR.QualityMode"), N == 0 ? 1 : (N == 1 ? 2 : 3));
+	const int32 Modo = N == 0 ? Base : FMath::Max(Base, N == 1 ? 2 : 3);
+	SetInt(TEXT("r.FidelityFX.FSR.QualityMode"), Modo);
 	SetInt(TEXT("r.Lumen.HardwareRayTracing"), N >= 3 ? 0 : 1);
 	SetInt(TEXT("r.Shadow.Virtual.ResolutionLodBiasDirectional"), N >= 4 ? 1 : -1);
 	SetInt(TEXT("r.VolumetricFog.GridPixelSize"), N >= 4 ? 16 : 8);
@@ -371,18 +506,16 @@ void APredioGameMode::AplicarNivelAjuste()
 
 void APredioGameMode::AjusteAutomatico(float Dt)
 {
-	if (!bAjusteAuto || bTour) return;
+	if (!FAjustesDrone::Get().bAjusteAuto || bTour || bMenuAberto) return;
 	if (FPSBase < 57.f) { AcumBaixo += Dt; AcumAlto = 0.f; }
 	else if (FPSBase > 88.f) { AcumAlto += Dt; AcumBaixo = 0.f; }
 	else { AcumBaixo = FMath::Max(0.f, AcumBaixo - Dt); AcumAlto = FMath::Max(0.f, AcumAlto - Dt); }
 
-	ADronePawn* D = Drone();
 	if (AcumBaixo > 4.f && NivelAjuste < 4)
 	{
 		++NivelAjuste;
 		AplicarNivelAjuste();
 		AcumBaixo = 0.f;
-		if (D) D->MostrarMensagem(FString::Printf(TEXT("Mantendo 60 FPS: FSR 4 %s"), *NomeModoFSR()), 2.f);
 	}
 	else if (AcumAlto > 12.f && NivelAjuste > 0)
 	{
@@ -408,10 +541,18 @@ void APredioGameMode::Tick(float DeltaSeconds)
 		TickTour(DeltaSeconds);
 		return;
 	}
-	AtualizarPortais();
-	TeclasAtalho();
+	if (bMenuAberto)
+	{
+		TickMenu(DtReal);
+	}
+	else
+	{
+		TeclasAtalho();
+	}
 	AjusteAutomatico(DeltaSeconds);
 }
+
+// ------------------------------------------------------------------ voo de teste
 
 void APredioGameMode::TickTour(float Dt)
 {
@@ -419,7 +560,6 @@ void APredioGameMode::TickTour(float Dt)
 	if (!D || TourPontos.Num() < 2) return;
 
 #if WITH_EDITOR
-	// no editor (-game) os shaders compilam na hora: espera terminar antes de medir/fotografar
 	if (GShaderCompilingManager && GShaderCompilingManager->GetNumRemainingJobs() > 0)
 	{
 		TourEspera = FMath::Max(TourEspera, 4.f);
@@ -453,7 +593,6 @@ void APredioGameMode::TickTour(float Dt)
 	Rot.Pitch = FMath::Clamp(Rot.Pitch * 0.6f, -35.f, 35.f);
 	D->SetActorLocationAndRotation(Pos, Rot);
 
-	// foto ao chegar em cada ponto marcado
 	if (I != UltimoPontoFoto && TourFotoNoPonto.IsValidIndex(I) && TourFotoNoPonto[I] == 1 && T < 0.05f)
 	{
 		UltimoPontoFoto = I;
@@ -466,7 +605,7 @@ void APredioGameMode::TickTour(float Dt)
 	}
 
 	const float Comprimento = FMath::Max(50.f, FVector::Dist(P1, P2));
-	TourS += Dt * 260.f / Comprimento; // ~2,6 m/s
+	TourS += Dt * 260.f / Comprimento;
 	if (TourS >= N - 1)
 	{
 		SalvarResultadoTour();
