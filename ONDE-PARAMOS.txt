@@ -136,3 +136,17 @@ PENDENTE:
   - Leonardo testar no OptiPlex e mandar o FPS de cada nível (BAIXO/MÉDIO).
   - Erros "Compound hierarchy is too deep" na colisão das árvores originais (só com os modelos pesados; no
     modo OptiPlex sumiram).
+
+
+==================================================
+MAPA DO PRÉDIO EM CONSTRUÇÃO (17/11/2026) — Unreal 5.8 + AMD FSR 4 — pasta predio/
+==================================================
+PEDIDO: mapa novo, prédio em obra, voo FPV (óculos) por corredores, poço do elevador, escada e buracos;
+tela de proteção em volta (não desenha a cidade); só desenha o andar onde o drone está (troca rápida);
+gráfico o mais AAA possível; tecnologias AMD (FSR 4 IA + gerador de quadros); 60 FPS de base; executável
+SEPARADO (não junta com o mapa atual). Leonardo escolheu Unreal 5.8 só para este mapa.
+DETALHES: ver predio/LEIA-ME.md (planta, andares, portais, como reconstruir).
+NO PC: C:\drone\predio (projeto, scripts .bat, conteúdo, recursos), Unreal em D:\JOGOS\UE_5.8,
+plugin AMD em D:\JOGOS\UE_5.8\Engine\Plugins\Marketplace, jogo empacotado em D:\JOGOS\UE_5.8\_PredioDrone_jogo.
+ATENÇÃO (envio de arquivos ao PC): o envio guarda cache pelo NOME do arquivo — sempre usar nomes únicos
+(predio/ferramentas/enviar.py já faz isso), senão vai a versão antiga.
