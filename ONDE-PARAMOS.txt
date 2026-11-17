@@ -146,7 +146,13 @@ tela de proteção em volta (não desenha a cidade); só desenha o andar onde o 
 gráfico o mais AAA possível; tecnologias AMD (FSR 4 IA + gerador de quadros); 60 FPS de base; executável
 SEPARADO (não junta com o mapa atual). Leonardo escolheu Unreal 5.8 só para este mapa.
 DETALHES: ver predio/LEIA-ME.md (planta, andares, portais, como reconstruir).
-NO PC: C:\drone\predio (projeto, scripts .bat, conteúdo, recursos), Unreal em D:\JOGOS\UE_5.8,
-plugin AMD em D:\JOGOS\UE_5.8\Engine\Plugins\Marketplace, jogo empacotado em D:\JOGOS\UE_5.8\_PredioDrone_jogo.
+NO PC: TUDO em D:\DronePredio (nada no C — pedido do Leonardo): projeto, .bat, conteúdo, recursos,
+cache do Unreal (DDC, variável UE-LocalDataCachePath), logs, testes e o jogo (D:\DronePredio\jogo\Windows).
+Unreal em D:\JOGOS\UE_5.8, plugin AMD em D:\JOGOS\UE_5.8\Engine\Plugins\Marketplace.
+Jogar: D:\DronePredio\JOGAR_PREDIO.bat (passa -NotInstalled para o Saved ficar no D).
+17/11 noite — feedback 1 do Leonardo corrigido: tela/HUD piscando (FG UIMode=1 + histerese na troca de
+andar + sem granulado), betoneira/objetos dava para ver através (sólidos fechados), luzes sem fonte
+(refletor modelado), aros amarelos removidos (bloqueavam), som do drone, menu (Start/Esc) com
+sensibilidade e inverter eixos (frente/trás já vem invertido para o controle dele). Câmera: ele gostou, manter.
 ATENÇÃO (envio de arquivos ao PC): o envio guarda cache pelo NOME do arquivo — sempre usar nomes únicos
 (predio/ferramentas/enviar.py já faz isso), senão vai a versão antiga.
