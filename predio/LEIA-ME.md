@@ -67,6 +67,10 @@ O certo, quando der, é instalar o ".NET Framework 4.8.1 Developer Pack".
 - FPS de base médio 80 (≈160 com o gerador), mínimo por foto 77; pior 1% dos quadros 50 (picos na troca de andar).
 - Otimização que resolveu: lâmpadas da gambiarra sem sombra/névoa (só as luzes de obra fazem sombra).
 
+## Teste automático (17/11, 18:47) — depois das correções do feedback 1
+- FPS de base médio 84 (≈168 com o gerador), mínimo por foto 76; pior 1% dos quadros 64,7
+  (antes 50: a histerese na troca de andar acabou com os picos). Tudo rodando de D:\DronePredio.
+
 ## Para melhorar depois (ideias)
 - Tela de proteção ainda puxa para o azul na sombra (luz do céu); malha poderia ser mais fina.
 - Partículas de poeira no ar, rádio via USB (só teclado e controle por enquanto).
