@@ -182,7 +182,7 @@ def criar_mestre_tela(tex_cor, tex_nrm, tex_op, tex_ru):
     ru = expr(m, unreal.MaterialExpressionTextureSampleParameter2D, -1200, 750, parameter_name="Rugosidade", texture=tex_ru,
               sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
     tint = expr(m, unreal.MaterialExpressionVectorParameter, -900, -350, parameter_name="Tinta",
-                default_value=unreal.LinearColor(0.12, 0.42, 0.16, 1))
+                default_value=unreal.LinearColor(0.05, 0.30, 0.09, 1))
     tint3 = rgb(m, tint, "", -750, -350)
     um = expr(m, unreal.MaterialExpressionConstant, -1000, -100, r=1.0)
     cor3 = rgb(m, cor, "", -1000, -200)
@@ -191,12 +191,14 @@ def criar_mestre_tela(tex_cor, tex_nrm, tex_op, tex_ru):
     ligar(dess, "", mul, "A")
     ligar(tint3, "", mul, "B")
     mul2 = expr(m, unreal.MaterialExpressionMultiply, -450, -250)
-    dois = expr(m, unreal.MaterialExpressionConstant, -600, -120, r=2.2)
+    dois = expr(m, unreal.MaterialExpressionConstant, -600, -120, r=1.6)
     ligar(mul, "", mul2, "A")
     ligar(dois, "", mul2, "B")
     mel.connect_material_property(mul2, "", unreal.MaterialProperty.MP_BASE_COLOR)
     mel.connect_material_property(rgb(m, nrm, "", -800, 150), "", unreal.MaterialProperty.MP_NORMAL)
-    mel.connect_material_property(op, "R", unreal.MaterialProperty.MP_OPACITY_MASK)
+    inv = expr(m, unreal.MaterialExpressionOneMinus, -800, 450)
+    ligar(op, "R", inv, "")
+    mel.connect_material_property(inv, "", unreal.MaterialProperty.MP_OPACITY_MASK)
     mel.connect_material_property(ru, "R", unreal.MaterialProperty.MP_ROUGHNESS)
     sub = expr(m, unreal.MaterialExpressionMultiply, -450, 0)
     ligar(mul, "", sub, "A")
@@ -282,7 +284,7 @@ def criar_mestre_emissivo():
 MATERIAIS = {
     "CONCRETO_ESTRUTURA": ("concreto/concrete_wall_006", (1.0, 1.0, 1.0), 0.0, 0.0, 1.0, 0.0, 1.0),
     "CONCRETO_PISO": ("concreto/concrete_floor_worn_001", (0.95, 0.94, 0.92), 0.0, 0.0, 0.9, 0.0, 1.0),
-    "CONCRETO_TETO": ("concreto/concrete_slab_wall", (1.0, 1.0, 1.0), 0.0, 0.0, 1.0, 0.0, 1.0),
+    "CONCRETO_TETO": ("concreto/concrete_wall_008", (1.0, 1.0, 1.0), 0.0, 0.0, 1.0, 0.0, 1.0),
     "CONCRETO_SUJO": ("concreto/dirty_concrete", (1.0, 1.0, 1.0), 0.0, 0.0, 1.0, 0.0, 1.0),
     "CERAMICA": ("concreto/scuffed_cement", (0.78, 0.36, 0.20), 1.0, 1.0, 1.05, 0.0, 1.4),
     "ARGAMASSA": ("alvenaria/grey_plaster_02", (0.72, 0.70, 0.66), 0.4, 0.0, 1.0, 0.0, 1.0),
@@ -366,7 +368,7 @@ def criar_materiais():
     mi = at.create_asset("MI_TELA", PASTA + "/Materiais", unreal.MaterialInstanceConstant, fac)
     mi.set_editor_property("parent", mestre_tela)
     mis["TELA"] = mi
-    for slot, cor, forca in (("LAMPADA", (1.0, 0.72, 0.42), 60.0), ("PORTAL", (1.0, 0.35, 0.02), 25.0)):
+    for slot, cor, forca in (("LAMPADA", (1.0, 0.72, 0.42), 30.0), ("PORTAL", (1.0, 0.35, 0.02), 9.0)):
         mi = at.create_asset("MI_" + slot, PASTA + "/Materiais", unreal.MaterialInstanceConstant, fac)
         mi.set_editor_property("parent", mestre_luz)
         mel.set_material_instance_vector_parameter_value(mi, "Cor", unreal.LinearColor(cor[0], cor[1], cor[2], 1))
@@ -478,8 +480,8 @@ def tag(ator, *nomes):
 def montar_mapa(layout, malhas, props, mis):
     les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
-    les.new_level(MAPA)
-    log("nível novo", MAPA)
+    mundo = unreal.EditorLoadingAndSavingUtils.new_blank_map(False)
+    log("mapa em branco (sem World Partition):", mundo)
 
     # ---- eixos: o marcador (x=20, y=5 m no Blender) diz como o FBX entrou no Unreal
     marc = malhas.get("Marcador")
@@ -538,13 +540,14 @@ def montar_mapa(layout, malhas, props, mis):
             a = eas.spawn_actor_from_class(unreal.PointLight, loc, unreal.Rotator(0, 0, 0))
             c = a.get_component_by_class(unreal.PointLightComponent)
             por(c, "source_radius", 2.5)
+            por(c, "cast_shadows", False)
         por(c, "intensity_units", unreal.LightUnits.LUMENS)
         por(c, "intensity", float(l["lumens"]))
         por(c, "use_temperature", True)
         por(c, "temperature", float(l["kelvin"]))
         por(c, "attenuation_radius", l.get("raio", 10) * escala)
         por(c, "mobility", unreal.ComponentMobility.MOVABLE)
-        por(c, "volumetric_scattering_intensity", 1.5)
+        por(c, "volumetric_scattering_intensity", 1.5 if l["tipo"] == "spot" else 0.0)
         a.set_actor_label("Luz_%s_%02d" % (l["grupo"], i))
         tag(a, l["grupo"])
     log("luzes", len(layout["luzes"]))
@@ -653,7 +656,7 @@ def montar_mapa(layout, malhas, props, mis):
     ov("auto_exposure_method", unreal.AutoExposureMethod.AEM_HISTOGRAM)
     ov("auto_exposure_min_brightness", -2.0)
     ov("auto_exposure_max_brightness", 12.0)
-    ov("auto_exposure_bias", 0.6)
+    ov("auto_exposure_bias", 0.0)
     ov("lumen_scene_lighting_quality", 2.0)
     ov("lumen_scene_detail", 2.0)
     ov("lumen_final_gather_quality", 2.0)
@@ -661,7 +664,7 @@ def montar_mapa(layout, malhas, props, mis):
     ov("lumen_reflection_quality", 2.0)
     ov("lumen_surface_cache_resolution", 1.0)
     ov("ambient_occlusion_intensity", 0.5)
-    ov("bloom_intensity", 0.5)
+    ov("bloom_intensity", 0.35)
     ov("color_saturation", unreal.Vector4(1.05, 1.03, 1.0, 1.0))
     ov("color_contrast", unreal.Vector4(1.06, 1.06, 1.06, 1.0))
     ov("white_temp", 6300.0)
@@ -669,8 +672,10 @@ def montar_mapa(layout, malhas, props, mis):
     ppv.set_editor_property("settings", s)
     ppv.set_actor_label("PosProcesso")
 
-    les.save_current_level()
-    log("mapa salvo")
+    ok = unreal.EditorLoadingAndSavingUtils.save_map(mundo, MAPA)
+    log("mapa salvo em", MAPA, ok)
+    n = len(eas.get_all_level_actors())
+    log("atores no mapa:", n)
 
 
 def assets_na_pasta(pasta, classe):
@@ -728,8 +733,6 @@ def main():
             with open(arq_op, encoding="utf-8") as fp:
                 op.update(json.load(fp))
         log("opções:", op)
-        if eal.does_asset_exist(MAPA):
-            eal.delete_asset(MAPA)
         if op["materiais"]:
             if eal.does_directory_exist(PASTA + "/Materiais"):
                 eal.delete_directory(PASTA + "/Materiais")

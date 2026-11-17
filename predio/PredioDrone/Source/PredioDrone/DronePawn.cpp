@@ -47,9 +47,9 @@ ADronePawn::ADronePawn()
 	PP.bOverride_VignetteIntensity = true;      PP.VignetteIntensity = 0.55f;
 	PP.bOverride_SceneFringeIntensity = true;   PP.SceneFringeIntensity = 0.6f;
 	PP.bOverride_FilmGrainIntensity = true;     PP.FilmGrainIntensity = 0.08f;
-	PP.bOverride_MotionBlurAmount = true;       PP.MotionBlurAmount = 0.25f;
+	PP.bOverride_MotionBlurAmount = true;       PP.MotionBlurAmount = 0.12f;
 	PP.bOverride_MotionBlurMax = true;          PP.MotionBlurMax = 3.f;
-	PP.bOverride_BloomIntensity = true;         PP.BloomIntensity = 0.55f;
+	PP.bOverride_BloomIntensity = true;         PP.BloomIntensity = 0.35f;
 	PP.bOverride_AutoExposureMinBrightness = true; PP.AutoExposureMinBrightness = -1.5f; // EV100 (faixa estendida)
 	PP.bOverride_AutoExposureMaxBrightness = true; PP.AutoExposureMaxBrightness = 11.0f;
 	PP.bOverride_AutoExposureSpeedUp = true;    PP.AutoExposureSpeedUp = 2.5f;
@@ -309,6 +309,10 @@ void ADronePawn::MoverComColisao(float h)
 
 void ADronePawn::AtualizarCamera(float Dt)
 {
+	if (bModoTour)
+	{
+		Camera->PostProcessSettings.MotionBlurAmount = 0.f; // prints nítidos no voo de teste
+	}
 	// câmera inclinada para cima como nos drones FPV (mais no acro)
 	const float Inclinacao = (Modo == EModoVoo::Acro) ? 22.f : 6.f;
 	// vibração das hélices (bem sutil) — aumenta com o acelerador
