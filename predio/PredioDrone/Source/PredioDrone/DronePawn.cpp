@@ -57,6 +57,12 @@ ADronePawn::ADronePawn()
 	PP.bOverride_AutoExposureMaxBrightness = true; PP.AutoExposureMaxBrightness = 11.0f;
 	PP.bOverride_AutoExposureSpeedUp = true;    PP.AutoExposureSpeedUp = 2.0f;
 	PP.bOverride_AutoExposureSpeedDown = true;  PP.AutoExposureSpeedDown = 1.2f;
+	// exposição local: segura os estouros brancos (sol na parede, barreira de concreto)
+	// e levanta as paredes que ficavam quase pretas contra o teto iluminado
+	PP.bOverride_LocalExposureHighlightContrastScale = true; PP.LocalExposureHighlightContrastScale = 0.55f;
+	PP.bOverride_LocalExposureShadowContrastScale = true;    PP.LocalExposureShadowContrastScale = 0.70f;
+	PP.bOverride_LocalExposureDetailStrength = true;         PP.LocalExposureDetailStrength = 1.1f;
+	PP.bOverride_AutoExposureBias = true;                    PP.AutoExposureBias = -0.25f;
 
 	Audio = CreateDefaultSubobject<UAudioComponent>(TEXT("SomMotores"));
 	Audio->SetupAttachment(Corpo);

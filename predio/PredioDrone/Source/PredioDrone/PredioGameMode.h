@@ -16,7 +16,7 @@ struct FConexao
 {
 	int32 AndarDeBaixo = 0;   // liga AndarDeBaixo e AndarDeBaixo+1
 	FVector Posicao = FVector::ZeroVector;
-	float Raio = 700.f;
+	float Raio = 1000.f;
 };
 
 /** Itens do menu (Start / Esc), agrupados pelas categorias da coluna da esquerda. */

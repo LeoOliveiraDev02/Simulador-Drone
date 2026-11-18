@@ -455,6 +455,7 @@ def importar_props(layout):
         ns.set_editor_property("enabled", True)
         sm.set_editor_property("nanite_settings", ns)
         eal.save_loaded_asset(sm)
+        colisao_prop(sm)
         props[n] = sm
         log("prop", n)
     return props
@@ -681,12 +682,24 @@ def carregar_materiais():
     return mis
 
 
+def colisao_prop(sm):
+    """Props colidem pela própria malha (o drone não atravessa saco de cimento, barreira etc.)."""
+    try:
+        bs = sm.get_editor_property("body_setup")
+        if bs:
+            bs.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+            eal.save_loaded_asset(sm)
+    except Exception as e:
+        log("colisao prop falhou", sm.get_name(), e)
+
+
 def carregar_props(layout):
     props = {}
     for n in sorted({p["modelo"] for p in layout["props"]}):
         sms = assets_na_pasta(PASTA + "/Props/" + n, unreal.StaticMesh)
         if sms:
             props[n] = sms[0]
+            colisao_prop(sms[0])
     log("props carregados:", len(props))
     return props
 

@@ -206,8 +206,8 @@ void APredioGameMode::AtualizarAndares(bool bForcar)
 	Visiveis.Add(AndarAtual);
 	// na cobertura (último andar) o andar de baixo fica sempre desenhado: dá para ver pelos buracos
 	if (AndarAtual == NumAndares - 1 && AndarAtual > 0) Visiveis.Add(AndarAtual - 1);
-	if (Frac < 0.18f && AndarAtual > 0) Visiveis.Add(AndarAtual - 1);
-	if (Frac > 0.80f && AndarAtual < NumAndares - 1) Visiveis.Add(AndarAtual + 1);
+	if (Frac < 0.25f && AndarAtual > 0) Visiveis.Add(AndarAtual - 1);
+	if (Frac > 0.70f && AndarAtual < NumAndares - 1) Visiveis.Add(AndarAtual + 1);
 	// perto de uma ligação vertical (poço do elevador, escada, buraco): o vizinho
 	// já está desenhado antes de dar para enxergar por ela
 	for (const FConexao& C : Conexoes)
@@ -658,7 +658,7 @@ void APredioGameMode::TickMenu(float Dt)
 			if (AreaItens[i].bIsValid && AreaItens[i].IsInside(M)) { Sob = i; break; }
 		}
 		if (Sob != INDEX_NONE && bMexeu) MenuIndice = Sob;
-		if (bPodeFechar && Apertou(EKeys::LeftMouseButton))
+		if (bPodeFechar && this->Apertou(EKeys::LeftMouseButton))
 		{
 			if (AreaFechar.bIsValid && AreaFechar.IsInside(M))
 			{
@@ -680,7 +680,7 @@ void APredioGameMode::TickMenu(float Dt)
 				if (!bMenuAberto) return;
 			}
 		}
-		if (Sob != INDEX_NONE && Apertou(EKeys::RightMouseButton))
+		if (Sob != INDEX_NONE && this->Apertou(EKeys::RightMouseButton))
 		{
 			MenuIndice = Sob;
 			MudarItem(-1, false);
