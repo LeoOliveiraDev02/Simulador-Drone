@@ -1,7 +1,7 @@
 ﻿SIMULADOR DE DRONE — ONDE PARAMOS
 =================================
 
->>> 18/11/2026 À TARDE (17:30–18:40) — JOGO ÚNICO NO AR + FAZENDA NOVA <<<
+>>> 18/11/2026 À TARDE (17:30–19:30) — JOGO ÚNICO NO AR + FAZENDA NOVA <<<
   [x] Jogo único empacotado; atalho "Simulador de Drone" na área de trabalho (o antigo foi para C:\drone\_antigos\atalhos).
   [x] Abertura: E88 de verdade voando pelo prédio com a câmera atrás (/Game/Drone, construir_extras.py),
       JOGAR / CONFIGURAÇÕES / SAIR. JOGAR -> mapas (1 Fazenda e 2 Prédio liberados; 3 Usina trancado com
@@ -11,8 +11,12 @@
       na torre, cata-vento girando, 2 silos, carreta, píer no açude, milharal (13 mil pés), capim próprio,
       transformador num poste. Missões: Entregas (4 destinos), Pulverizar o milharal (mapinha da roça, 90%),
       Inspeção com fotos (6 alvos), Ferraduras douradas (12 escondidas, quente/frio), Aros, Contra o relógio.
-  [ ] Conferir fotos dos testes (testes\menu, testes\campo) e corrigir o que aparecer.
-  [ ] Mapa 3 (usina): surpresa do Claude — começar depois da fazenda aprovada.
+  [x] 19:30 — FAZENDA FINALIZADA: milho e capim agora vêm prontos do Blender (malhas "Milharal" e "Pasto",
+      já trianguladas, com Nanite). As instâncias criadas pelo jogo (ISM/HISM) não apareciam no Shipping;
+      o C++ pula essa parte quando acha as tags Milharal/Pasto (a grade da pulverização continua).
+      Teste: ~84 FPS de média, pior 1% 64 FPS; fotos ok (testes\campo). Jogo empacotado + atalho.
+  [ ] Detalhe pequeno: um pouco de capim nasce em cima da plataforma de entrega da casa (ZONAS_PLANAS).
+  [ ] Mapa 3 (usina): surpresa do Claude. ESPERANDO ORDENS do Leonardo antes de começar.
 
 >>> NOITE DE 18/11/2026 — O QUE JÁ FOI FEITO (código no repositório, commit ac2e7eb) <<<
   [x] JOGO ÚNICO: o mapa do prédio sem "?jogo" abre o MENU PRINCIPAL (voo de fundo pelo prédio):
