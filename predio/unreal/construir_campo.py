@@ -307,6 +307,13 @@ RESERVA = {"BASE": (0.55, 0.54, 0.52), "PISO": (0.5, 0.48, 0.45), "PAREDE": (0.8
 def criar_mestre_folha():
     m = novo_material("M_CampoFolha")
     m.set_editor_property("two_sided", True)
+    # milho e capim são instâncias criadas pelo jogo: o shader para instâncias tem que ir no pacote
+    for flag in ("used_with_instanced_static_meshes", "b_used_with_instanced_static_meshes"):
+        try:
+            m.set_editor_property(flag, True)
+            break
+        except Exception:
+            pass
     cor = expr(m, unreal.MaterialExpressionVectorParameter, -800, -200, parameter_name="Cor",
                default_value=unreal.LinearColor(0.2, 0.3, 0.07, 1))
     c3 = rgb(m, cor, "", -600, -200)
@@ -491,7 +498,8 @@ def importar_malhas(mis):
                 sm.set_material(i, alvo)
             else:
                 log("  slot sem material:", nome, smat.get_editor_property("material_slot_name"))
-        nanite(sm, nome not in ("Marcador", "Agua", "Farol", "CaixaEntrega", "Ferradura", "CataVentoRotor"), 0.0)
+        # capim e milho viram milhares de instâncias criadas pelo jogo: malha comum (poucos triângulos), sem Nanite
+        nanite(sm, nome not in ("Marcador", "Agua", "Farol", "CaixaEntrega", "Ferradura", "CataVentoRotor", "PeMilho", "Capim"), 0.0)
         if nome not in ("Marcador", "Agua") + MODELOS_JOGO:
             colisao_complexa(sm)
         eal.save_loaded_asset(sm)

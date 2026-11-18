@@ -26,7 +26,7 @@
 #include "Components/AudioComponent.h"
 #include "Misc/PackageName.h"
 #include "Camera/PlayerCameraManager.h"
-#include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #if WITH_EDITOR
@@ -2256,7 +2256,7 @@ void APredioGameMode::EspalharMilho()
 	if (!Malha) { DiagCampo += TEXT("milho: SEM MALHA (ModeloMilho não achado)\n"); return; }
 	AActor* Dono = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity);
 	if (!Dono) return;
-	UHierarchicalInstancedStaticMeshComponent* H = NewObject<UHierarchicalInstancedStaticMeshComponent>(Dono, TEXT("Milho"));
+	UInstancedStaticMeshComponent* H = NewObject<UInstancedStaticMeshComponent>(Dono, TEXT("Milho"));
 	H->SetMobility(EComponentMobility::Movable);
 	H->SetStaticMesh(Malha);
 	H->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -2279,6 +2279,7 @@ void APredioGameMode::EspalharMilho()
 		}
 	}
 	H->AddInstances(Ts, false, true);
+	H->MarkRenderStateDirty();
 	DiagCampo += FString::Printf(TEXT("milho: %d pés (malha %s), roça %dx%d células, chão no meio %.0f cm\n"), Ts.Num(), *Malha->GetName(), RocaNX, RocaNY, ChaoCelula.Num() ? ChaoCelula[ChaoCelula.Num() / 2] : 0.f);
 	UE_LOG(LogPredio, Log, TEXT("Campo: %d pés de milho, roça %dx%d células"), Ts.Num(), RocaNX, RocaNY);
 }
@@ -2329,7 +2330,7 @@ void APredioGameMode::EspalharGrama()
 
 	AActor* Dono = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity);
 	if (!Dono) return;
-	UHierarchicalInstancedStaticMeshComponent* H = NewObject<UHierarchicalInstancedStaticMeshComponent>(Dono, TEXT("Capim"));
+	UInstancedStaticMeshComponent* H = NewObject<UInstancedStaticMeshComponent>(Dono, TEXT("Capim"));
 	H->SetMobility(EComponentMobility::Movable);
 	H->SetStaticMesh(Malha);
 	H->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -2372,6 +2373,7 @@ void APredioGameMode::EspalharGrama()
 	}
 	DiagCampo += FString::Printf(TEXT("capim: traços sem acerto %d, primeiro outro ator atingido: %s\n"), SemAcerto, *OutroAtor);
 	H->AddInstances(Ts, false, true);
+	H->MarkRenderStateDirty();
 	DiagCampo += FString::Printf(TEXT("capim: %d touceiras (malha %s, %d instâncias no componente)\n"), Ts.Num(), *Malha->GetName(), H->GetInstanceCount());
 	UE_LOG(LogPredio, Log, TEXT("Campo: %d touceiras de capim"), Ts.Num());
 }
