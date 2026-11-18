@@ -210,6 +210,7 @@ public:
 	float MPAvisoT = 0.f;
 	bool bCarregando = false;       // trocando de mapa
 	bool bTrocandoMapa = false;     // -mapa=Campo: pulando para a fazenda
+	FString DiagCampo;              // diagnóstico (vai no resultado do voo de teste)
 	float BonusDoAro(int32 I) const;          // contra o relógio: segundos para chegar ao aro I
 	float ComprimentoCircuito() const;        // cm, do início passando por todos os aros
 

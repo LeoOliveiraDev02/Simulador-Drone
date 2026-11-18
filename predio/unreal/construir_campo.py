@@ -187,6 +187,12 @@ def criar_terreno_material():
         ligar(cor_a, "", tom, "A")
         ligar(const(m, 1.15, -1600, -60), "", tom, "B")
         cor_g = lerp(m, cor_g, tom, const(m, 0.38, -1450, -400), -1300, -600)
+    # pasto um pouco mais verde (a textura de grama é bem seca)
+    verde = expr(m, unreal.MaterialExpressionConstant3Vector, -1450, -760, constant=unreal.LinearColor(0.78, 1.0, 0.62, 1))
+    cor_v = expr(m, unreal.MaterialExpressionMultiply, -1200, -700)
+    ligar(cor_g, "", cor_v, "A")
+    ligar(verde, "", cor_v, "B")
+    cor_g = cor_v
     c1 = lerp(m, cor_g, rgb(m, t_c, "", -1600, 150), vc, -1100, -300, salfa="R")
     c2 = lerp(m, c1, rgb(m, l_c, "", -1600, 650), vc, -900, -200, salfa="G")
     batida = expr(m, unreal.MaterialExpressionMultiply, -1100, 700)
@@ -421,9 +427,17 @@ def material_do_slot(nome, mis):
     return None
 
 
-def nanite(sm, ligar_nanite=True, erro_reserva=None):
+def nanite(sm, ligar_nanite=True, erro_reserva=None, folhagem=False):
     ns = sm.get_editor_property("nanite_settings")
     ns.set_editor_property("enabled", ligar_nanite)
+    if folhagem:
+        # folhas em cartões: sem isso o Nanite "come" as folhas de longe e a árvore fica pelada
+        for prop, val in (("preserve_area", True), ("shape_preservation", unreal.NaniteShapePreservation.PRESERVE_AREA)
+                          if hasattr(unreal, "NaniteShapePreservation") else ("preserve_area", True)):
+            try:
+                ns.set_editor_property(prop, val)
+            except Exception:
+                pass
     if erro_reserva is not None:
         try:
             ns.set_editor_property("fallback_relative_error", erro_reserva)
@@ -486,6 +500,42 @@ def importar_malhas(mis):
     return malhas
 
 
+def corrigir_folhas(nome, sm):
+    """o Nanite não desenha material translúcido: folha que veio do glTF como "Blend" vira "Mask" (recorte)."""
+    for i, smat in enumerate(sm.get_editor_property("static_materials")):
+        mi = smat.get_editor_property("material_interface")
+        if not mi:
+            continue
+        pai = mi.get_editor_property("parent") if isinstance(mi, unreal.MaterialInstance) else None
+        caminho_pai = pai.get_path_name() if pai else "-"
+        log("   material", nome, i, mi.get_name(), "pai:", caminho_pai)
+        if pai and "Blend" in caminho_pai:
+            for troca in (("Blend", "Mask"), ("_Blend", "_Masked"), ("Blend", "Masked")):
+                novo = caminho_pai.replace(*troca)
+                alvo = unreal.load_asset(novo.split(".")[0]) if eal.does_asset_exist(novo.split(".")[0]) else None
+                if alvo:
+                    mi.set_editor_property("parent", alvo)
+                    if isinstance(mi, unreal.MaterialInstanceConstant):
+                        mel.update_material_instance(mi)
+                    eal.save_loaded_asset(mi)
+                    log("     -> folha passou para", novo)
+                    break
+            else:
+                try:
+                    o = mi.get_editor_property("base_property_overrides")
+                    o.set_editor_property("override_blend_mode", True)
+                    o.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+                    o.set_editor_property("override_opacity_mask_clip_value", True)
+                    o.set_editor_property("opacity_mask_clip_value", 0.4)
+                    mi.set_editor_property("base_property_overrides", o)
+                    if isinstance(mi, unreal.MaterialInstanceConstant):
+                        mel.update_material_instance(mi)
+                    eal.save_loaded_asset(mi)
+                    log("     -> folha com blend forçado para Masked")
+                except Exception as e:
+                    log("     -> não deu para corrigir:", e)
+
+
 def importar_modelos(layout, refazer):
     nomes = sorted({p["modelo"] for p in layout["plantas"]} | {"grass_medium_01"})
     modelos = {}
@@ -512,6 +562,12 @@ def importar_modelos(layout, refazer):
                     colisao_complexa(sm)
                 eal.save_loaded_asset(sm)
             log("modelo", n, len(sms), "malha(s)")
+        folha = any(k in n for k in ("tree", "shrub", "jacaranda", "grass"))
+        for sm in sms:
+            if folha:
+                nanite(sm, True, folhagem=True)
+                corrigir_folhas(n, sm)
+                eal.save_loaded_asset(sm)
         modelos[n] = sms
     return modelos
 

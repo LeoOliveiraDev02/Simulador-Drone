@@ -1152,6 +1152,14 @@ void APredioGameMode::SalvarResultadoTour()
 	const float P99 = F.Num() ? F[FMath::Clamp(FMath::FloorToInt(F.Num() * 0.99f), 0, F.Num() - 1)] : 0.f;
 	TourLinhas.Add(FString::Printf(TEXT("QUADROS %d  media %.2f ms (%.1f FPS base)  pior 1%% %.2f ms (%.1f FPS)"),
 		F.Num(), Media, Media > 0 ? 1000.f / Media : 0.f, P99, P99 > 0 ? 1000.f / P99 : 0.f));
+	if (!DiagCampo.IsEmpty())
+	{
+		TArray<FString> L;
+		DiagCampo.ParseIntoArrayLines(L);
+		TourLinhas.Append(L);
+	}
+	TourLinhas.Add(FString::Printf(TEXT("missões: coleta %d, entregas %d, fotos %d, ferraduras %d, giratórios %d, farol %d, caixa %d"),
+		bTemColeta ? 1 : 0, PontosEntrega.Num(), PontosFoto.Num(), Ferraduras.Num(), Giratorios.Num(), Farol.IsValid() ? 1 : 0, MalhaCaixa ? 1 : 0));
 	FFileHelper::SaveStringArrayToFile(TourLinhas, *(PastaTestes / TEXT("tour_resultado.txt")));
 }
 
@@ -2213,7 +2221,7 @@ void APredioGameMode::TickMissoes(float Dt, const FVector& P)
 
 void APredioGameMode::EspalharMilho()
 {
-	if (!Roca.bIsValid) return;
+	if (!Roca.bIsValid) { DiagCampo += TEXT("milho: roça não achada (tag Roca_)\n"); return; }
 	UStaticMesh* Malha = nullptr;
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
@@ -2245,7 +2253,7 @@ void APredioGameMode::EspalharMilho()
 			ChaoCelula[y * RocaNX + x] = Z;
 		}
 	}
-	if (!Malha) return;
+	if (!Malha) { DiagCampo += TEXT("milho: SEM MALHA (ModeloMilho não achado)\n"); return; }
 	AActor* Dono = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity);
 	if (!Dono) return;
 	UHierarchicalInstancedStaticMeshComponent* H = NewObject<UHierarchicalInstancedStaticMeshComponent>(Dono, TEXT("Milho"));
@@ -2271,6 +2279,7 @@ void APredioGameMode::EspalharMilho()
 		}
 	}
 	H->AddInstances(Ts, false, true);
+	DiagCampo += FString::Printf(TEXT("milho: %d pés (malha %s), roça %dx%d células, chão no meio %.0f cm\n"), Ts.Num(), *Malha->GetName(), RocaNX, RocaNY, ChaoCelula.Num() ? ChaoCelula[ChaoCelula.Num() / 2] : 0.f);
 	UE_LOG(LogPredio, Log, TEXT("Campo: %d pés de milho, roça %dx%d células"), Ts.Num(), RocaNX, RocaNY);
 }
 
@@ -2302,7 +2311,7 @@ void APredioGameMode::EspalharGrama()
 			}
 		}
 	}
-	if (!Malha) return;
+	if (!Malha) { DiagCampo += TEXT("capim: SEM MALHA (ModeloGrama não achado)\n"); return; }
 	PontosEstrada.Sort([](const TPair<int32, FVector>& A, const TPair<int32, FVector>& B) { return A.Key < B.Key; });
 
 	auto DistEstrada = [&PontosEstrada](const FVector2D& P)
@@ -2332,6 +2341,8 @@ void APredioGameMode::EspalharGrama()
 
 	FRandomStream R(2026);
 	TArray<FTransform> Ts;
+	int32 SemAcerto = 0;
+	FString OutroAtor;
 	FCollisionQueryParams Q(SCENE_QUERY_STAT(Capim), true);
 	struct FFaixa { float R0, R1; int32 N; };
 	const FFaixa Faixas[] = { { 600.f, 4500.f, 9000 }, { 4500.f, 13000.f, 11000 } };
@@ -2347,14 +2358,20 @@ void APredioGameMode::EspalharGrama()
 			if (Roca.bIsValid && Roca.ExpandBy(300.f).IsInside(P)) continue;
 			if (Acude.Z > 0.f && FMath::Square((P.X - Acude.X) / Acude.Z) + FMath::Square((P.Y - Acude.Y) / Acude.W) < 1.f) continue;
 			FHitResult Hit;
-			if (!GetWorld()->LineTraceSingleByChannel(Hit, FVector(P, 30000.f), FVector(P, -30000.f), ECC_Visibility, Q)) continue;
-			if (!Hit.GetActor() || !Hit.GetActor()->ActorHasTag(TEXT("Terreno"))) continue; // em cima de pedra, árvore, base...
+			if (!GetWorld()->LineTraceSingleByChannel(Hit, FVector(P, 30000.f), FVector(P, -30000.f), ECC_Visibility, Q)) { ++SemAcerto; continue; }
+			if (!Hit.GetActor() || !Hit.GetActor()->ActorHasTag(TEXT("Terreno")))
+			{
+				if (Hit.GetActor() && OutroAtor.IsEmpty()) OutroAtor = Hit.GetActor()->GetName();
+				continue; // em cima de pedra, árvore, base...
+			}
 			if (Hit.ImpactNormal.Z < 0.82f) continue;
 			const float E = R.FRandRange(0.75f, 1.45f);
 			Ts.Add(FTransform(FRotator(0.f, R.FRand() * 360.f, 0.f), Hit.ImpactPoint - FVector(0, 0, 4.f), FVector(E, E, E * R.FRandRange(0.85f, 1.25f))));
 			++Feitos;
 		}
 	}
+	DiagCampo += FString::Printf(TEXT("capim: traços sem acerto %d, primeiro outro ator atingido: %s\n"), SemAcerto, *OutroAtor);
 	H->AddInstances(Ts, false, true);
+	DiagCampo += FString::Printf(TEXT("capim: %d touceiras (malha %s, %d instâncias no componente)\n"), Ts.Num(), *Malha->GetName(), H->GetInstanceCount());
 	UE_LOG(LogPredio, Log, TEXT("Campo: %d touceiras de capim"), Ts.Num());
 }
