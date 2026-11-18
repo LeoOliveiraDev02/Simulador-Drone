@@ -31,7 +31,7 @@ for %%P in (menu campo predio) do (
   del /q "D:\DronePredio\testes\%%P\*.*" >nul 2>&1
 )
 start "" /wait "%EXE%" -NotInstalled -fotomenu -pastatestes=D:/DronePredio/testes/menu -windowed -resx=1920 -resy=1080
-start "" /wait "%EXE%" /Game/Mapas/Campo -NotInstalled -tour -pastatestes=D:/DronePredio/testes/campo -windowed -resx=1920 -resy=1080
+start "" /wait "%EXE%" -mapa=Campo -NotInstalled -tour -pastatestes=D:/DronePredio/testes/campo -windowed -resx=1920 -resy=1080
 start "" /wait "%EXE%" -NotInstalled -tour -pastatestes=D:/DronePredio/testes/predio -windowed -resx=1920 -resy=1080
 echo --- campo
 type "D:\DronePredio\testes\campo\tour_resultado.txt"

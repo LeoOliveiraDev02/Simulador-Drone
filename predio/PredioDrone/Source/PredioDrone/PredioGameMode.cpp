@@ -87,6 +87,16 @@ void APredioGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// -mapa=Campo na linha de comando (testes): o jogo sempre abre no prédio; daqui pula para a fazenda
+	FString MapaCmd;
+	if (!GetWorld()->GetMapName().Contains(TEXT("Campo")) && FParse::Value(FCommandLine::Get(), TEXT("mapa="), MapaCmd)
+		&& MapaCmd.Equals(TEXT("Campo"), ESearchCase::IgnoreCase) && !UGameplayStatics::HasOption(OptionsString, TEXT("jogo")))
+	{
+		bTrocandoMapa = true;
+		UGameplayStatics::OpenLevel(this, FName(TEXT("/Game/Mapas/Campo")), true, TEXT("jogo"));
+		return;
+	}
+
 	FAjustesDrone& Cfg = FAjustesDrone::Get();
 	Cfg.AplicarGraficos();
 
@@ -1005,6 +1015,7 @@ void APredioGameMode::AjusteAutomatico(float Dt)
 void APredioGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (bTrocandoMapa) return;
 
 	const float DtReal = FApp::GetDeltaTime(); // tempo do quadro de verdade (sem os quadros gerados)
 	SuavDt = FMath::Lerp(SuavDt, (float)DtReal, 0.05f);
@@ -1835,7 +1846,7 @@ void APredioGameMode::TickMenuPrincipal(float Dt)
 				if (UStaticMeshComponent* H = HelicesTitulo[i].Get()) H->SetRelativeRotation(FRotator(0.f, (i == 0 || i == 3) ? AnguloHelices : -AnguloHelices, 0.f));
 			}
 			// a câmera olha para o drone, um pouco à frente dele (ele fica no terço direito da tela)
-			const FVector Olhar = PosDrone + TD.GetRotation().GetForwardVector() * 60.f - TD.GetRotation().GetRightVector() * 22.f;
+			const FVector Olhar = PosDrone + TD.GetRotation().GetForwardVector() * 60.f - TD.GetRotation().GetRightVector() * 45.f;
 			const FRotator RC = (Olhar - PosCam).Rotation();
 			D->SetActorLocationAndRotation(PosCam, bVolta ? RC : FMath::RInterpTo(D->GetActorRotation(), RC, Dt, 4.f));
 		}

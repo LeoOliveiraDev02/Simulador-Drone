@@ -966,18 +966,34 @@ void ADroneHUD::Ilustracao(int32 Cartao, float X, float Y, float W, float H, boo
 	case ECartaoMapa::Campo:
 	{
 		RetArred(X, Y, W, H, 6 * e, C(120, 175, 235), C(250, 205, 140));        // céu de fim de tarde
-		Disco(P(0.80f, 0.30f), 18 * e, C(255, 236, 170), 24);                     // sol
-		Tri(P(0.0f, 0.78f), P(0.28f, 0.52f), P(0.62f, 0.78f), C(122, 150, 84));   // morros
-		Tri(P(0.40f, 0.78f), P(0.74f, 0.48f), P(1.0f, 0.78f), C(104, 132, 72));
-		RetArred(X, Y + 0.76f * H, W, 0.24f * H, 2 * e, C(170, 120, 70), C(150, 104, 60)); // terra vermelha
-		Linha(P(0.10f, 1.0f), P(0.46f, 0.77f), 5 * e, C(196, 150, 100));          // estradinha
-		RetArred(X + 0.08f * W, Y + 0.62f * H, 0.16f * W, 0.14f * H, 2 * e, C(200, 110, 80), C(180, 96, 70)); // galpão
-		for (int32 i = 0; i < 3; ++i)                                             // aros
+		Disco(P(0.86f, 0.24f), 16 * e, C(255, 236, 170), 24);                     // sol
+		Tri(P(0.0f, 0.70f), P(0.30f, 0.50f), P(0.64f, 0.70f), C(122, 150, 84));   // morros
+		Tri(P(0.42f, 0.70f), P(0.76f, 0.46f), P(1.0f, 0.70f), C(104, 132, 72));
+		RetArred(X, Y + 0.68f * H, W, 0.32f * H, 2 * e, C(118, 150, 70), C(100, 132, 60)); // pasto
+		for (int32 k = 0; k < 7; ++k)                                              // milharal em fileiras
 		{
-			const FVector2D CA = P(0.42f + i * 0.17f, 0.50f - i * 0.06f);
-			Arco(CA, (16 - i * 3) * e, 3.f * e, C(255, 150, 30), 0.f, 360.f, 22);
+			const float U = 0.62f + k * 0.055f;
+			Linha(P(U, 0.98f), P(U + 0.03f, 0.74f), 4 * e, C(70, 120, 40));
 		}
-		Icone(IcDrone, P(0.24f, 0.30f), 9 * e, C(30, 36, 50));
+		// casa com telhado vermelho
+		RetArred(X + 0.08f * W, Y + 0.62f * H, 0.22f * W, 0.14f * H, 1 * e, C(235, 225, 205), C(220, 210, 190));
+		Tri(P(0.06f, 0.63f), P(0.19f, 0.52f), P(0.32f, 0.63f), C(190, 80, 50));
+		RetArred(X + 0.17f * W, Y + 0.68f * H, 0.04f * W, 0.08f * H, 1 * e, C(110, 70, 40), C(110, 70, 40));
+		// caixa d'água azul na torre
+		Linha(P(0.42f, 0.74f), P(0.44f, 0.46f), 2 * e, C(90, 90, 95));
+		Linha(P(0.50f, 0.74f), P(0.48f, 0.46f), 2 * e, C(90, 90, 95));
+		RetArred(X + 0.415f * W, Y + 0.36f * H, 0.09f * W, 0.11f * H, 3 * e, C(30, 90, 190), C(20, 70, 160));
+		// cata-vento
+		Linha(P(0.55f, 0.72f), P(0.57f, 0.40f), 2 * e, C(80, 80, 85));
+		Linha(P(0.59f, 0.72f), P(0.57f, 0.40f), 2 * e, C(80, 80, 85));
+		Arco(P(0.57f, 0.38f), 11 * e, 2.2f * e, C(200, 200, 205), 0.f, 360.f, 18);
+		for (int32 k = 0; k < 6; ++k)
+		{
+			const float a = FMath::DegreesToRadians(k * 30.f);
+			Linha(P(0.57f, 0.38f) + FVector2D(FMath::Cos(a), FMath::Sin(a)) * 11.f * e, P(0.57f, 0.38f) - FVector2D(FMath::Cos(a), FMath::Sin(a)) * 11.f * e, 1.5f * e, C(200, 200, 205));
+		}
+		Icone(IcDrone, P(0.30f, 0.26f), 9 * e, C(30, 36, 50));
+		Disco(P(0.78f, 0.58f), 4 * e, C(255, 200, 40), 10);                       // ferradura dourada (brilho)
 		break;
 	}
 	case ECartaoMapa::Predio:
