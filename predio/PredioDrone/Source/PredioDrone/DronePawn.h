@@ -42,6 +42,7 @@ public:
 	float Acelerador = 0.f;
 	bool bCaido = false;
 	int32 Batidas = 0;            // batidas desde o último início (3 = quebra)
+	int32 Reinicios = 0;          // quantas vezes voltou ao início (o desafio recomeça junto)
 	static constexpr int32 MaxBatidas = 3;
 	float TempoCaido = 0.f;
 	FString Mensagem;

@@ -24,6 +24,10 @@ private:
 
 	// menu
 	void DesenharMenu(APredioGameMode* GM);
+	void DesenharMenuPrincipal(APredioGameMode* GM);
+	void Ilustracao(int32 Cartao, float X, float Y, float W, float H, bool bSel);
+	void DesenharObjetivo(APredioGameMode* GM, const class ADronePawn* D, float E);
+	void DesenharResultado(APredioGameMode* GM, float E);
 	FSlateFontInfo Fonte(float Px, const TCHAR* Face) const;
 	FVector2D Medir(const FString& S, const FSlateFontInfo& F) const;
 	float T(const FString& S, float X, float Y, float Px, const TCHAR* Face, const FLinearColor& Cor, int32 Alinh = 0, float Espaco = 0.f);

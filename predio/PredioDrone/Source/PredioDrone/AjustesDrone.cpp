@@ -46,6 +46,9 @@ void FAjustesDrone::Carregar()
 		else if (K == TEXT("Painel")) bPainel = B;
 		else if (K == TEXT("AjusteAuto")) bAjusteAuto = B;
 		else if (K == TEXT("EscalaInterface")) EscalaInterface = FMath::Clamp(F, 0.7f, 1.6f);
+		else if (K == TEXT("RecordeTopo")) RecordeTopo = FMath::Max(0.f, F);
+		else if (K == TEXT("RecordeAros")) RecordeAros = FMath::Max(0.f, F);
+		else if (K == TEXT("RecordeRelogio")) RecordeRelogio = FMath::Max(0.f, F);
 	}
 }
 
@@ -66,6 +69,9 @@ void FAjustesDrone::Salvar() const
 	L.Add(FString::Printf(TEXT("Painel=%d"), bPainel ? 1 : 0));
 	L.Add(FString::Printf(TEXT("AjusteAuto=%d"), bAjusteAuto ? 1 : 0));
 	L.Add(FString::Printf(TEXT("EscalaInterface=%.2f"), EscalaInterface));
+	L.Add(FString::Printf(TEXT("RecordeTopo=%.2f"), RecordeTopo));
+	L.Add(FString::Printf(TEXT("RecordeAros=%.2f"), RecordeAros));
+	L.Add(FString::Printf(TEXT("RecordeRelogio=%.2f"), RecordeRelogio));
 	FFileHelper::SaveStringArrayToFile(L, *Arquivo());
 }
 

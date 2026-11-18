@@ -11,6 +11,7 @@
 #include "Fonts/FontMeasure.h"
 #include "Rendering/SlateRenderer.h"
 #include "RenderUtils.h"
+#include "Camera/PlayerCameraManager.h"
 
 void ADroneHUD::Texto(const FString& S, float X, float Y, float Escala, const FLinearColor& Cor, bool bCentro, bool bDireita)
 {
@@ -44,6 +45,15 @@ void ADroneHUD::DrawHUD()
 	const ADronePawn* D = PC ? Cast<ADronePawn>(PC->GetPawn()) : nullptr;
 	APredioGameMode* GM = GetWorld() ? Cast<APredioGameMode>(GetWorld()->GetAuthGameMode()) : nullptr;
 	if (!D || !GM) return;
+	if (!Roboto)
+	{
+		Roboto = LoadObject<UFont>(nullptr, TEXT("/Engine/EngineFonts/Roboto.Roboto"));
+	}
+	if (GM->bMenuPrincipal && !GM->bMenuAberto)
+	{
+		DesenharMenuPrincipal(GM);
+		return;
+	}
 	if (GM->bMenuAberto)
 	{
 		if (!GM->bMenuJaDesenhado && !D->bModoTour)
@@ -74,7 +84,7 @@ void ADroneHUD::DrawHUD()
 		const FString Hel = FString::Printf(TEXT("HÉLICES %d/%d"), Restam, ADronePawn::MaxBatidas);
 		Texto(Hel, M, M + 62.f * E, 0.75f * E, Restam >= ADronePawn::MaxBatidas ? Branco : (Restam == 1 ? Vermelho : Amarelo));
 	}
-	Texto(GM->TextoAndar(GM->AndarAtual), W - M, M, 1.0f * E, Branco, false, true);
+	Texto(GM->TextoLocal(), W - M, M, 1.0f * E, Branco, false, true);
 	const int32 Min = FMath::FloorToInt(D->TempoVoo / 60.f), Seg = FMath::FloorToInt(D->TempoVoo) % 60;
 	Texto(FString::Printf(TEXT("%02d:%02d"), Min, Seg), W - M, M + 34.f * E, 1.0f * E, Branco, false, true);
 
@@ -89,6 +99,9 @@ void ADroneHUD::DrawHUD()
 	Caixa(W * 0.5f - 14.f * E, H * 0.5f - 1.f * E, 10.f * E, 2.f * E, Mira);
 	Caixa(W * 0.5f + 4.f * E, H * 0.5f - 1.f * E, 10.f * E, 2.f * E, Mira);
 	Caixa(W * 0.5f - 1.f * E, H * 0.5f + 4.f * E, 2.f * E, 8.f * E, Mira);
+
+	// objetivo (cronômetro, aros, resultado)
+	DesenharObjetivo(GM, D, E);
 
 	// mensagens
 	if (D->TempoMensagem > 0.f && !D->Mensagem.IsEmpty())
@@ -157,12 +170,14 @@ namespace
 	{
 		IcMonitor, IcMira, IcControle, IcSetasH, IcSetasV, IcGiro, IcLados, IcOlho, IcDrone, IcChip, IcQuadro,
 		IcMedidor, IcEngrenagem, IcRecarregar, IcEstrela, IcEnergia, IcTexto, IcSliders, IcAltoFalante,
-		IcAcessib, IcChave, IcDocumento, IcMonitorSync
+		IcAcessib, IcChave, IcDocumento, IcMonitorSync, IcBandeira, IcAro, IcRelogio, IcCasa
 	};
 	const int32 IconeItem[] = {
 		IcMonitor,      // Continuar
+		IcBandeira,     // Objetivo
 		IcOlho,         // Modo de voo
 		IcRecarregar,   // Voltar ao início
+		IcCasa,         // Menu principal
 		IcMira,         // Sensibilidade
 		IcControle,     // Expo
 		IcChip,         // FSR
@@ -507,6 +522,26 @@ void ADroneHUD::Icone(int32 Tipo, FVector2D C, float S, const FLinearColor& Cor)
 		Linha(P(-0.8f, 0.8f), P(0.15f, -0.15f), E * 1.8f, Cor);
 		Arco(P(0.42f, -0.42f), 0.38f * S, E * 1.3f, Cor, 100.f, 350.f, 14);
 		break;
+	case IcBandeira:
+		Linha(P(-0.6f, 1.f), P(-0.6f, -1.f), E, Cor);
+		Tri(P(-0.6f, -1.f), P(0.85f, -0.62f), P(-0.6f, -0.22f), Cor);
+		break;
+	case IcAro:
+		Arco(C, 0.85f * S, E * 1.6f, Cor, 0.f, 360.f, 24);
+		Arco(C, 0.45f * S, E, Cor, 0.f, 360.f, 16);
+		break;
+	case IcRelogio:
+		Arco(C, 0.85f * S, E, Cor, 0.f, 360.f, 24);
+		Linha(C, P(0, -0.55f), E, Cor);
+		Linha(C, P(0.4f, 0.1f), E, Cor);
+		Linha(P(-0.25f, -1.05f), P(0.25f, -1.05f), E * 1.3f, Cor);
+		break;
+	case IcCasa:
+		Linha(P(-0.95f, -0.05f), P(0, -0.9f), E, Cor); Linha(P(0, -0.9f), P(0.95f, -0.05f), E, Cor);
+		Linha(P(-0.65f, -0.3f), P(-0.65f, 0.85f), E, Cor); Linha(P(0.65f, -0.3f), P(0.65f, 0.85f), E, Cor);
+		Linha(P(-0.65f, 0.85f), P(0.65f, 0.85f), E, Cor);
+		ContornoArred(C.X - 0.2f * S, C.Y + 0.25f * S, 0.4f * S, 0.6f * S, 0.05f * S, E, Cor);
+		break;
 	case IcDocumento:
 		ContornoArred(C.X - 0.7f * S, C.Y - S, 1.4f * S, 2.f * S, 0.15f * S, E, Cor);
 		for (float Y : { -0.45f, 0.f, 0.45f }) Linha(P(-0.38f, Y), P(0.38f, Y), E, Cor);
@@ -675,5 +710,338 @@ void ADroneHUD::DesenharMenu(APredioGameMode* GM)
 		FX += TW + 16 * e + 8 * e;
 		T(Dc.Texto, FX, FY + 1 * e, 15.5f * e, TEXT("Regular"), Cor255(220, 230, 250));
 		FX += Medir(Dc.Texto, FL).X + 34 * e;
+	}
+}
+
+// =====================================================================================
+// OBJETIVO — cronômetro no alto, marca do próximo aro e painel de resultado
+// =====================================================================================
+void ADroneHUD::DesenharObjetivo(APredioGameMode* GM, const ADronePawn* D, float E)
+{
+	if (GM->Objetivo == EObjetivo::Livre) return;
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	const bool bAros = GM->Objetivo == EObjetivo::ArosOrdem || GM->Objetivo == EObjetivo::ArosRelogio;
+	const bool bFim = GM->Estado == EEstadoDesafio::Concluido || GM->Estado == EEstadoDesafio::Falhou;
+
+	// marca do próximo aro (losango na tela; seta na borda quando ele está fora da vista)
+	if (bAros && !bFim && GM->Aros.IsValidIndex(GM->ProximoAro))
+	{
+		const APlayerController* PC = GetOwningPlayerController();
+		if (PC && PC->PlayerCameraManager)
+		{
+			const FVector Alvo = GM->Aros[GM->ProximoAro].GetLocation();
+			const FVector CL = PC->PlayerCameraManager->GetCameraLocation();
+			const FRotator CR = PC->PlayerCameraManager->GetCameraRotation();
+			const FVector Local = CR.UnrotateVector(Alvo - CL);
+			const float Metros = FVector::Dist(Alvo, D->GetActorLocation()) / 100.f;
+			const FLinearColor Laranja = Cor255(255, 170, 40);
+			bool bNaTela = false;
+			if (Local.X > 20.f)
+			{
+				const FVector S = Project(Alvo);
+				if (S.X > 40.f && S.X < W - 40.f && S.Y > 40.f && S.Y < H - 40.f)
+				{
+					bNaTela = true;
+					const float R = 16.f * E;
+					const FVector2D C(S.X, S.Y);
+					Linha(C + FVector2D(0, -R), C + FVector2D(R, 0), 2.5f * E, Laranja);
+					Linha(C + FVector2D(R, 0), C + FVector2D(0, R), 2.5f * E, Laranja);
+					Linha(C + FVector2D(0, R), C + FVector2D(-R, 0), 2.5f * E, Laranja);
+					Linha(C + FVector2D(-R, 0), C + FVector2D(0, -R), 2.5f * E, Laranja);
+					T(FString::Printf(TEXT("%d  •  %.0f m"), GM->ProximoAro + 1, Metros), C.X, C.Y + R + 4.f * E, 16.f * E, TEXT("Bold"), Laranja, 1);
+				}
+			}
+			if (!bNaTela)
+			{
+				FVector2D Dir(Local.Y, -Local.Z);
+				if (Local.X <= 20.f && Dir.SizeSquared() < 1.f) Dir = FVector2D(0, 1); // bem atrás: aponta para baixo
+				Dir.Normalize();
+				const FVector2D Centro(W * 0.5f, H * 0.5f);
+				const FVector2D Pt = Centro + FVector2D(Dir.X * W * 0.40f, Dir.Y * H * 0.38f);
+				Seta(Pt - Dir * 30.f * E, Pt, 4.f * E, 16.f * E, Laranja);
+				T(FString::Printf(TEXT("%.0f m"), Metros), Pt.X - Dir.X * 52.f * E, Pt.Y - Dir.Y * 52.f * E - 10.f * E, 15.f * E, TEXT("Bold"), Laranja, 1);
+			}
+		}
+	}
+
+	// painel do alto
+	const float PW = 440.f * E, PH = 106.f * E;
+	const float PX = W * 0.5f - PW * 0.5f, PY = 26.f * E;
+	RetArred(PX, PY, PW, PH, 10.f * E, Cor255(6, 12, 24, 190), Cor255(10, 22, 42, 190));
+	ContornoArred(PX, PY, PW, PH, 10.f * E, FMath::Max(1.f, 1.2f * E), Cor255(60, 120, 220, 170));
+	FString Titulo = GM->NomeObjetivo(GM->Objetivo).ToUpper();
+	if (bAros) Titulo += FString::Printf(TEXT("   AROS %d/%d"), FMath::Min(GM->ProximoAro, GM->Aros.Num()), GM->Aros.Num());
+	T(Titulo, W * 0.5f, PY + 8.f * E, 15.f * E, TEXT("Bold"), AzulTexto, 1, 2.f * E);
+
+	const bool bRelogio = GM->Objetivo == EObjetivo::ArosRelogio;
+	const float Mostrar = bRelogio ? GM->TempoRestante : GM->TempoDesafio;
+	FLinearColor CorTempo = Branco;
+	if (bRelogio && GM->TempoRestante < 5.f && !bFim)
+	{
+		CorTempo = FMath::Frac(GM->TempoRestante * 2.f) > 0.5f ? Cor255(255, 80, 70) : Cor255(255, 190, 180);
+	}
+	T(GM->TextoTempo(Mostrar), W * 0.5f, PY + 28.f * E, 44.f * E, TEXT("Bold Italic"), CorTempo, 1);
+
+	FString Rodape;
+	FLinearColor CorRodape = Cinza;
+	if (GM->Estado == EEstadoDesafio::Pronto)
+	{
+		Rodape = GM->Objetivo == EObjetivo::Topo ? TEXT("Decole para começar — a meta é a cobertura") : TEXT("Decole para começar — siga o losango laranja");
+		CorRodape = AzulTexto;
+	}
+	else if (bRelogio && GM->TempoDesdeAro < 1.6f && GM->BonusUltimoAro > 0.f)
+	{
+		Rodape = FString::Printf(TEXT("+%.0f s"), GM->BonusUltimoAro);
+		CorRodape = Cor255(110, 255, 140);
+	}
+	else if (!bRelogio)
+	{
+		Rodape = FString::Printf(TEXT("Ouro %s   •   Prata %s   •   Bronze %s"),
+			*GM->TextoTempo(GM->LimiteMedalha(3), false), *GM->TextoTempo(GM->LimiteMedalha(2), false), *GM->TextoTempo(GM->LimiteMedalha(1), false));
+	}
+	else
+	{
+		Rodape = TEXT("Cada aro dá mais tempo");
+	}
+	T(Rodape, W * 0.5f, PY + 82.f * E, 14.f * E, TEXT("Regular"), CorRodape, 1);
+
+	if (bFim) DesenharResultado(GM, E);
+}
+
+void ADroneHUD::DesenharResultado(APredioGameMode* GM, float E)
+{
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	const bool bOk = GM->Estado == EEstadoDesafio::Concluido;
+	const FString Dica = TEXT("A / Enter: tentar de novo      Start / Esc: menu");
+	if (GM->TempoNoResultado > 10.f)
+	{
+		// depois de um tempo o painel encolhe para não atrapalhar o voo livre
+		T(Dica, W * 0.5f, 142.f * E, 16.f * E, TEXT("Regular"), AzulTexto, 1);
+		return;
+	}
+	const float Entrada = FMath::Clamp(GM->TempoNoResultado * 4.f, 0.f, 1.f);
+	const float PW = 600.f * E, PH = 330.f * E;
+	const float PX = W * 0.5f - PW * 0.5f, PY = H * 0.5f - PH * 0.5f + (1.f - Entrada) * 40.f * E;
+	RetArred(PX, PY, PW, PH, 14.f * E, Cor255(6, 12, 24, 235), Cor255(12, 26, 50, 235));
+	ContornoArred(PX, PY, PW, PH, 14.f * E, FMath::Max(1.f, 1.6f * E), bOk ? Cor255(80, 160, 255) : Cor255(255, 90, 80));
+	T(bOk ? TEXT("CONCLUÍDO!") : TEXT("TEMPO ESGOTADO"), W * 0.5f, PY + 18.f * E, 46.f * E, TEXT("Bold Italic"), bOk ? Branco : Cor255(255, 120, 110), 1);
+	T(GM->NomeObjetivo(GM->Objetivo).ToUpper(), W * 0.5f, PY + 78.f * E, 15.f * E, TEXT("Italic"), AzulTexto, 1, 3.f * E);
+
+	if (bOk)
+	{
+		T(GM->TextoTempo(GM->TempoDesafio), PX + 190.f * E, PY + 112.f * E, 54.f * E, TEXT("Bold Italic"), Branco, 1);
+		T(TEXT("tempo"), PX + 190.f * E, PY + 180.f * E, 14.f * E, TEXT("Regular"), Cinza, 1);
+		const FLinearColor CorMed = GM->Medalha == 3 ? Cor255(255, 196, 40) : (GM->Medalha == 2 ? Cor255(205, 215, 230) : (GM->Medalha == 1 ? Cor255(210, 130, 60) : Cor255(90, 100, 120)));
+		const FVector2D CM(PX + 430.f * E, PY + 150.f * E);
+		Disco(CM, 44.f * E, CorMed, 32);
+		Arco(CM, 36.f * E, 2.f * E, Cor255(255, 255, 255, 120), 0.f, 360.f, 32);
+		Icone(IcEstrela, CM, 22.f * E, Cor255(20, 24, 34));
+		T(GM->NomeMedalha(GM->Medalha), CM.X, CM.Y + 52.f * E, 16.f * E, TEXT("Bold"), CorMed, 1);
+		const FString Rec = GM->bNovoRecorde ? FString(TEXT("NOVO RECORDE!")) : FString::Printf(TEXT("Recorde: %s"), *GM->TextoTempo(GM->RecordeAtual()));
+		T(Rec, W * 0.5f, PY + 236.f * E, 20.f * E, TEXT("Bold"), GM->bNovoRecorde ? Cor255(110, 255, 140) : AzulTexto, 1);
+	}
+	else
+	{
+		T(FString::Printf(TEXT("Você passou por %d de %d aros"), GM->ProximoAro, GM->Aros.Num()), W * 0.5f, PY + 140.f * E, 24.f * E, TEXT("Regular"), Branco, 1);
+		T(TEXT("Dica: corte caminho entre os aros e não perca altura"), W * 0.5f, PY + 186.f * E, 16.f * E, TEXT("Regular"), Cinza, 1);
+	}
+	T(Dica, W * 0.5f, PY + PH - 44.f * E, 16.f * E, TEXT("Regular"), Cor255(220, 230, 250), 1);
+}
+
+// =====================================================================================
+// MENU PRINCIPAL — jogo único: escolha do mapa (cartões) e do desafio (lista)
+// =====================================================================================
+void ADroneHUD::Ilustracao(int32 Cartao, float X, float Y, float W, float H, bool bSel)
+{
+	const float e = Esc;
+	auto P = [&](float U, float V) { return FVector2D(X + U * W, Y + V * H); };
+	const float A = bSel ? 1.f : 0.75f;
+	auto C = [&](uint8 R, uint8 G, uint8 B, uint8 Al = 255) { return Cor255(R, G, B, (uint8)(Al * A)); };
+	switch ((ECartaoMapa)Cartao)
+	{
+	case ECartaoMapa::Campo:
+	{
+		RetArred(X, Y, W, H, 6 * e, C(120, 175, 235), C(250, 205, 140));        // céu de fim de tarde
+		Disco(P(0.80f, 0.30f), 18 * e, C(255, 236, 170), 24);                     // sol
+		Tri(P(0.0f, 0.78f), P(0.28f, 0.52f), P(0.62f, 0.78f), C(122, 150, 84));   // morros
+		Tri(P(0.40f, 0.78f), P(0.74f, 0.48f), P(1.0f, 0.78f), C(104, 132, 72));
+		RetArred(X, Y + 0.76f * H, W, 0.24f * H, 2 * e, C(170, 120, 70), C(150, 104, 60)); // terra vermelha
+		Linha(P(0.10f, 1.0f), P(0.46f, 0.77f), 5 * e, C(196, 150, 100));          // estradinha
+		RetArred(X + 0.08f * W, Y + 0.62f * H, 0.16f * W, 0.14f * H, 2 * e, C(200, 110, 80), C(180, 96, 70)); // galpão
+		for (int32 i = 0; i < 3; ++i)                                             // aros
+		{
+			const FVector2D CA = P(0.42f + i * 0.17f, 0.50f - i * 0.06f);
+			Arco(CA, (16 - i * 3) * e, 3.f * e, C(255, 150, 30), 0.f, 360.f, 22);
+		}
+		Icone(IcDrone, P(0.24f, 0.30f), 9 * e, C(30, 36, 50));
+		break;
+	}
+	case ECartaoMapa::Predio:
+	{
+		RetArred(X, Y, W, H, 6 * e, C(70, 110, 170), C(170, 195, 225));
+		RetArred(X, Y + 0.88f * H, W, 0.12f * H, 2 * e, C(110, 100, 90), C(95, 88, 80));
+		const float BX0 = 0.22f, BX1 = 0.72f;
+		for (int32 k = 0; k <= 4; ++k)                                             // lajes
+		{
+			const float V = 0.88f - k * 0.17f;
+			Linha(P(BX0 - 0.02f, V), P(BX1 + 0.02f, V), 4 * e, C(200, 200, 195));
+		}
+		for (int32 k = 0; k <= 4; ++k)                                             // pilares
+		{
+			const float U = FMath::Lerp(BX0, BX1, k / 4.f);
+			Linha(P(U, 0.88f), P(U, 0.20f), 3 * e, C(185, 185, 180));
+		}
+		RetArred(X + 0.23f * W, Y + 0.72f * H, 0.24f * W, 0.16f * H, 1 * e, C(160, 90, 60), C(150, 84, 56)); // tijolos no térreo
+		Linha(P(0.84f, 0.88f), P(0.84f, 0.08f), 3 * e, C(255, 196, 40));           // grua
+		Linha(P(0.50f, 0.10f), P(0.98f, 0.10f), 3 * e, C(255, 196, 40));
+		Linha(P(0.60f, 0.10f), P(0.60f, 0.30f), 1.5f * e, C(40, 40, 40));
+		Icone(IcDrone, P(0.47f, 0.47f), 8 * e, C(255, 255, 255));
+		break;
+	}
+	default:
+	{
+		RetArred(X, Y, W, H, 6 * e, C(40, 34, 40), C(110, 70, 50));               // céu de poeira
+		RetArred(X + 0.12f * W, Y + 0.18f * H, 0.07f * W, 0.62f * H, 1 * e, C(60, 54, 52), C(50, 45, 44)); // chaminés
+		RetArred(X + 0.26f * W, Y + 0.30f * H, 0.06f * W, 0.50f * H, 1 * e, C(60, 54, 52), C(50, 45, 44));
+		for (int32 i = 0; i < 4; ++i)                                             // telhado em serra
+		{
+			const float U = 0.40f + i * 0.14f;
+			Tri(P(U, 0.80f), P(U, 0.50f), P(U + 0.14f, 0.80f), C(72, 62, 58));
+		}
+		RetArred(X, Y + 0.80f * H, W, 0.20f * H, 2 * e, C(46, 40, 38), C(40, 35, 34));
+		T(TEXT("?"), X + 0.5f * W, Y + 0.16f * H, 46 * e, TEXT("Bold Italic"), C(255, 170, 60, 200), 1);
+		break;
+	}
+	}
+}
+
+void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
+{
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	Esc = FMath::Min(W * 0.92f / 1280.f, H * 0.94f / 960.f);
+	const float OX = (W - 1280.f * Esc) * 0.5f;
+	const float OY = (H - 960.f * Esc) * 0.5f;
+	auto X = [&](float V) { return OX + V * Esc; };
+	auto Y = [&](float V) { return OY + V * Esc; };
+	auto Pt = [&](float A, float B) { return FVector2D(X(A), Y(B)); };
+	const float e = Esc;
+	const float Anim = FMath::Clamp(GM->MPRelogio * 2.5f, 0.f, 1.f);
+
+	// voo de fundo escurecido (mais escuro embaixo, onde ficam os cartões)
+	Caixa(0, 0, W, H, Cor255(2, 6, 14, 120));
+	Caixa(0, H * 0.45f, W, H * 0.55f, Cor255(2, 6, 14, 90));
+	if (GM->MPEscuro > 0.f) Caixa(0, 0, W, H, FLinearColor(0, 0, 0, GM->MPEscuro));
+
+	// título
+	Icone(IcDrone, Pt(96, 92), 30 * e, AzulClaro);
+	Linha(Pt(150, 132), Pt(220, 132), 2.2f * e, Cor255(70, 140, 255, 220));
+	T(TEXT("SIMULADOR DE DRONE"), X(146), Y(46), 62 * e, TEXT("Bold Italic"), Branco);
+	T(TEXT("ESCOLHA O MAPA E O DESAFIO"), X(230), Y(122), 17 * e, TEXT("Italic"), AzulTexto, 0, 4.f * e);
+
+	// cartões dos mapas
+	struct FInfo { const TCHAR* Tag; const TCHAR* Nome; const TCHAR* Sub; };
+	const FInfo Info[] = {
+		{ TEXT("MAPA 1"), TEXT("CAMPO BAIANO"), TEXT("Fazenda com açude, galpão e circuito de aros") },
+		{ TEXT("MAPA 2"), TEXT("PRÉDIO EM OBRA"), TEXT("Três andares em construção — voo por dentro") },
+		{ TEXT("MAPA 3"), TEXT("USINA ABANDONADA"), TEXT("Siderúrgica desativada — entregas difíceis") },
+	};
+	const int32 NCart = (int32)ECartaoMapa::Total;
+	GM->AreaCartoes.SetNum(NCart);
+	const float CW = 370.f, CH = 262.f, CG = 15.f, CX0 = (1280.f - (NCart * CW + (NCart - 1) * CG)) * 0.5f, CY0 = 186.f;
+	for (int32 c = 0; c < NCart; ++c)
+	{
+		const bool bSel = c == GM->MPCartao;
+		const bool bDisp = GM->CartaoDisponivel(c);
+		const float cx = CX0 + c * (CW + CG);
+		const float cy = CY0 - (bSel ? 8.f : 0.f) + (1.f - Anim) * (30.f + c * 12.f);
+		RetArred(X(cx), Y(cy), CW * e, CH * e, 10 * e, bSel ? Cor255(12, 30, 66, 245) : Cor255(8, 15, 28, 230), bSel ? Cor255(10, 22, 48, 245) : Cor255(8, 14, 26, 230));
+		ContornoArred(X(cx), Y(cy), CW * e, CH * e, 10 * e, FMath::Max(1.f, (bSel ? 2.4f : 1.1f) * e), bSel ? Cor255(90, 160, 255) : Cor255(40, 64, 104, 200));
+		Ilustracao(c, X(cx + 10), Y(cy + 10), (CW - 20) * e, 140 * e, bSel);
+		// etiqueta
+		const TCHAR* Tag = bDisp ? Info[c].Tag : TEXT("EM BREVE");
+		const float TW = Medir(Tag, Fonte(12 * e, TEXT("Bold"))).X;
+		RetArred(X(cx + 20), Y(cy + 20), TW + 18 * e, 22 * e, 11 * e, bDisp ? Cor255(30, 110, 250, 230) : Cor255(230, 130, 30, 235), bDisp ? Cor255(40, 125, 255, 230) : Cor255(240, 150, 40, 235));
+		T(Tag, X(cx + 20) + 9 * e, Y(cy + 23), 12 * e, TEXT("Bold"), Branco);
+		T(Info[c].Nome, X(cx + 20), Y(cy + 160), 27 * e, TEXT("Bold Italic"), bDisp ? Branco : Cinza);
+		T(Info[c].Sub, X(cx + 20), Y(cy + 200), 13.5f * e, TEXT("Regular"), bSel ? Cor255(175, 200, 240) : Cinza);
+		if (bSel)
+		{
+			Linha(Pt(cx + 20, cy + 232), Pt(cx + 90, cy + 232), 3 * e, Cor255(70, 140, 255));
+		}
+		GM->AreaCartoes[c] = FBox2D(Pt(cx, cy), Pt(cx + CW, cy + CH));
+	}
+
+	// lista: desafios do mapa escolhido + configurações + sair
+	const int32 NL = GM->NumLinhasMP();
+	const float L0 = CX0, L1 = 1280.f - CX0, LY0 = 476.f, LH = 58.f;
+	GM->AreaLinhas.SetNum(NL);
+	for (int32 l = 0; l < NL; ++l)
+	{
+		const float ly = LY0 + l * LH + (1.f - Anim) * 40.f;
+		const bool bSel = l == GM->MPLinha;
+		EObjetivo O = EObjetivo::Livre;
+		const bool bObj = GM->LinhaEhObjetivo(l, O);
+		const bool bBloq = bObj && !GM->CartaoDisponivel(GM->MPCartao);
+		if (bSel)
+		{
+			RetArred(X(L0), Y(ly), (L1 - L0) * e, (LH - 6) * e, 7 * e, Cor255(21, 87, 214, 240), Cor255(11, 38, 92, 240));
+			ContornoArred(X(L0), Y(ly), (L1 - L0) * e, (LH - 6) * e, 7 * e, FMath::Max(1.f, 1.4f * e), Cor255(76, 149, 255));
+		}
+		else
+		{
+			RetArred(X(L0), Y(ly), (L1 - L0) * e, (LH - 6) * e, 6 * e, Cor255(10, 18, 32, 215), Cor255(9, 16, 28, 215));
+		}
+		int32 Ic = IcEngrenagem;
+		if (bObj) Ic = O == EObjetivo::Topo ? IcBandeira : (O == EObjetivo::ArosOrdem ? IcAro : (O == EObjetivo::ArosRelogio ? IcRelogio : IcOlho));
+		else if (l == NL - 1) Ic = IcEnergia;
+		const float CY = ly + (LH - 6) * 0.5f;
+		Icone(Ic, Pt(L0 + 34, CY), 12 * e, bSel ? Branco : AzulTexto);
+		T(GM->NomeLinhaMP(l), X(L0 + 70), Y(ly + 5), 19 * e, TEXT("Regular"), bBloq ? Cinza : Branco);
+		T(GM->DescricaoLinhaMP(l), X(L0 + 70), Y(ly + 28), 12.5f * e, TEXT("Regular"), bSel ? Cor255(175, 200, 240) : Cinza);
+		const FString Extra = GM->ExtraLinhaMP(l);
+		if (!Extra.IsEmpty())
+		{
+			T(Extra, X(L1 - 54), Y(ly + 15), 15 * e, TEXT("Italic"), bBloq ? Cor255(240, 150, 60) : AzulTexto, 2);
+		}
+		if (bSel)
+		{
+			// botão de play na linha escolhida
+			const FVector2D PC = Pt(L1 - 28, CY);
+			Tri(PC + FVector2D(-6, -8) * e, PC + FVector2D(-6, 8) * e, PC + FVector2D(8, 0) * e, Branco);
+		}
+		GM->AreaLinhas[l] = FBox2D(Pt(L0, ly), Pt(L1, ly + LH - 6));
+	}
+
+	if (GM->MPAvisoT > 0.f && !GM->MPAviso.IsEmpty())
+	{
+		T(GM->MPAviso, W * 0.5f, Y(LY0 + NL * LH + 8), 17 * e, TEXT("Bold"), Cor255(255, 170, 70, (uint8)(255 * FMath::Clamp(GM->MPAvisoT, 0.f, 1.f))), 1);
+	}
+
+	// lema e rodapé
+	T(TEXT("VOE • EXPLORE • DOMINE"), W * 0.5f, Y(868), 14 * e, TEXT("Italic"), Cor255(110, 140, 190), 1, 5.f * e);
+	struct FDica { const TCHAR* Tecla; const TCHAR* Texto; };
+	const FDica Dicas[] = {
+		{ TEXT("← →"), TEXT("Mapa") }, { TEXT("↑↓"), TEXT("Desafio") }, { TEXT("A / Enter"), TEXT("Voar") },
+		{ TEXT("Start"), TEXT("Configurações") }, { TEXT("B / Esc"), TEXT("Sair") } };
+	const FSlateFontInfo FT = Fonte(14 * e, TEXT("Bold"));
+	const FSlateFontInfo FL = Fonte(15.5f * e, TEXT("Regular"));
+	float Total = 0.f;
+	for (const FDica& Dc : Dicas) Total += Medir(Dc.Tecla, FT).X + 16 * e + 8 * e + Medir(Dc.Texto, FL).X + 34 * e;
+	float FX = W * 0.5f - Total * 0.5f;
+	const float FY = Y(912);
+	for (const FDica& Dc : Dicas)
+	{
+		const float TW = Medir(Dc.Tecla, FT).X;
+		ContornoArred(FX, FY - 2 * e, TW + 16 * e, 26 * e, 4 * e, FMath::Max(1.f, 1.2f * e), Cor255(190, 205, 230, 220));
+		T(Dc.Tecla, FX + 8 * e, FY + 2 * e, 14 * e, TEXT("Bold"), Branco);
+		FX += TW + 16 * e + 8 * e;
+		T(Dc.Texto, FX, FY + 1 * e, 15.5f * e, TEXT("Regular"), Cor255(220, 230, 250));
+		FX += Medir(Dc.Texto, FL).X + 34 * e;
+	}
+
+	if (GM->bCarregando)
+	{
+		Caixa(0, 0, W, H, FLinearColor(0, 0, 0, 0.85f));
+		T(TEXT("CARREGANDO…"), W * 0.5f, H * 0.5f - 20 * e, 34 * e, TEXT("Bold Italic"), Branco, 1, 4.f * e);
 	}
 }

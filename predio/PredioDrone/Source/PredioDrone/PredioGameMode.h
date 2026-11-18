@@ -23,8 +23,10 @@ struct FConexao
 enum class EItemMenu : uint8
 {
 	Continuar,      // CONTINUAR
-	ModoVoo,        // JOGABILIDADE
+	Objetivo,       // JOGABILIDADE
+	ModoVoo,
 	VoltarInicio,
+	MenuPrincipal,
 	Sensibilidade,  // SENSIBILIDADE
 	Expo,
 	ModoFSR,        // VÍDEO
@@ -50,6 +52,15 @@ enum class ECategoriaMenu : uint8
 
 /** Como o valor do item aparece no menu. */
 enum class ETipoValor : uint8 { Acao, Texto, Chave, Nenhum };
+
+/** Objetivo do voo (escolhido no menu principal ou no menu de pausa). */
+enum class EObjetivo : uint8 { Livre, Topo, ArosOrdem, ArosRelogio };
+
+/** Andamento do desafio. */
+enum class EEstadoDesafio : uint8 { Pronto, Correndo, Concluido, Falhou };
+
+/** Cartões do menu principal. */
+enum class ECartaoMapa : uint8 { Campo, Predio, Usina, Total };
 
 /**
  * Regras do mapa do prédio:
@@ -100,6 +111,52 @@ public:
 	// limites de voo: por dentro da tela de proteção e abaixo da borda de cima dela
 	FBox LimitesVoo;
 
+	// ---------------------------------------------------------------- mapa e objetivo
+	bool bEhCampo = false;
+	EObjetivo Objetivo = EObjetivo::Livre;
+	EEstadoDesafio Estado = EEstadoDesafio::Pronto;
+	float TempoDesafio = 0.f;      // cronômetro (s), só corre com o jogo despausado
+	float TempoRestante = 0.f;     // contra o relógio (s)
+	float BonusUltimoAro = 0.f;    // segundos ganhos no último aro (mostrado na tela)
+	float TempoDesdeAro = 99.f;
+	int32 ProximoAro = 0;
+	TArray<FTransform> Aros;       // na ordem do circuito
+	float RaioAro = 220.f;         // raio de passagem (cm)
+	int32 Medalha = 0;             // 0 nenhuma, 1 bronze, 2 prata, 3 ouro
+	bool bNovoRecorde = false;
+	float TempoNoResultado = 0.f;  // segundos desde o fim do desafio (painel de resultado)
+	float AlturaTopo() const;
+	float LimiteMedalha(int32 M) const;  // tempo máximo (s) para a medalha M (3 ouro, 2 prata, 1 bronze)
+	float RecordeAtual() const;
+	TArray<EObjetivo> ObjetivosDoMapa() const;
+	static TArray<EObjetivo> ObjetivosDoCartao(ECartaoMapa C);
+	static FString NomeObjetivo(EObjetivo O);
+	static FString DescricaoObjetivo(EObjetivo O);
+	static FString TextoTempo(float Segundos, bool bDecimos = true);
+	static FString NomeMedalha(int32 M);
+	FString TextoLocal() const;    // canto de cima à direita do OSD
+
+	// ---------------------------------------------------------------- menu principal
+	bool bMenuPrincipal = false;
+	int32 MPCartao = (int32)ECartaoMapa::Predio;
+	int32 MPLinha = 0;
+	bool bCampoExiste = false;
+	int32 NumLinhasMP() const;
+	bool LinhaEhObjetivo(int32 L, EObjetivo& Out) const;
+	FString NomeLinhaMP(int32 L) const;
+	FString DescricaoLinhaMP(int32 L) const;
+	FString ExtraLinhaMP(int32 L) const;   // recorde / aviso à direita
+	bool CartaoDisponivel(int32 C) const;
+	TArray<FBox2D> AreaCartoes;
+	TArray<FBox2D> AreaLinhas;
+	float MPRelogio = 0.f;          // segundos reais desde que o menu principal abriu (animações)
+	float MPEscuro = 0.f;           // escurecimento do voo de fundo quando ele dá a volta
+	FString MPAviso;                // aviso curto no menu principal
+	float MPAvisoT = 0.f;
+	bool bCarregando = false;       // trocando de mapa
+	float BonusDoAro(int32 I) const;          // contra o relógio: segundos para chegar ao aro I
+	float ComprimentoCircuito() const;        // cm, do início passando por todos os aros
+
 	static FString NomeModoFSR();
 	static bool FSRLigado();
 	static bool GeradorLigado();
@@ -117,12 +174,34 @@ private:
 	void TickTour(float Dt);
 	void SalvarResultadoTour();
 
+	void MontarPercurso();
+	FTransform PontoNoPercurso(float S) const;
+	void EntrarMenuPrincipal();
+	void TickMenuPrincipal(float Dt);
+	void ConfirmarMenuPrincipal();
+	void IniciarObjetivo(EObjetivo O, bool bRecolocar);
+	void ReiniciarDesafio();
+	void TickObjetivo(float Dt);
+	void ConcluirDesafio(bool bSucesso);
+	void MontarAros();
+	void MostrarAros();
+	void IrParaMapa(const FString& Mapa, const FString& Opcoes);
+	void EspalharGrama();
+	TArray<TPair<int32, TWeakObjectPtr<AActor>>> AtoresAros;
+	int32 UltimosReinicios = 0;
+	FVector UltimaPosDrone = FVector::ZeroVector;
+	float MPVooS = 0.f;
+	bool bFotoMenu = false;
+	float FotoMenuT = 0.f;
+	int32 FotoMenuFase = 0;
+	bool bConfigDoMenuPrincipal = false;
+
 	ADronePawn* Drone() const;
 
 	TMap<FName, FGrupoVisivel> Grupos;   // "Andar0", "Laje1", ...
 	TArray<FConexao> Conexoes;
 	TMap<int32, double> AndarPedido; // última vez que cada andar precisou aparecer (evita pisca-pisca)
-	TArray<TPair<int32, FTransform>> Rota; // pontos invisíveis do voo de teste
+	TArray<TPair<int32, FTransform>> Rota; // pontos invisíveis do voo de teste (no campo: os aros)
 	float AlturaAndar = 300.f;
 	float CotaTerreo = 0.f;
 

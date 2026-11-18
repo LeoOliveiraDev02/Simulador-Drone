@@ -19,6 +19,10 @@ struct FAjustesDrone
 	bool bPainel = true;
 	bool bAjusteAuto = true;
 	float EscalaInterface = 1.0f; // tamanho do OSD (acessibilidade)
+	// recordes (segundos; 0 = ainda não tem)
+	float RecordeTopo = 0.f;      // prédio: chegar ao topo
+	float RecordeAros = 0.f;      // campo: aros em ordem
+	float RecordeRelogio = 0.f;   // campo: contra o relógio (tempo total)
 
 	static FAjustesDrone& Get();
 	static FString Arquivo();

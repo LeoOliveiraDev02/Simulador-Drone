@@ -176,6 +176,7 @@ void ADronePawn::Recomecar(const FTransform& Onde)
 	bCaido = false;
 	TempoCaido = 0.f;
 	Batidas = 0;
+	++Reinicios;
 }
 
 void ADronePawn::LerControles(float Dt)
@@ -427,10 +428,7 @@ void ADronePawn::MoverComColisao(float h)
 
 void ADronePawn::AtualizarCamera(float Dt)
 {
-	if (bModoTour)
-	{
-		Camera->PostProcessSettings.MotionBlurAmount = 0.f;
-	}
+	Camera->PostProcessSettings.MotionBlurAmount = bModoTour ? 0.f : 0.12f; // volta ao normal ao sair do menu principal
 	const float Inclinacao = (Modo == EModoVoo::Acro) ? 22.f : 6.f;
 	const float Amp = (bModoTour || bCongelado) ? 0.f : (0.04f + 0.10f * Acelerador);
 	const FRotator Tremor(
