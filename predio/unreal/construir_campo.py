@@ -500,7 +500,9 @@ def importar_malhas(mis):
                 log("  slot sem material:", nome, smat.get_editor_property("material_slot_name"))
         # capim e milho viram milhares de instâncias criadas pelo jogo: malha comum (poucos triângulos), sem Nanite
         nanite(sm, nome not in ("Marcador", "Agua", "Farol", "CaixaEntrega", "Ferradura", "CataVentoRotor", "PeMilho", "Capim"), 0.0)
-        if nome not in ("Marcador", "Agua") + MODELOS_JOGO:
+        if nome in ("Milharal", "Pasto"):
+            nanite(sm, True, folhagem=True)    # plantação já espalhada no Blender: uma malha só, com Nanite
+        elif nome not in ("Marcador", "Agua") + MODELOS_JOGO:
             colisao_complexa(sm)
         eal.save_loaded_asset(sm)
         malhas[nome] = sm
@@ -629,7 +631,7 @@ def montar_mapa(layout, malhas, modelos):
         a = eas.spawn_actor_from_object(sm, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
         a.set_actor_label(nome)
         tag(a, nome)
-        if nome == "Agua":
+        if nome in ("Agua", "Milharal", "Pasto"):
             a.set_actor_enable_collision(False)
 
     # árvores, arbustos, pedras e objetos

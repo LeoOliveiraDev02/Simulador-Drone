@@ -870,6 +870,91 @@ def transformador():
     return (b0[0] + 0.35, b0[1], y + 7.6)
 
 
+MOLDES = {}
+
+
+def molde(bm):
+    """copia vértices, faces e material de um bmesh (para espalhar milhares de cópias com numpy)."""
+    bm.verts.ensure_lookup_table()
+    v = np.array([vv.co[:] for vv in bm.verts], dtype=np.float64)
+    f = [[vv.index for vv in ff.verts] for ff in bm.faces]
+    m = [ff.material_index for ff in bm.faces]
+    return v, f, m
+
+
+def espalhar(nome, mold, posicoes, materiais):
+    """uma malha só com cópias do molde: posicoes = lista de (x, y, z, giro_rad, escala_xy, escala_z) no Blender."""
+    v0, f0, m0 = mold
+    nv = len(v0)
+    P = np.array(posicoes, dtype=np.float64)
+    n = len(P)
+    c, s_ = np.cos(P[:, 3]), np.sin(P[:, 3])
+    x = v0[None, :, 0] * P[:, 4:5]
+    y = v0[None, :, 1] * P[:, 4:5]
+    z = v0[None, :, 2] * P[:, 5:6]
+    X = x * c[:, None] - y * s_[:, None] + P[:, 0:1]
+    Y = x * s_[:, None] + y * c[:, None] + P[:, 1:2]
+    Z = z + P[:, 2:3]
+    verts = np.stack([X, Y, Z], axis=2).reshape(-1, 3).astype(np.float32)
+    tam = [len(ff) for ff in f0]
+    idx0 = np.array([i for ff in f0 for i in ff], dtype=np.int64)
+    loops = (idx0[None, :] + (np.arange(n) * nv)[:, None]).ravel().astype(np.int32)
+    tot = np.tile(np.array(tam, dtype=np.int32), n)
+    inicio = np.concatenate([[0], np.cumsum(tot)[:-1]]).astype(np.int32)
+    me = bpy.data.meshes.new(nome)
+    me.vertices.add(len(verts))
+    me.vertices.foreach_set("co", verts.ravel())
+    me.loops.add(len(loops))
+    me.loops.foreach_set("vertex_index", loops)
+    me.polygons.add(len(tot))
+    me.polygons.foreach_set("loop_start", inicio)
+    me.polygons.foreach_set("loop_total", tot)
+    me.polygons.foreach_set("material_index", np.tile(np.array(m0, dtype=np.int32), n))
+    me.update(calc_edges=True)
+    for mm in materiais:
+        me.materials.append(mat(mm))
+    ob = bpy.data.objects.new(nome, me)
+    bpy.context.scene.collection.objects.link(ob)
+    print(nome, n, "cópias,", len(tot), "faces")
+    return ob
+
+
+def plantacoes():
+    """milharal e capim já espalhados (malhas prontas: não dependem de instâncias criadas no jogo)."""
+    rr = np.random.RandomState(77)
+    pos = []
+    x = ROCA[0] + 0.6
+    while x < ROCA[2] - 0.3:
+        z = ROCA[1] + 0.3
+        while z < ROCA[3] - 0.3:
+            px, pz = x + rr.uniform(-0.08, 0.08), z + rr.uniform(-0.06, 0.06)
+            pos.append((px, pz))
+            z += 0.40
+        x += 0.95
+    P = np.array(pos)
+    H = altura(P[:, 0], P[:, 1])
+    posicoes = np.stack([P[:, 0], -P[:, 1], H - 0.03, rr.uniform(0, 2 * np.pi, len(P)),
+                         rr.uniform(0.85, 1.15, len(P)), rr.uniform(0.8, 1.15, len(P))], axis=1)
+    espalhar("Milharal", MOLDES["milho"], posicoes, ["MILHO", "ESPIGA"])
+    # capim: mais denso perto da base, rareando até 130 m (fora da estrada, açude, roça e construções)
+    N = 60000
+    ang = rr.uniform(0, 2 * np.pi, N)
+    r = np.sqrt(rr.uniform(6.0 ** 2, 130.0 ** 2, N))
+    r = np.where(rr.uniform(0, 1, N) < 0.45, np.sqrt(rr.uniform(6.0 ** 2, 45.0 ** 2, N)), r)
+    gx, gz = np.cos(ang) * r, np.sin(ang) * r + 4.0
+    ok = dist_estrada(gx, gz) > 4.8
+    ok &= acude_e(gx, gz) > 1.25
+    ok &= ~((gx > ROCA[0] - 3) & (gx < ROCA[2] + 3) & (gz > ROCA[1] - 3) & (gz < ROCA[3] + 3))
+    ok &= np.hypot(gx - GALPAO_C[0], gz - GALPAO_C[1]) > 12.0
+    for (cx, cz), r0, r1 in ZONAS_PLANAS:
+        ok &= np.hypot(gx - cx, gz - cz) > r0 + 1.0
+    gx, gz = gx[ok][:26000], gz[ok][:26000]
+    n = len(gx)
+    gh = altura(gx, gz)
+    posicoes = np.stack([gx, -gz, gh - 0.04, rr.uniform(0, 2 * np.pi, n), rr.uniform(0.75, 1.45, n), rr.uniform(0.8, 1.5, n)], axis=1)
+    espalhar("Pasto", MOLDES["capim"], posicoes, ["CAPIM"])
+
+
 def modelos_soltos():
     """malhas que o jogo usa em tempo de execução (ficam escondidas no mapa como modelo)."""
     # pé de milho (~2,1 m)
@@ -895,6 +980,7 @@ def modelos_soltos():
         a = k * 1.25
         segmento(bm, (0, 0, 2.08), (math.cos(a) * 0.14, math.sin(a) * 0.14, 2.3), 0.006, mi=1, lados=3)
     uv_caixa(bm, 0.5)
+    MOLDES["milho"] = molde(bm)
     novo_obj("PeMilho", bm, ["MILHO", "ESPIGA"])
     # touceira de capim (~0,5 m)
     bm = bmesh.new()
@@ -915,6 +1001,7 @@ def modelos_soltos():
         bm.faces.new((v[0], v[1], v[2], v[3]))
         bm.faces.new((v[3], v[2], v[4]))
     uv_caixa(bm, 0.5)
+    MOLDES["capim"] = molde(bm)
     novo_obj("Capim", bm, ["CAPIM"])
     # caixa de entrega (40 x 30 x 30 cm) com fita
     bm = bmesh.new()
@@ -959,6 +1046,7 @@ def fazenda():
     ponta_pier = pier()
     trafo = transformador()
     modelos_soltos()
+    plantacoes()
     # coleta das caixas: na frente do lado aberto do galpão
     g = math.radians(GALPAO_GIRO)
     lx, ly = 0.0, -(7.5 / 2 + 6.0)

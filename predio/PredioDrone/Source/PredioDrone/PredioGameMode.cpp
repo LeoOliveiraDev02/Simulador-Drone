@@ -2253,6 +2253,14 @@ void APredioGameMode::EspalharMilho()
 			ChaoCelula[y * RocaNX + x] = Z;
 		}
 	}
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		if (It->ActorHasTag(TEXT("Milharal")))
+		{
+			DiagCampo += FString::Printf(TEXT("milho: milharal pronto no mapa (malha fixa), roça %dx%d células\n"), RocaNX, RocaNY);
+			return;
+		}
+	}
 	if (!Malha) { DiagCampo += TEXT("milho: SEM MALHA (ModeloMilho não achado)\n"); return; }
 	AActor* Dono = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity);
 	if (!Dono) return;
@@ -2288,6 +2296,10 @@ void APredioGameMode::EspalharMilho()
 
 void APredioGameMode::EspalharGrama()
 {
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		if (It->ActorHasTag(TEXT("Pasto"))) { DiagCampo += TEXT("capim: pasto pronto no mapa (malha fixa)\n"); return; }
+	}
 	UStaticMesh* Malha = nullptr;
 	TArray<TPair<int32, FVector>> PontosEstrada;
 	FVector4 Acude(0, 0, 0, 0); // centro x, y e raios x, y (cm)
