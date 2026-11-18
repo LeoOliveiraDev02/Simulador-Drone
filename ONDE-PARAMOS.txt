@@ -1,5 +1,45 @@
 SIMULADOR DE DRONE — ONDE PARAMOS
 =================================
+
+>>> PLANO COMBINADO COM O LEONARDO EM 18/11/2026 (00:00) — FAZER NESTA ORDEM <<<
+Regra fixa: toda mudança termina com o jogo empacotado e o atalho da área de trabalho atualizado.
+
+ETAPA 1 — PORTAR O MAPA 1 (campo baiano, Godot) PARA O UNREAL — reaproveitando, não do zero
+  O mapa 1 é gerado por código (voo_e88/scripts/mapa.gd): relevo, açude, galpão, estrada,
+  cercas, postes, base H, biruta, eucaliptos, portais. Isso tudo vira dados e é reaproveitado.
+  [ ] 1.1 Script que lê o mapa.gd e exporta o layout (posições, tamanhos, função do relevo) em JSON
+  [ ] 1.2 Relevo 1 x 1 km como Landscape do Unreal (heightmap gerado da mesma função altura())
+          + material de terreno em camadas (pasto, terra, estrada, beira do açude)
+  [ ] 1.3 Reaproveitar os modelos já baixados (árvores/pedras do Poly Haven) e o E88 do Blender;
+          refazer no Blender, com mais detalhe, galpão, cercas, postes, biruta e base H
+  [ ] 1.4 Vegetação com Nanite (capim, eucaliptos), vento nas folhas, capim reagindo às hélices
+  [ ] 1.5 Açude com água de verdade, céu com os 3 horários (tarde com nuvens, pôr do sol, céu limpo)
+  [ ] 1.6 Portar a física do E88 (e88.gd: estabilizado com altitude travada, acro, vento com
+          rajadas, efeito solo, quebra de hélice) para C++; câmera atrás + opção FPV;
+          reaproveitar menu/pausa, som, OSD, AMD FSR 4 + gerador de quadros, ajuste 60 FPS
+  [ ] 1.7 Limite de voo de 1 km (não sair do mapa)
+  [ ] 1.8 OBJETIVOS: (a) passar pelos aros em ordem; (b) passar pelos aros contra o relógio
+  [ ] 1.9 Caça aos bugs (visual, FPS, colisão, tela) + voo de teste automático; 60 FPS base
+  * Sistema de desafios feito aqui de forma comum para os 3 mapas: tipos "passar por pontos",
+    "contra o tempo", "pegar e entregar", "pousar em ponto"; menu Desafios; recorde salvo;
+    medalhas ouro/prata/bronze; tela de resultado; reiniciar desafio pelo menu.
+  * Decidir com o Leonardo: um executável só com escolha de mapa no menu, ou um por mapa.
+
+ETAPA 2 — MAPA 2 (PRÉDIO EM OBRA, Unreal): bugs que faltam + objetivos
+  [ ] 2.1 Bugs pendentes: textura esticada na base de um lance da escada; parede escura de
+          frente para o início (pôr uma lâmpada no ambiente); testar colisão dos props voando;
+          conferir o menu no controle
+  [ ] 2.2 OBJETIVO: "Chegue ao topo" — do térreo até a cobertura no tempo, com tempo generoso
+          (mapa difícil); calibrar ouro/prata/bronze no teste (ponto de partida: 3:00 / 2:00 / 1:20)
+  [ ] 2.3 Extra opcional: atravessar o poço do elevador sem bater
+  [ ] 2.4 Caça aos bugs final do mapa 2
+
+ETAPA 3 — MAPA 3 (USINA SIDERÚRGICA ABANDONADA) — DESAFIO DO CLAUDE
+  Liberdade total de criação (o Leonardo não vai opinar). Única exigência: ele olhar e dizer
+  "não tem bug nenhum". Base: missões de pegar uma carga num ponto e levar a outro, em pontos
+  difíceis (descer, pousar, buscar). Ideia inicial: galpão gigante com pontes rolantes,
+  esteiras, tubulações, alto-forno brilhando, feixes de luz pelos buracos do telhado.
+
 Atualizado: 17/11/2026 (versão para o OptiPlex; seção no fim)
 
 >>> FOCO ATUAL (decidido por Leonardo em 10/11, 00:18): SÓ O DRONE E88 (dobrável) <<<
