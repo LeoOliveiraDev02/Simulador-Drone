@@ -41,6 +41,16 @@ ACUDE_C = (-6.0, -122.0)
 ACUDE_R = (34.0, 19.0)
 GALPAO_C = (-47.0, -60.0)
 GALPAO_GIRO = 12.0
+# construções novas da fazenda (x, z da Godot): onde ficam e o raio do terreno aplainado
+CASA_C = (-34.0, 26.0)
+CAIXA_C = (28.0, 18.0)
+CATAVENTO_C = (-75.0, -8.0)
+SILOS_C = [(-28.0, -76.0), (-22.5, -81.5)]
+CARRETA_C = (-62.0, -36.0)
+PIER_C = (30.0, -118.0)
+ROCA = (70.0, -150.0, 125.0, -72.0)     # milharal: x0, z0, x1, z1 (Godot)
+ZONAS_PLANAS = [(CASA_C, 10.0, 19.0), (CAIXA_C, 4.0, 9.0), (CATAVENTO_C, 3.5, 8.0), ((-25.0, -79.0), 8.0, 14.0),
+                (CARRETA_C, 4.0, 8.0)]
 ESCALA_BASE = 0.5
 
 
@@ -132,6 +142,10 @@ def altura(x, z):
     h = ALT_CENTRO + (h - ALT_CENTRO) * smoothstep(14.0, 45.0, d)
     dg = np.hypot(x - GALPAO_C[0], z - GALPAO_C[1])
     h = np.where(dg < 24.0, ALT_GALPAO + (h - ALT_GALPAO) * smoothstep(11.0, 24.0, dg), h)
+    for (cx, cz), r0, r1 in ZONAS_PLANAS:
+        ref = float(altura_bruta(np.array(cx), np.array(cz)))
+        dz = np.hypot(x - cx, z - cz)
+        h = np.where(dz < r1, ref + (h - ref) * smoothstep(r0, r1, dz), h)
     h = h - 0.14 * (1.0 - smoothstep(2.5, 4.5, dist_estrada(x, z)))
     h = h - 2.6 * (1.0 - smoothstep(0.55, 1.35, acude_e(x, z)))
     return h
@@ -146,6 +160,11 @@ def mascara(x, z):
     g = 1.0 - smoothstep(1.0, 1.55, acude_e(x, z))
     b = 1.0 - smoothstep(4.7, 6.6, np.hypot(x, z))
     b = np.maximum(b, 1.0 - smoothstep(9.0, 15.0, np.hypot(x - GALPAO_C[0], z - GALPAO_C[1])))
+    for (cx, cz), r0, r1 in ZONAS_PLANAS:
+        b = np.maximum(b, (1.0 - smoothstep(r0 * 0.6, r0 * 1.1, np.hypot(x - cx, z - cz))) * 0.85)
+    # milharal: terra arada (canal B mais fraco, a grama some embaixo do milho)
+    dentro = (x > ROCA[0] - 1) & (x < ROCA[2] + 1) & (z > ROCA[1] - 1) & (z < ROCA[3] + 1)
+    b = np.where(dentro, np.maximum(b, 0.7), b)
     return r, g, b
 
 
@@ -548,6 +567,13 @@ def livre(x, z, folga):
     for a in LAYOUT["aros"]:
         if math.hypot(x - a["x"], -z - a["y"]) < 9.0:
             return False
+    for (cx, cz), r0, r1 in ZONAS_PLANAS:
+        if math.hypot(x - cx, z - cz) < r1 + folga * 0.5:
+            return False
+    if ROCA[0] - 6 < x < ROCA[2] + 6 and ROCA[1] - 6 < z < ROCA[3] + 6:
+        return False
+    if math.hypot(x - PIER_C[0], z - PIER_C[1]) < 10:
+        return False
     return True
 
 
@@ -622,6 +648,379 @@ def vegetacao():
     print("plantas/objetos:", len(LAYOUT["plantas"]))
 
 
+# ----------------------------------------------------------------------------- fazenda nova (Unreal)
+def em_mundo(bm, cx, cz, h, giro=0.0):
+    """leva um bmesh montado em volta da origem (x = leste, y = norte) para o lugar (Godot cx, cz)."""
+    from mathutils import Matrix, Vector
+    M = Matrix.Translation(Vector(B(cx, cz, h))) @ Matrix.Rotation(math.radians(giro), 4, "Z")
+    bmesh.ops.transform(bm, matrix=M, verts=bm.verts)
+
+
+def casa():
+    """casa sede: alpendre virado para o norte (para a base), telhado de duas águas, chaminé."""
+    bm = bmesh.new()
+    L, P, H = 12.0, 9.0, 3.2
+    VAR = 2.8
+    caixa(bm, (0, VAR / 2, 0.15), (L + 0.8, P + VAR + 0.6, 0.5), mi=3)                    # base/calçada
+    for (cx, cy, w, d) in ((0, -P / 2, L, 0.22), (0, P / 2, L, 0.22), (-L / 2, 0, 0.22, P), (L / 2, 0, 0.22, P)):
+        caixa(bm, (cx, cy, 0.4 + H / 2), (w, d, H), mi=0)
+    # janelas e porta (na frente, a norte)
+    for x in (-4.2, -1.8, 2.6, 4.6):
+        if abs(x - 0.4) < 1.0:
+            continue
+        caixa(bm, (x, P / 2 + 0.12, 2.0), (1.2, 0.06, 1.2), mi=5)
+        caixa(bm, (x, P / 2 + 0.15, 1.36), (1.4, 0.12, 0.08), mi=2)
+    caixa(bm, (0.4, P / 2 + 0.12, 1.45), (1.1, 0.08, 2.1), mi=2)
+    for x in (-3.5, 3.5):
+        caixa(bm, (x, -P / 2 - 0.12, 2.0), (1.2, 0.06, 1.2), mi=5)
+    for y in (-2.0, 2.0):
+        caixa(bm, (-L / 2 - 0.12, y, 2.0), (0.06, 1.2, 1.2), mi=5)
+        caixa(bm, (L / 2 + 0.12, y, 2.0), (0.06, 1.2, 1.2), mi=5)
+    # alpendre: piso, pilares e telhadinho
+    for x in (-L / 2 + 0.3, -L / 6, L / 6, L / 2 - 0.3):
+        cilindro(bm, (x, P / 2 + VAR - 0.3, 0.4), 0.11, 0.12, 2.75, lados=10, mi=2)
+    caixa(bm, (0, P / 2 + VAR - 0.3, 3.15), (L + 0.4, 0.2, 0.18), mi=2)
+    caixa(bm, (0, P / 2 + VAR / 2, 3.45), (L + 0.8, VAR + 0.6, 0.12), giro_x=8.0, mi=1)
+    # telhado de duas águas (cumeeira leste-oeste)
+    subida = 2.0
+    meia = P / 2 + 0.6
+    comp = math.hypot(meia, subida)
+    ang = math.degrees(math.atan2(subida, meia))
+    for sgn in (-1.0, 1.0):
+        caixa(bm, (0, sgn * meia / 2, 0.4 + H + subida / 2 - 0.1), (L + 1.2, comp, 0.14), giro_x=-sgn * ang, mi=1)
+    for sgn in (-1.0, 1.0):                                          # oitões
+        vs = [bm.verts.new((sgn * L / 2 + dx, y, 0.4 + H + zz)) for dx in (0.11, -0.11)
+              for (y, zz) in ((-P / 2, 0.0), (P / 2, 0.0), (0.0, subida))]
+        f1 = bm.faces.new(vs[0:3])
+        f2 = bm.faces.new(vs[3:6][::-1])
+        f1.material_index = f2.material_index = 0
+    caixa(bm, (3.0, -1.4, 0.4 + H + 1.6), (0.8, 0.8, 3.2), mi=0)   # chaminé
+    caixa(bm, (3.0, -1.4, 0.4 + H + 3.25), (1.0, 1.0, 0.12), mi=3)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    h = alt1(*CASA_C)
+    em_mundo(bm, CASA_C[0], CASA_C[1], h - 0.15)
+    uv_caixa(bm, 2.0)
+    novo_obj("Casa", bm, ["PAREDE", "TELHA", "MADEIRA", "PISO", "METAL", "VIDRO"])
+    topo_chamine = (CASA_C[0] + 3.0, CASA_C[1] + 1.4, h - 0.15 + 0.4 + H + 3.4)
+    frente = (CASA_C[0], CASA_C[1] - (P / 2 + VAR + 3.5))
+    return topo_chamine, frente
+
+
+def caixa_dagua():
+    """caixa d'água azul de fibra em cima de uma torre de 9 m (dá para pousar na tampa)."""
+    bm = bmesh.new()
+    alt = 9.0
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            segmento(bm, (sx * 1.6, sy * 1.6, 0), (sx * 1.1, sy * 1.1, alt), 0.09, mi=0, lados=8)
+    for z in (2.5, 5.0, 7.5):
+        k = 1.6 - 0.5 * z / alt
+        pts = [(k, k), (-k, k), (-k, -k), (k, -k)]
+        for i in range(4):
+            a, b2 = pts[i], pts[(i + 1) % 4]
+            segmento(bm, (a[0], a[1], z), (b2[0], b2[1], z), 0.05, mi=0, lados=6)
+    caixa(bm, (0, 0, alt + 0.1), (3.0, 3.0, 0.2), mi=2)
+    cilindro(bm, (0, 0, alt + 0.2), 1.75, 1.85, 2.4, lados=36, mi=1)
+    cilindro(bm, (0, 0, alt + 2.6), 1.2, 1.78, 0.3, lados=36, mi=1)
+    cilindro(bm, (0, 0, alt + 2.9), 1.2, 1.2, 0.05, lados=36, mi=1)          # tampa (pouso)
+    for z in range(0, int(alt) + 1):                                          # escada
+        segmento(bm, (1.45, -0.25, z * 1.0 + 0.3), (1.45, 0.25, z * 1.0 + 0.3), 0.025, mi=0, lados=5)
+    segmento(bm, (1.45, -0.25, 0), (1.45, -0.25, alt), 0.03, mi=0, lados=5)
+    segmento(bm, (1.45, 0.25, 0), (1.45, 0.25, alt), 0.03, mi=0, lados=5)
+    h = alt1(*CAIXA_C)
+    em_mundo(bm, CAIXA_C[0], CAIXA_C[1], h - 0.1)
+    uv_caixa(bm, 1.0)
+    novo_obj("CaixaDagua", bm, ["METAL", "TANQUE", "MADEIRA"])
+    return h - 0.1 + alt + 2.95, h - 0.1 + alt + 1.4
+
+
+def cata_vento():
+    """torre de ferro de 10 m com cauda; o rotor é outra malha que o jogo faz girar."""
+    bm = bmesh.new()
+    alt = 10.0
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            segmento(bm, (sx * 1.3, sy * 1.3, 0), (sx * 0.3, sy * 0.3, alt), 0.05, mi=0, lados=6)
+    for z in (2.0, 4.0, 6.0, 8.0):
+        k = 1.3 - 1.0 * z / alt
+        for (a, b2) in (((k, k), (-k, k)), ((-k, k), (-k, -k)), ((-k, -k), (k, -k)), ((k, -k), (k, k))):
+            segmento(bm, (a[0], a[1], z), (b2[0], b2[1], z), 0.03, mi=0, lados=5)
+    caixa(bm, (0, 0, alt), (1.4, 1.4, 0.08), mi=1)
+    caixa(bm, (-0.2, 0, alt + 0.45), (1.1, 0.25, 0.25), mi=0)                  # cabeçote
+    segmento(bm, (-0.6, 0, alt + 0.45), (-2.6, 0, alt + 0.55), 0.04, mi=0, lados=6)
+    caixa(bm, (-2.9, 0, alt + 0.75), (1.2, 0.03, 0.9), mi=0)                    # cauda
+    h = alt1(*CATAVENTO_C)
+    em_mundo(bm, CATAVENTO_C[0], CATAVENTO_C[1], h - 0.1)
+    uv_caixa(bm, 1.0)
+    novo_obj("CataVento", bm, ["METAL", "MADEIRA"])
+    # rotor: eixo em +X (para o Unreal girar em volta do X do ator)
+    rb = bmesh.new()
+    cilindro(rb, (0, 0, 0), 0.18, 0.18, 0.3, lados=16, mi=0, eixo=(1, 0, 0))
+    for i in range(12):
+        a = 2 * math.pi * i / 12
+        d = (0.0, math.cos(a), math.sin(a))
+        c = (0.12, d[1] * 1.15, d[2] * 1.15)
+        caixa(rb, c, (0.02, 0.32, 1.5), giro_x=math.degrees(a) - 90.0, giro_z=0, mi=1)
+    segmento(rb, (0.12, 0, 0), (0.12, 0, 0), 0.01)
+    uv_caixa(rb, 1.0)
+    novo_obj("CataVentoRotor", rb, ["METAL", "PALHETA"])
+    centro = B(CATAVENTO_C[0] + 0.45, CATAVENTO_C[1], h - 0.1 + alt + 0.45)
+    LAYOUT.setdefault("giratorios", []).append({"malha": "CataVentoRotor", "x": centro[0], "y": centro[1], "z": centro[2],
+                                                "yaw": 0.0, "graus_s": 140.0})
+    return centro
+
+
+def silos():
+    bm = bmesh.new()
+    tops = []
+    for i, (sx, sz) in enumerate(SILOS_C):
+        h = alt1(sx, sz)
+        bx, by, _ = B(sx, sz, h)
+        cilindro(bm, (bx, by, h - 0.2), 2.4, 2.4, 9.2, lados=40, mi=0)
+        cilindro(bm, (bx, by, h + 9.0), 0.3, 2.55, 1.8, lados=40, mi=0)
+        cilindro(bm, (bx, by, h - 0.25), 2.7, 2.7, 0.45, lados=40, mi=1)
+        for z in range(0, 9):
+            segmento(bm, (bx + 2.5, by - 0.2, h + z + 0.4), (bx + 2.5, by + 0.2, h + z + 0.4), 0.02, mi=2, lados=5)
+        segmento(bm, (bx + 2.5, by - 0.2, h), (bx + 2.5, by - 0.2, h + 9.2), 0.025, mi=2, lados=5)
+        segmento(bm, (bx + 2.5, by + 0.2, h), (bx + 2.5, by + 0.2, h + 9.2), 0.025, mi=2, lados=5)
+        tops.append((bx, by, h + 11.0))
+    uv_caixa(bm, 1.0)
+    novo_obj("Silos", bm, ["ZINCO", "PISO", "METAL"])
+    return tops
+
+
+def carreta():
+    bm = bmesh.new()
+    caixa(bm, (0, 0, 1.05), (4.2, 2.2, 0.12), mi=0)                               # carroceria (pouso)
+    for sy in (-1, 1):
+        caixa(bm, (0, sy * 1.12, 1.3), (4.2, 0.06, 0.45), mi=0)
+    caixa(bm, (0, 0, 0.8), (3.6, 0.3, 0.3), mi=1)
+    for sx in (-1.1, 1.1):
+        for sy in (-1, 1):
+            cilindro(bm, (sx, sy * 1.05, 0.45), 0.45, 0.45, 0.28, lados=20, mi=2, eixo=(0, 1, 0))
+    segmento(bm, (2.1, 0, 0.8), (3.6, 0, 0.55), 0.06, mi=1, lados=8)
+    h = alt1(*CARRETA_C)
+    em_mundo(bm, CARRETA_C[0], CARRETA_C[1], h - 0.05, giro=25.0)
+    uv_caixa(bm, 1.0)
+    novo_obj("Carreta", bm, ["MADEIRA", "METAL", "PNEU"])
+    return h - 0.05 + 1.12
+
+
+def pier():
+    bm = bmesh.new()
+    topo = NIVEL_AGUA + 0.55
+    for i in range(6):
+        for sy in (-0.85, 0.85):
+            x = -i * 1.8
+            cilindro(bm, (x, sy, NIVEL_AGUA - 1.5), 0.09, 0.1, 2.1, lados=8, mi=0)
+    for i in range(30):
+        caixa(bm, (-i * 0.36 + 0.4, 0, 0), (0.3, 2.0, 0.06), mi=0)
+    from mathutils import Matrix, Vector
+    bx, by, _ = B(PIER_C[0], PIER_C[1], 0)
+    for v in bm.verts:
+        if v.co.z == 0 or abs(v.co.z) < 0.04:
+            pass
+    bmesh.ops.transform(bm, matrix=Matrix.Translation(Vector((bx, by, 0))), verts=bm.verts)
+    for v in bm.verts:
+        if abs(v.co.z) <= 0.031:
+            v.co.z += topo
+    uv_caixa(bm, 1.0)
+    novo_obj("Pier", bm, ["MADEIRA"])
+    return (bx - 9.5, by, topo)
+
+
+def plataforma(nome, cx, cz, h):
+    """quadrado de madeira de 2,2 m com borda amarela (ponto de coleta/entrega)."""
+    bm = bmesh.new()
+    caixa(bm, (0, 0, 0.06), (2.2, 2.2, 0.12), mi=0)
+    for (x, y, w, d) in ((0, 1.0, 2.2, 0.2), (0, -1.0, 2.2, 0.2), (1.0, 0, 0.2, 2.2), (-1.0, 0, 0.2, 2.2)):
+        caixa(bm, (x, y, 0.125), (w, d, 0.01), mi=1)
+    em_mundo(bm, cx, cz, h)
+    uv_caixa(bm, 1.0)
+    novo_obj(nome, bm, ["MADEIRA", "PINTURA_AMARELA"])
+
+
+def transformador():
+    """um poste da rede ganha transformador (alvo de foto)"""
+    # o mesmo cálculo de postes(): pega o poste mais perto de z = -90
+    melhor = None
+    acum, prox = 0.0, 0.0
+    for i in range(len(ESTRADA) - 1):
+        ax, az = ESTRADA[i]
+        bx, bz = ESTRADA[i + 1]
+        seg = math.hypot(bx - ax, bz - az)
+        dx, dz = (bx - ax) / seg, (bz - az) / seg
+        nx, nz = dz * 13.0, -dx * 13.0
+        while prox <= acum + seg:
+            px, pz = ax + dx * (prox - acum) + nx, az + dz * (prox - acum) + nz
+            prox += 48.0
+            if melhor is None or abs(pz + 90) < abs(melhor[1] + 90):
+                melhor = (px, pz)
+        acum += seg
+    px, pz = melhor
+    y = alt1(px, pz)
+    b0 = B(px, pz, y)
+    bm = bmesh.new()
+    cilindro(bm, (b0[0] + 0.35, b0[1], y + 7.0), 0.32, 0.32, 1.1, lados=20, mi=0)
+    caixa(bm, (b0[0] + 0.2, b0[1], y + 7.5), (0.25, 0.12, 0.6), mi=0)
+    for k in range(3):
+        cilindro(bm, (b0[0] + 0.2 + (k - 1) * 0.18, b0[1], y + 8.1), 0.04, 0.05, 0.18, lados=8, mi=1)
+    uv_caixa(bm, 1.0)
+    novo_obj("Transformador", bm, ["METAL", "ISOLADOR"])
+    return (b0[0] + 0.35, b0[1], y + 7.6)
+
+
+def modelos_soltos():
+    """malhas que o jogo usa em tempo de execução (ficam escondidas no mapa como modelo)."""
+    # pé de milho (~2,1 m)
+    bm = bmesh.new()
+    cilindro(bm, (0, 0, 0), 0.018, 0.026, 2.1, lados=6, mi=0)
+    for i in range(7):
+        a = i * 2.4
+        z0 = 0.35 + i * 0.24
+        d = (math.cos(a), math.sin(a))
+        pts = [(0.0, 0.0), (0.25, 0.18), (0.5, 0.22), (0.72, 0.1)]
+        prev_l = prev_r = None
+        for k, (r, dz) in enumerate(pts):
+            w = 0.045 * (1 - k / len(pts)) + 0.01
+            c = (d[0] * r, d[1] * r, z0 + dz)
+            pl = bm.verts.new((c[0] - d[1] * w, c[1] + d[0] * w, c[2]))
+            pr = bm.verts.new((c[0] + d[1] * w, c[1] - d[0] * w, c[2]))
+            if prev_l:
+                f = bm.faces.new((prev_l, prev_r, pr, pl))
+                f.material_index = 0
+            prev_l, prev_r = pl, pr
+    cilindro(bm, (0.04, 0, 1.15), 0.035, 0.045, 0.28, lados=8, mi=1, eixo=(0.25, 0, 1))      # espiga
+    for k in range(5):
+        a = k * 1.25
+        segmento(bm, (0, 0, 2.08), (math.cos(a) * 0.14, math.sin(a) * 0.14, 2.3), 0.006, mi=1, lados=3)
+    uv_caixa(bm, 0.5)
+    novo_obj("PeMilho", bm, ["MILHO", "ESPIGA"])
+    # touceira de capim (~0,5 m)
+    bm = bmesh.new()
+    rr = random.Random(5)
+    for i in range(16):
+        a = rr.random() * 2 * math.pi
+        r0 = rr.uniform(0.0, 0.12)
+        base = (math.cos(a) * r0, math.sin(a) * r0, 0.0)
+        alt = rr.uniform(0.3, 0.6)
+        inc = rr.uniform(0.1, 0.35)
+        lado = (-math.sin(a), math.cos(a))
+        topo = (base[0] + math.cos(a) * inc, base[1] + math.sin(a) * inc, alt)
+        meio = (base[0] + math.cos(a) * inc * 0.4, base[1] + math.sin(a) * inc * 0.4, alt * 0.55)
+        w0, w1 = 0.022, 0.012
+        v = [bm.verts.new((base[0] - lado[0] * w0, base[1] - lado[1] * w0, 0)), bm.verts.new((base[0] + lado[0] * w0, base[1] + lado[1] * w0, 0)),
+             bm.verts.new((meio[0] + lado[0] * w1, meio[1] + lado[1] * w1, meio[2])), bm.verts.new((meio[0] - lado[0] * w1, meio[1] - lado[1] * w1, meio[2])),
+             bm.verts.new(topo)]
+        bm.faces.new((v[0], v[1], v[2], v[3]))
+        bm.faces.new((v[3], v[2], v[4]))
+    uv_caixa(bm, 0.5)
+    novo_obj("Capim", bm, ["CAPIM"])
+    # caixa de entrega (40 x 30 x 30 cm) com fita
+    bm = bmesh.new()
+    caixa(bm, (0, 0, 0), (0.4, 0.3, 0.3), mi=0)
+    caixa(bm, (0, 0, 0.152), (0.42, 0.06, 0.006), mi=1)
+    caixa(bm, (0.202, 0, 0.0), (0.006, 0.06, 0.3), mi=1)
+    caixa(bm, (-0.202, 0, 0.0), (0.006, 0.06, 0.3), mi=1)
+    uv_caixa(bm, 0.5)
+    novo_obj("CaixaEntrega", bm, ["PAPELAO", "FITA"])
+    # ferradura dourada (em pé, 36 cm)
+    bm = bmesh.new()
+    pts = []
+    for i in range(25):
+        a = math.radians(-30 + i * 240 / 24)
+        pts.append((0.0, math.cos(a) * 0.16, math.sin(a) * 0.16))
+    for a0, a1 in zip(pts, pts[1:]):
+        segmento(bm, a0, a1, 0.03, mi=0, lados=8)
+    for p0 in (pts[0], pts[-1]):
+        caixa(bm, (p0[0], p0[1], p0[2] - 0.03), (0.07, 0.08, 0.05), mi=0)
+    uv_caixa(bm, 0.5)
+    novo_obj("Ferradura", bm, ["OURO"])
+    # farol: coluna de luz de 40 m (marca o alvo da missão de longe)
+    bm = bmesh.new()
+    n = 24
+    baixo = [bm.verts.new((math.cos(2 * math.pi * i / n) * 1.0, math.sin(2 * math.pi * i / n) * 1.0, 0.0)) for i in range(n)]
+    cima = [bm.verts.new((math.cos(2 * math.pi * i / n) * 1.0, math.sin(2 * math.pi * i / n) * 1.0, 40.0)) for i in range(n)]
+    uv = bm.loops.layers.uv.verify()
+    for i in range(n):
+        j = (i + 1) % n
+        f = bm.faces.new((baixo[i], baixo[j], cima[j], cima[i]))
+        for lp in f.loops:
+            lp[uv].uv = (i / n, 0.0 if lp.vert.co.z < 1 else 1.0)
+    novo_obj("Farol", bm, ["FAROL"])
+
+
+def fazenda():
+    chamine, frente_casa = casa()
+    topo_tanque, meio_tanque = caixa_dagua()
+    rotor = cata_vento()
+    tops_silos = silos()
+    piso_carreta = carreta()
+    ponta_pier = pier()
+    trafo = transformador()
+    modelos_soltos()
+    # coleta das caixas: na frente do lado aberto do galpão
+    g = math.radians(GALPAO_GIRO)
+    lx, ly = 0.0, -(7.5 / 2 + 6.0)
+    cx = GALPAO_C[0] + lx * math.cos(g) - ly * math.sin(g)
+    cz = GALPAO_C[1] - (lx * math.sin(g) + ly * math.cos(g))
+    h_coleta = alt1(cx, cz)
+    plataforma("PlataformaColeta", cx, cz, h_coleta)
+    h_casa = alt1(*frente_casa)
+    plataforma("PlataformaCasa", frente_casa[0], frente_casa[1], h_casa)
+    LAYOUT["coleta"] = list(B(cx, cz, h_coleta + 0.13))
+    cxb, cyb, _ = B(*CAIXA_C, 0)
+    carx, cary, _ = B(*CARRETA_C, 0)
+    LAYOUT["entregas"] = [
+        {"nome": "Casa sede", "pos": list(B(frente_casa[0], frente_casa[1], h_casa + 0.13))},
+        {"nome": "Caixa d'água", "pos": [cxb, cyb, topo_tanque]},
+        {"nome": "Carreta do curral", "pos": [carx, cary, piso_carreta]},
+        {"nome": "Píer do açude", "pos": list(ponta_pier)},
+    ]
+    gtopo = B(GALPAO_C[0], GALPAO_C[1], ALT_GALPAO + 4.9)
+    LAYOUT["fotos"] = [
+        {"nome": "Transformador do poste", "pos": list(trafo)},
+        {"nome": "Rotor do cata-vento", "pos": list(rotor)},
+        {"nome": "Caixa d'água", "pos": [cxb, cyb, meio_tanque]},
+        {"nome": "Telhado do galpão", "pos": list(gtopo)},
+        {"nome": "Topo do silo", "pos": list(tops_silos[0])},
+        {"nome": "Chaminé da casa", "pos": list(B(chamine[0], chamine[1], chamine[2]))},
+    ]
+    # ferraduras douradas escondidas pelo mapa
+    fx = []
+    def f(x, z, h_rel, base=None):
+        b = base if base is not None else alt1(x, z)
+        fx.append(list(B(x, z, b + h_rel)))
+    f(GALPAO_C[0], GALPAO_C[1], 1.3, ALT_GALPAO)                              # dentro do galpão
+    f(GALPAO_C[0], GALPAO_C[1], 5.4, ALT_GALPAO)                              # em cima do telhado
+    fx.append([ponta_pier[0] - 1.5, ponta_pier[1], ponta_pier[2] + 1.0])       # na ponta do píer
+    f(-19.0, -88.0, 1.0)                                                        # atrás dos silos
+    fx.append([rotor[0] - 0.5, rotor[1], rotor[2] + 0.9])                       # em cima do cata-vento
+    f((ROCA[0] + ROCA[2]) / 2, (ROCA[1] + ROCA[3]) / 2, 2.9)                   # no meio do milharal
+    f(ACUDE_C[0], ACUDE_C[1], 1.6, NIVEL_AGUA)                                 # sobre o açude
+    f(CAIXA_C[0], CAIXA_C[1], 3.0)                                             # embaixo da caixa d'água
+    f(-150.0, -241.5, 4.0)                                                      # entre os eucaliptos
+    fx.append([chamine[0], -chamine[1], chamine[2] + 0.7])                     # na chaminé da casa
+    f(-15.0, 3.0, 7.3)                                                          # no alto da biruta
+    f(trafo[0] - 2.0, -trafo[1] + 40.0, 5.2)                                    # embaixo dos fios
+    LAYOUT["ferraduras"] = fx
+    LAYOUT["roca"] = {"x0": ROCA[0], "y0": -ROCA[3], "x1": ROCA[2], "y1": -ROCA[1]}
+    # pontos de vista para o voo de teste (fotos das construções novas)
+    def vista(alvo_x, alvo_z, alvo_h, de_x, de_z, de_h):
+        a = B(alvo_x, alvo_z, alvo_h)
+        d = B(de_x, de_z, alt1(de_x, de_z) + de_h)
+        yaw = math.degrees(math.atan2(a[1] - d[1], a[0] - d[0]))
+        return {"x": d[0], "y": d[1], "z": d[2], "yaw": yaw}
+    LAYOUT["vistas"] = [
+        vista(CASA_C[0], CASA_C[1], alt1(*CASA_C) + 3, CASA_C[0] + 4, CASA_C[1] - 22, 4.0),
+        vista(CAIXA_C[0], CAIXA_C[1], alt1(*CAIXA_C) + 8, CAIXA_C[0] - 14, CAIXA_C[1] - 12, 6.0),
+        vista(CATAVENTO_C[0], CATAVENTO_C[1], alt1(*CATAVENTO_C) + 9, CATAVENTO_C[0] + 16, CATAVENTO_C[1] - 6, 7.0),
+        vista(SILOS_C[0][0], SILOS_C[0][1], alt1(*SILOS_C[0]) + 6, SILOS_C[0][0] + 14, SILOS_C[0][1] + 14, 5.0),
+        vista((ROCA[0] + ROCA[2]) / 2, (ROCA[1] + ROCA[3]) / 2, 0, ROCA[0] - 8, ROCA[3] + 6, 9.0),
+        vista(PIER_C[0] - 5, PIER_C[1], NIVEL_AGUA, PIER_C[0] + 10, PIER_C[1] + 10, 4.0),
+    ]
+
+
 # ----------------------------------------------------------------------------- exportação
 def exportar(ob):
     bpy.ops.object.select_all(action="DESELECT")
@@ -646,6 +1045,7 @@ def main():
     aro()
     haste()
     marcador()
+    fazenda()
     vegetacao()
     LAYOUT["inicio"] = {"x": 0.0, "y": -2.0, "z": ALT_CENTRO - 0.28 + 0.4 + 0.15, "yaw": 90.0}
     for ob in list(bpy.context.scene.objects):

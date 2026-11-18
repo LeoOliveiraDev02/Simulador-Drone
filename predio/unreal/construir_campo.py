@@ -280,10 +280,76 @@ SLOTS = {
     "ARO_PRETO": ("cor", (0.02, 0.02, 0.02), 0.5, 0.0, 0.0, 0.5),
     "ARO": ("cor", (0.95, 0.30, 0.04), 0.45, 0.0, 0.6, 0.5),
     "AGUA": ("cor", (0.015, 0.045, 0.05), 0.04, 0.0, 0.0, 1.0),
+    "VIDRO": ("cor", (0.02, 0.025, 0.03), 0.08, 0.0, 0.0, 0.8),
+    "TANQUE": ("cor", (0.04, 0.22, 0.62), 0.35, 0.0, 0.0, 0.5),
+    "ZINCO": ("cor", (0.62, 0.63, 0.64), 0.38, 0.9, 0.0, 0.5),
+    "PALHETA": ("cor", (0.7, 0.7, 0.68), 0.4, 0.8, 0.0, 0.5),
+    "PNEU": ("cor", (0.02, 0.02, 0.02), 0.9, 0.0, 0.0, 0.3),
+    "PINTURA_AMARELA": ("cor", (0.9, 0.62, 0.04), 0.55, 0.0, 0.0, 0.5),
+    "PAPELAO": ("cor", (0.5, 0.34, 0.18), 0.85, 0.0, 0.0, 0.3),
+    "FITA": ("cor", (0.72, 0.62, 0.42), 0.35, 0.0, 0.0, 0.5),
+    "OURO": ("cor", (1.0, 0.72, 0.18), 0.22, 1.0, 0.25, 0.5),
+    "ESPIGA": ("folha", (0.55, 0.58, 0.22), 0.7, 0.0, 0.0, 0.4),
+    "MILHO": ("folha", (0.16, 0.32, 0.06), 0.65, 0.0, 0.0, 0.4),
+    "CAPIM": ("folha", (0.22, 0.30, 0.07), 0.8, 0.0, 0.0, 0.3),
 }
 # reserva quando falta a textura: cor lisa parecida
 RESERVA = {"BASE": (0.55, 0.54, 0.52), "PISO": (0.5, 0.48, 0.45), "PAREDE": (0.85, 0.8, 0.7),
            "TELHA": (0.6, 0.28, 0.18), "MADEIRA": (0.42, 0.32, 0.22)}
+
+
+def criar_mestre_folha():
+    m = novo_material("M_CampoFolha")
+    m.set_editor_property("two_sided", True)
+    cor = expr(m, unreal.MaterialExpressionVectorParameter, -800, -200, parameter_name="Cor",
+               default_value=unreal.LinearColor(0.2, 0.3, 0.07, 1))
+    c3 = rgb(m, cor, "", -600, -200)
+    # variação de cor por posição (cada pé/touceira com um tom)
+    pos = expr(m, unreal.MaterialExpressionObjectPositionWS, -900, 100)
+    msk = expr(m, unreal.MaterialExpressionComponentMask, -750, 100, r=True, g=False, b=False, a=False)
+    ligar(pos, "", msk, "")
+    mul = expr(m, unreal.MaterialExpressionMultiply, -620, 100)
+    ligar(msk, "", mul, "A")
+    ligar(const(m, 0.0137, -750, 180), "", mul, "B")
+    fr = expr(m, unreal.MaterialExpressionFrac, -500, 100)
+    ligar(mul, "", fr, "")
+    var = lerp(m, const(m, 0.8, -500, 180), const(m, 1.2, -500, 240), fr, -380, 120)
+    cc = expr(m, unreal.MaterialExpressionMultiply, -350, -200)
+    ligar(c3, "", cc, "A")
+    ligar(var, "", cc, "B")
+    mel.connect_material_property(cc, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    rug = expr(m, unreal.MaterialExpressionScalarParameter, -800, 300, parameter_name="Rugosidade", default_value=0.7)
+    mel.connect_material_property(rug, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.connect_material_property(const(m, 0.35, -500, 380), "", unreal.MaterialProperty.MP_SPECULAR)
+    mel.recompile_material(m)
+    return m
+
+
+def criar_farol():
+    """coluna de luz laranja, aditiva, que some para cima"""
+    m = novo_material("M_Farol")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    tc = expr(m, unreal.MaterialExpressionTextureCoordinate, -900, 0)
+    v = expr(m, unreal.MaterialExpressionComponentMask, -750, 0, r=False, g=True, b=False, a=False)
+    ligar(tc, "", v, "")
+    inv = expr(m, unreal.MaterialExpressionOneMinus, -620, 0)
+    ligar(v, "", inv, "")
+    pw = expr(m, unreal.MaterialExpressionPower, -500, 0)
+    ligar(inv, "", pw, "Base")
+    ligar(const(m, 3.0, -620, 80), "", pw, "Exp")
+    cor = expr(m, unreal.MaterialExpressionVectorParameter, -620, -200, parameter_name="Cor",
+               default_value=unreal.LinearColor(1.0, 0.45, 0.05, 1))
+    mul = expr(m, unreal.MaterialExpressionMultiply, -350, -100)
+    ligar(rgb(m, cor, "", -480, -200), "", mul, "A")
+    ligar(pw, "", mul, "B")
+    mul2 = expr(m, unreal.MaterialExpressionMultiply, -220, -100)
+    ligar(mul, "", mul2, "A")
+    ligar(const(m, 2.5, -350, 0), "", mul2, "B")
+    mel.connect_material_property(mul2, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.recompile_material(m)
+    return m
 
 
 def criar_materiais():
@@ -300,6 +366,7 @@ def criar_materiais():
             break
     mestre_pbr = criar_mestre_pbr(*base) if base and base[1] and base[2] else None
     mestre_cor = criar_mestre_cor()
+    mestre_folha = criar_mestre_folha()
     fac = unreal.MaterialInstanceConstantFactoryNew()
     for slot, d in SLOTS.items():
         mi = at.create_asset("MI_" + slot, PASTA + "/Materiais", unreal.MaterialInstanceConstant, fac)
@@ -313,7 +380,13 @@ def criar_materiais():
             mel.set_material_instance_scalar_parameter_value(mi, "Escala", d[3])
             mel.set_material_instance_scalar_parameter_value(mi, "RugosidadeMult", d[4])
         else:
-            mi.set_editor_property("parent", mestre_cor)
+            mi.set_editor_property("parent", mestre_folha if d[0] == "folha" else mestre_cor)
+            if d[0] == "folha":
+                mel.set_material_instance_vector_parameter_value(mi, "Cor", unreal.LinearColor(*d[1], 1))
+                mel.set_material_instance_scalar_parameter_value(mi, "Rugosidade", d[2])
+                mel.update_material_instance(mi)
+                mis[slot] = mi
+                continue
             if d[0] == "pbr":
                 cor, rug, met, bri, esp = RESERVA.get(slot, (0.6, 0.6, 0.6)), 0.8, 0.0, 0.0, 0.5
             else:
@@ -332,6 +405,7 @@ def criar_materiais():
         mel.set_material_instance_scalar_parameter_value(mi, "Rugosidade", 0.95)
         mel.update_material_instance(mi)
         mis["TERRENO"] = mi
+    mis["FAROL"] = criar_farol()
     log("materiais prontos:", sorted(mis))
     return mis
 
@@ -378,6 +452,10 @@ def carregar_sm(pasta):
     return res
 
 
+# malhas que o jogo usa em tempo de execução (ficam escondidas no mapa como "modelo")
+MODELOS_JOGO = ("PeMilho", "Capim", "CaixaEntrega", "Ferradura", "Farol")
+
+
 def importar_malhas(mis):
     malhas = {}
     if eal.does_directory_exist(PASTA + "/Malhas"):
@@ -399,8 +477,8 @@ def importar_malhas(mis):
                 sm.set_material(i, alvo)
             else:
                 log("  slot sem material:", nome, smat.get_editor_property("material_slot_name"))
-        nanite(sm, nome not in ("Marcador", "Agua"), 0.0)
-        if nome not in ("Marcador", "Agua"):
+        nanite(sm, nome not in ("Marcador", "Agua", "Farol", "CaixaEntrega", "Ferradura", "CataVentoRotor"), 0.0)
+        if nome not in ("Marcador", "Agua") + MODELOS_JOGO:
             colisao_complexa(sm)
         eal.save_loaded_asset(sm)
         malhas[nome] = sm
@@ -482,7 +560,7 @@ def montar_mapa(layout, malhas, modelos):
 
     # malhas fixas (já estão no lugar dentro do FBX)
     for nome, sm in malhas.items():
-        if nome in ("Marcador", "Aro", "Haste"):
+        if nome in ("Marcador", "Aro", "Haste", "CataVentoRotor") + MODELOS_JOGO:
             continue
         a = eas.spawn_actor_from_object(sm, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
         a.set_actor_label(nome)
@@ -506,13 +584,52 @@ def montar_mapa(layout, malhas, modelos):
             n += 1
     log("plantas e objetos colocados:", n)
 
-    # grama: modelo escondido que o jogo espalha em volta da base (HISM em tempo de execução)
-    if modelos.get("grass_medium_01"):
-        g = eas.spawn_actor_from_object(modelos["grass_medium_01"][0], unreal.Vector(0, 0, -100000), unreal.Rotator(0, 0, 0))
-        g.set_actor_label("ModeloGrama")
+    # modelos escondidos que o jogo usa: capim e milho (espalhados), caixa de entrega, farol do alvo
+    grama = modelos["grass_medium_01"][0] if modelos.get("grass_medium_01") else malhas.get("Capim")
+    for nome_tag, sm in (("ModeloGrama", grama), ("ModeloMilho", malhas.get("PeMilho")),
+                         ("ModeloCaixa", malhas.get("CaixaEntrega")), ("ModeloFarol", malhas.get("Farol"))):
+        if not sm:
+            log("FALTA modelo do jogo", nome_tag)
+            continue
+        g = eas.spawn_actor_from_object(sm, unreal.Vector(0, 0, -100000), unreal.Rotator(0, 0, 0))
+        g.set_actor_label(nome_tag)
         g.set_actor_enable_collision(False)
         g.set_actor_hidden_in_game(True)
-        tag(g, "ModeloGrama")
+        tag(g, nome_tag)
+
+    # cata-vento girando
+    for gi in layout.get("giratorios", []):
+        sm = malhas.get(gi["malha"])
+        if sm:
+            a = eas.spawn_actor_from_object(sm, P(gi["x"], gi["y"], gi["z"]), unreal.Rotator(0, 0, yaw(gi["yaw"])))
+            a.set_actor_label(gi["malha"])
+            a.set_actor_enable_collision(False)
+            tag(a, "Gira_%d" % int(gi["graus_s"]))
+            a.get_component_by_class(unreal.StaticMeshComponent).set_editor_property("mobility", unreal.ComponentMobility.MOVABLE)
+
+    # missões: coleta/entregas, fotos, ferraduras e a roça de milho
+    def ponto(rotulo, pos, *tags):
+        e = eas.spawn_actor_from_class(unreal.TargetPoint, P(*pos), unreal.Rotator(0, 0, 0))
+        e.set_actor_label(rotulo)
+        tag(e, *tags)
+    if layout.get("coleta"):
+        ponto("Coleta", layout["coleta"], "Coleta")
+    for i, en in enumerate(layout.get("entregas", [])):
+        ponto("Entrega_%d" % i, en["pos"], "Entrega_%d" % i, "Nome:" + en["nome"])
+    for i, fo in enumerate(layout.get("fotos", [])):
+        ponto("Foto_%d" % i, fo["pos"], "Foto_%d" % i, "Nome:" + fo["nome"])
+    ferr = malhas.get("Ferradura")
+    for i, pos in enumerate(layout.get("ferraduras", [])):
+        if not ferr:
+            break
+        a = eas.spawn_actor_from_object(ferr, P(*pos), unreal.Rotator(0, 0, 0))
+        a.set_actor_label("Ferradura_%02d" % i)
+        a.set_actor_enable_collision(False)
+        a.set_actor_scale3d(unreal.Vector(2.0, 2.0, 2.0))
+        tag(a, "Ferradura_%d" % i)
+        a.get_component_by_class(unreal.StaticMeshComponent).set_editor_property("mobility", unreal.ComponentMobility.MOVABLE)
+    log("missões: coleta", bool(layout.get("coleta")), "entregas", len(layout.get("entregas", [])),
+        "fotos", len(layout.get("fotos", [])), "ferraduras", len(layout.get("ferraduras", [])))
 
     # aros do circuito
     aro, haste = malhas.get("Aro"), malhas.get("Haste")
@@ -528,6 +645,11 @@ def montar_mapa(layout, malhas, modelos):
             h.set_actor_scale3d(unreal.Vector(1, 1, base_aro - r["chao"] + 0.25))
             h.set_actor_label("Haste_%02d" % (r["n"] + 1))
     log("aros:", len(layout["aros"]))
+    # pontos de vista do voo de teste (depois dos aros)
+    for i, v in enumerate(layout.get("vistas", [])):
+        e = eas.spawn_actor_from_class(unreal.TargetPoint, P(v["x"], v["y"], v["z"]), unreal.Rotator(0, 0, yaw(v["yaw"])))
+        e.set_actor_label("Vista_%02d" % i)
+        tag(e, "Rota_%d" % (50 + i))
 
     # informações para o jogo: raio do aro, açude e estrada (a grama evita esses lugares)
     ac = layout["acude"]
@@ -537,6 +659,12 @@ def montar_mapa(layout, malhas, modelos):
     tag(info, "AroRaio_%d" % int(layout.get("raio_aro", 2.05) * escala),
         "Acude_%d_%d_%d_%d" % (int(c.x), int(c.y), int(ac["rx"] * escala * 1.25), int(ac["ry"] * escala * 1.25)),
         "AlturaAndar_100000", "CotaTerreo_-100000")
+    if layout.get("roca"):
+        r = layout["roca"]
+        a, b = P(r["x0"], r["y0"], 0), P(r["x1"], r["y1"], 0)
+        tags_info = [str(t) for t in info.get_editor_property("tags")]
+        tags_info.append("Roca_%d_%d_%d_%d" % (int(min(a.x, b.x)), int(min(a.y, b.y)), int(max(a.x, b.x)), int(max(a.y, b.y))))
+        tag(info, *tags_info)
     for i, (x, y, z) in enumerate(layout["estrada"]):
         e = eas.spawn_actor_from_class(unreal.TargetPoint, P(x, y, z), unreal.Rotator(0, 0, 0))
         e.set_actor_label("Estrada_%02d" % i)

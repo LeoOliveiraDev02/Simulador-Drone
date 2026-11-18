@@ -743,49 +743,117 @@ void ADroneHUD::DesenharObjetivo(APredioGameMode* GM, const ADronePawn* D, float
 {
 	if (GM->Objetivo == EObjetivo::Livre) return;
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	const bool bAros = GM->Objetivo == EObjetivo::ArosOrdem || GM->Objetivo == EObjetivo::ArosRelogio;
 	const bool bFim = GM->Estado == EEstadoDesafio::Concluido || GM->Estado == EEstadoDesafio::Falhou;
 
-	// marca do próximo aro (losango na tela; seta na borda quando ele está fora da vista)
-	if (bAros && !bFim && GM->Aros.IsValidIndex(GM->ProximoAro))
+	const APlayerController* PCm = GetOwningPlayerController();
+	// marca de um alvo no mundo: losango na tela, ou seta na borda quando ele está fora da vista
+	auto Marcar = [&](const FVector& Alvo, const FString& Rotulo, const FLinearColor& Cor, bool bSetaFora)
 	{
-		const APlayerController* PC = GetOwningPlayerController();
-		if (PC && PC->PlayerCameraManager)
+		if (!PCm || !PCm->PlayerCameraManager) return;
+		const FVector CL = PCm->PlayerCameraManager->GetCameraLocation();
+		const FRotator CR = PCm->PlayerCameraManager->GetCameraRotation();
+		const FVector Local = CR.UnrotateVector(Alvo - CL);
+		const float Metros = FVector::Dist(Alvo, D->GetActorLocation()) / 100.f;
+		if (Local.X > 20.f)
 		{
-			const FVector Alvo = GM->Aros[GM->ProximoAro].GetLocation();
-			const FVector CL = PC->PlayerCameraManager->GetCameraLocation();
-			const FRotator CR = PC->PlayerCameraManager->GetCameraRotation();
-			const FVector Local = CR.UnrotateVector(Alvo - CL);
-			const float Metros = FVector::Dist(Alvo, D->GetActorLocation()) / 100.f;
-			const FLinearColor Laranja = Cor255(255, 170, 40);
-			bool bNaTela = false;
-			if (Local.X > 20.f)
+			const FVector S = Project(Alvo);
+			if (S.X > 40.f && S.X < W - 40.f && S.Y > 40.f && S.Y < H - 40.f)
 			{
-				const FVector S = Project(Alvo);
-				if (S.X > 40.f && S.X < W - 40.f && S.Y > 40.f && S.Y < H - 40.f)
+				const float R = 16.f * E;
+				const FVector2D C(S.X, S.Y);
+				Linha(C + FVector2D(0, -R), C + FVector2D(R, 0), 2.5f * E, Cor);
+				Linha(C + FVector2D(R, 0), C + FVector2D(0, R), 2.5f * E, Cor);
+				Linha(C + FVector2D(0, R), C + FVector2D(-R, 0), 2.5f * E, Cor);
+				Linha(C + FVector2D(-R, 0), C + FVector2D(0, -R), 2.5f * E, Cor);
+				T(FString::Printf(TEXT("%s  •  %.0f m"), *Rotulo, Metros), C.X, C.Y + R + 4.f * E, 15.f * E, TEXT("Bold"), Cor, 1);
+				return;
+			}
+		}
+		if (!bSetaFora) return;
+		FVector2D Dir(Local.Y, -Local.Z);
+		if (Local.X <= 20.f && Dir.SizeSquared() < 1.f) Dir = FVector2D(0, 1); // bem atrás: aponta para baixo
+		Dir.Normalize();
+		const FVector2D Centro(W * 0.5f, H * 0.5f);
+		const FVector2D Pt = Centro + FVector2D(Dir.X * W * 0.40f, Dir.Y * H * 0.38f);
+		Seta(Pt - Dir * 30.f * E, Pt, 4.f * E, 16.f * E, Cor);
+		T(FString::Printf(TEXT("%.0f m"), Metros), Pt.X - Dir.X * 52.f * E, Pt.Y - Dir.Y * 52.f * E - 10.f * E, 15.f * E, TEXT("Bold"), Cor, 1);
+	};
+	const FLinearColor Laranja = Cor255(255, 170, 40);
+	if (!bFim)
+	{
+		FVector Alvo;
+		FString Rotulo;
+		if (GM->AlvoPrincipal(Alvo, Rotulo)) Marcar(Alvo, Rotulo, Laranja, true);
+		if (GM->Objetivo == EObjetivo::Fotos)
+		{
+			for (int32 i = 0; i < GM->PontosFoto.Num(); ++i)
+			{
+				if (!GM->FotoFeita[i]) Marcar(GM->PontosFoto[i], GM->NomesFoto[i], i == GM->FotoMirando ? Branco : Cor255(120, 200, 255), false);
+			}
+			// moldura da câmera + anel de carregamento enquanto mira
+			const FVector2D C(W * 0.5f, H * 0.5f);
+			const float Q = 70.f * E, Ql = 22.f * E;
+			const FLinearColor CM = GM->FotoMirando != INDEX_NONE ? Branco : Cor255(255, 255, 255, 110);
+			for (int32 k = 0; k < 4; ++k)
+			{
+				const float SX = (k & 1) ? 1.f : -1.f, SY = (k & 2) ? 1.f : -1.f;
+				const FVector2D Cn = C + FVector2D(SX * Q, SY * Q * 0.7f);
+				Linha(Cn, Cn - FVector2D(SX * Ql, 0), 2.f * E, CM);
+				Linha(Cn, Cn - FVector2D(0, SY * Ql), 2.f * E, CM);
+			}
+			if (GM->FotoMirando != INDEX_NONE)
+			{
+				const float Fr = FMath::Clamp(GM->TempoMira / APredioGameMode::TempoParaFoto, 0.f, 1.f);
+				Arco(C, 30.f * E, 4.f * E, Cor255(120, 200, 255), 90.f, 90.f - 360.f * Fr, 32);
+			}
+		}
+		if (GM->Objetivo == EObjetivo::Entregas && GM->TempoParado > 0.f)
+		{
+			const float Fr = FMath::Clamp(GM->TempoParado / APredioGameMode::TempoParaSoltar, 0.f, 1.f);
+			const FVector2D C(W * 0.5f, H * 0.5f + 70.f * E);
+			RetArred(C.X - 120.f * E, C.Y, 240.f * E, 10.f * E, 5.f * E, Cor255(30, 42, 62), Cor255(30, 42, 62));
+			RetArred(C.X - 120.f * E, C.Y, FMath::Max(10.f * E, 240.f * E * Fr), 10.f * E, 5.f * E, Laranja, Cor255(255, 210, 90));
+			T(GM->bComCaixa ? TEXT("SOLTANDO A CAIXA…") : TEXT("PRENDENDO A CAIXA…"), C.X, C.Y + 14.f * E, 15.f * E, TEXT("Bold"), Branco, 1);
+		}
+		if (GM->Objetivo == EObjetivo::Pulverizar && GM->RocaNX > 0)
+		{
+			// mapinha da roça: células feitas em verde, o drone como ponto
+			const float MW = 230.f * E;
+			const float CelW = MW / GM->RocaNX;
+			const float MH = CelW * GM->RocaNY;
+			const float MX0 = W - MW - 30.f * E, MY0 = 150.f * E;
+			RetArred(MX0 - 8 * E, MY0 - 30 * E, MW + 16 * E, MH + 40 * E, 8 * E, Cor255(6, 12, 24, 190), Cor255(10, 22, 42, 190));
+			T(FString::Printf(TEXT("ROÇA  %d%%"), FMath::RoundToInt(GM->Cobertura() * 100.f)), MX0, MY0 - 26 * E, 14 * E, TEXT("Bold"), AzulTexto, 0, 2.f * E);
+			// a roça no Unreal: X vai para a direita, Y (sul) para baixo
+			for (int32 y = 0; y < GM->RocaNY; ++y)
+			{
+				for (int32 x = 0; x < GM->RocaNX; ++x)
 				{
-					bNaTela = true;
-					const float R = 16.f * E;
-					const FVector2D C(S.X, S.Y);
-					Linha(C + FVector2D(0, -R), C + FVector2D(R, 0), 2.5f * E, Laranja);
-					Linha(C + FVector2D(R, 0), C + FVector2D(0, R), 2.5f * E, Laranja);
-					Linha(C + FVector2D(0, R), C + FVector2D(-R, 0), 2.5f * E, Laranja);
-					Linha(C + FVector2D(-R, 0), C + FVector2D(0, -R), 2.5f * E, Laranja);
-					T(FString::Printf(TEXT("%d  •  %.0f m"), GM->ProximoAro + 1, Metros), C.X, C.Y + R + 4.f * E, 16.f * E, TEXT("Bold"), Laranja, 1);
+					const bool bFeita = GM->CelulaFeita[y * GM->RocaNX + x] != 0;
+					Caixa(MX0 + x * CelW + 0.5f, MY0 + y * CelW + 0.5f, CelW - 1.f, CelW - 1.f, bFeita ? Cor255(70, 200, 90, 230) : Cor255(110, 80, 45, 200));
 				}
 			}
-			if (!bNaTela)
+			const FVector P = D->GetActorLocation();
+			const float U = (P.X - GM->Roca.Min.X) / GM->Roca.GetSize().X, V = (P.Y - GM->Roca.Min.Y) / GM->Roca.GetSize().Y;
+			if (U > -0.2f && U < 1.2f && V > -0.2f && V < 1.2f)
 			{
-				FVector2D Dir(Local.Y, -Local.Z);
-				if (Local.X <= 20.f && Dir.SizeSquared() < 1.f) Dir = FVector2D(0, 1); // bem atrás: aponta para baixo
-				Dir.Normalize();
-				const FVector2D Centro(W * 0.5f, H * 0.5f);
-				const FVector2D Pt = Centro + FVector2D(Dir.X * W * 0.40f, Dir.Y * H * 0.38f);
-				Seta(Pt - Dir * 30.f * E, Pt, 4.f * E, 16.f * E, Laranja);
-				T(FString::Printf(TEXT("%.0f m"), Metros), Pt.X - Dir.X * 52.f * E, Pt.Y - Dir.Y * 52.f * E - 10.f * E, 15.f * E, TEXT("Bold"), Laranja, 1);
+				const FVector2D DP(MX0 + FMath::Clamp(U, 0.f, 1.f) * MW, MY0 + FMath::Clamp(V, 0.f, 1.f) * MH);
+				Disco(DP, 5.f * E, Branco, 12);
+				const float Yaw = FMath::DegreesToRadians(D->GetActorRotation().Yaw);
+				Linha(DP, DP + FVector2D(FMath::Cos(Yaw), FMath::Sin(Yaw)) * 12.f * E, 2.f * E, Branco);
+			}
+			const bool bSobre = GM->Roca.IsInside(FVector2D(P));
+			if (GM->bPulverizando)
+			{
+				T(TEXT("PULVERIZANDO"), W * 0.5f, H * 0.5f + 80.f * E, 22.f * E, TEXT("Bold Italic"), Cor255(110, 255, 140), 1, 3.f * E);
+			}
+			else if (bSobre)
+			{
+				T(TEXT("ALTO DEMAIS — desça até 4 m do chão"), W * 0.5f, H * 0.5f + 80.f * E, 18.f * E, TEXT("Bold"), Cor255(255, 190, 90), 1);
 			}
 		}
 	}
+	if (GM->Flash > 0.f) Caixa(0, 0, W, H, FLinearColor(1, 1, 1, GM->Flash * 0.75f));
 
 	// painel do alto
 	const float PW = 440.f * E, PH = 106.f * E;
@@ -793,7 +861,8 @@ void ADroneHUD::DesenharObjetivo(APredioGameMode* GM, const ADronePawn* D, float
 	RetArred(PX, PY, PW, PH, 10.f * E, Cor255(6, 12, 24, 190), Cor255(10, 22, 42, 190));
 	ContornoArred(PX, PY, PW, PH, 10.f * E, FMath::Max(1.f, 1.2f * E), Cor255(60, 120, 220, 170));
 	FString Titulo = GM->NomeObjetivo(GM->Objetivo).ToUpper();
-	if (bAros) Titulo += FString::Printf(TEXT("   AROS %d/%d"), FMath::Min(GM->ProximoAro, GM->Aros.Num()), GM->Aros.Num());
+	if (GM->Objetivo == EObjetivo::Pulverizar) Titulo += FString::Printf(TEXT("   %d%% / %d%%"), GM->Progresso(), GM->ProgressoTotal());
+	else if (GM->ProgressoTotal() > 0) Titulo += FString::Printf(TEXT("   %d/%d"), GM->Progresso(), GM->ProgressoTotal());
 	T(Titulo, W * 0.5f, PY + 8.f * E, 15.f * E, TEXT("Bold"), AzulTexto, 1, 2.f * E);
 
 	const bool bRelogio = GM->Objetivo == EObjetivo::ArosRelogio;
@@ -811,6 +880,18 @@ void ADroneHUD::DesenharObjetivo(APredioGameMode* GM, const ADronePawn* D, float
 	{
 		Rodape = GM->Objetivo == EObjetivo::Topo ? TEXT("Decole para começar — a meta é a cobertura") : TEXT("Decole para começar — siga o losango laranja");
 		CorRodape = AzulTexto;
+	}
+	else if (GM->Objetivo == EObjetivo::Entregas)
+	{
+		Rodape = GM->bComCaixa ? FString::Printf(TEXT("Leve a caixa para: %s"), GM->NomesEntrega.IsValidIndex(GM->EntregaAtual) ? *GM->NomesEntrega[GM->EntregaAtual] : TEXT("o destino"))
+			: FString(TEXT("Pegue a caixa na plataforma do galpão (pare em cima dela)"));
+		CorRodape = AzulTexto;
+	}
+	else if (GM->Objetivo == EObjetivo::Ferraduras && GM->DistFerradura < 1e8f)
+	{
+		const float Dm = GM->DistFerradura;
+		Rodape = FString::Printf(TEXT("%s  —  a mais perto está a %.0f m"), Dm < 15.f ? TEXT("QUENTE!") : (Dm < 45.f ? TEXT("morno") : TEXT("frio")), Dm);
+		CorRodape = Dm < 15.f ? Cor255(255, 120, 80) : (Dm < 45.f ? Cor255(255, 200, 90) : Cor255(140, 190, 255));
 	}
 	else if (bRelogio && GM->TempoDesdeAro < 1.6f && GM->BonusUltimoAro > 0.f)
 	{
@@ -1122,7 +1203,7 @@ void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 			}
 		}
 
-		const TCHAR* Subs[] = { TEXT("Pasto, açude, galpão e missões pela fazenda"), TEXT("Três andares em construção — voo por dentro"), TEXT("Siderúrgica desativada — entregas difíceis") };
+		const TCHAR* Subs[] = { TEXT("Entregas, pulverização, fotos e ferraduras"), TEXT("Três andares em construção — voo por dentro"), TEXT("Siderúrgica desativada — entregas difíceis") };
 		const float CW = 392.f, CH = 520.f, CG = 18.f, CX0 = (1280.f - (NCart * CW + (NCart - 1) * CG)) * 0.5f, CY0 = 200.f;
 		GM->AreaCartoes.SetNum(NCart);
 		for (int32 c = 0; c < NCart; ++c)
@@ -1179,8 +1260,15 @@ void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 					if (Md > 0) ++NComMedalha;
 					Disco(Pt(MX, cy + 428), 12 * e, CorMedalha(Md), 20);
 					if (Md > 0) Icone(IcEstrela, Pt(MX, cy + 428), 6.5f * e, Cor255(20, 24, 34));
-					T(APredioGameMode::NomeObjetivo(O), X(MX + 20), Y(cy + 419), 14 * e, TEXT("Regular"), Cor255(205, 218, 238));
-					MX += 30 + Medir(APredioGameMode::NomeObjetivo(O), Fonte(14 * e, TEXT("Regular"))).X / e + 18;
+					if (APredioGameMode::ObjetivosDoCartao((ECartaoMapa)c).Num() <= 3)
+					{
+						T(APredioGameMode::NomeObjetivo(O), X(MX + 20), Y(cy + 419), 14 * e, TEXT("Regular"), Cor255(205, 218, 238));
+						MX += 30 + Medir(APredioGameMode::NomeObjetivo(O), Fonte(14 * e, TEXT("Regular"))).X / e + 18;
+					}
+					else
+					{
+						MX += 34;  // muitos desafios: só as medalhas
+					}
 				}
 				T(FString::Printf(TEXT("%d de %d desafios com medalha"), NComMedalha, NDesafios), X(cx + 24), Y(cy + 458), 13 * e, TEXT("Italic"), Cinza);
 				if (bSel)
@@ -1222,7 +1310,7 @@ void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 		T(TEXT("Voo livre: explore o mapa sem cronômetro."), X(40), Y(538), 14 * e, TEXT("Italic"), Cinza);
 
 		const int32 NL = GM->NumLinhasMP();
-		const float L0 = 560.f, L1 = 1240.f, LY0 = 170.f, LH = 86.f;
+		const float L0 = 560.f, L1 = 1240.f, LY0 = 170.f, LH = FMath::Min(86.f, 690.f / FMath::Max(1, NL));
 		GM->AreaLinhas.SetNum(NL);
 		for (int32 l = 0; l < NL; ++l)
 		{
@@ -1242,7 +1330,20 @@ void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 			}
 			const float CY = ly + (LH - 10) * 0.5f;
 			int32 Ic = IcRecarregar;
-			if (bObj) Ic = O == EObjetivo::Topo ? IcBandeira : (O == EObjetivo::ArosOrdem ? IcAro : (O == EObjetivo::ArosRelogio ? IcRelogio : IcOlho));
+			if (bObj)
+			{
+				switch (O)
+				{
+				case EObjetivo::Topo: Ic = IcBandeira; break;
+				case EObjetivo::ArosOrdem: Ic = IcAro; break;
+				case EObjetivo::ArosRelogio: Ic = IcRelogio; break;
+				case EObjetivo::Entregas: Ic = IcCasa; break;
+				case EObjetivo::Pulverizar: Ic = IcSliders; break;
+				case EObjetivo::Fotos: Ic = IcMonitor; break;
+				case EObjetivo::Ferraduras: Ic = IcEstrela; break;
+				default: Ic = IcOlho; break;
+				}
+			}
 			Icone(Ic, Pt(L0 + 38, CY), 15 * e, bSel ? Branco : AzulTexto);
 			T(GM->NomeLinhaMP(l), X(L0 + 78), Y(ly + 12), 23 * e, bObj ? TEXT("Regular") : TEXT("Italic"), Branco);
 			T(GM->DescricaoLinhaMP(l), X(L0 + 78), Y(ly + 44), 13.5f * e, TEXT("Regular"), bSel ? Cor255(175, 200, 240) : Cinza);

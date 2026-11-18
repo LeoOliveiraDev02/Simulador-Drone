@@ -19,14 +19,11 @@ struct FAjustesDrone
 	bool bPainel = true;
 	bool bAjusteAuto = true;
 	float EscalaInterface = 1.0f; // tamanho do OSD (acessibilidade)
-	// recordes (segundos; 0 = ainda não tem)
-	float RecordeTopo = 0.f;      // prédio: chegar ao topo
-	float RecordeAros = 0.f;      // campo: aros em ordem
-	float RecordeRelogio = 0.f;   // campo: contra o relógio (tempo total)
-	// melhor medalha de cada desafio (0 nenhuma, 1 bronze, 2 prata, 3 ouro) — é o "progresso" do mapa
-	int32 MedalhaTopo = 0;
-	int32 MedalhaAros = 0;
-	int32 MedalhaRelogio = 0;
+	// recordes (segundos; 0 = ainda não tem) e melhor medalha (0 nenhuma, 1 bronze, 2 prata, 3 ouro)
+	// de cada objetivo, na ordem do EObjetivo (Livre, Topo, ArosOrdem, ArosRelogio, Entregas, Pulverizar, Fotos, Ferraduras)
+	static constexpr int32 NumObjetivos = 8;
+	float Recordes[NumObjetivos] = {};
+	int32 Medalhas[NumObjetivos] = {};
 
 	static FAjustesDrone& Get();
 	static FString Arquivo();

@@ -25,6 +25,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Components/AudioComponent.h"
 #include "Misc/PackageName.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -115,7 +116,12 @@ void APredioGameMode::BeginPlay()
 
 	MontarPercurso();
 	MontarAros();
-	if (bEhCampo) EspalharGrama();
+	if (bEhCampo)
+	{
+		EspalharMilho();
+		EspalharGrama();
+		CaixaAtor = CriarAtorMalha(MalhaCaixa, FTransform(FVector(0, 0, -100000)));
+	}
 
 	bTour = FParse::Param(FCommandLine::Get(), TEXT("tour"));
 	bFotoMenu = FParse::Param(FCommandLine::Get(), TEXT("fotomenu"));
@@ -174,6 +180,10 @@ void APredioGameMode::ColetarAtores()
 	Rota.Reset();
 	AtoresAros.Reset();
 	int32 MaiorAndar = 0;
+	TArray<TPair<int32, TPair<FVector, FString>>> Entregas, Fotos;
+	TArray<TPair<int32, TWeakObjectPtr<AActor>>> Ferrs;
+	UStaticMesh* MalhaFarol = nullptr;
+	Giratorios.Reset();
 
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
@@ -208,6 +218,46 @@ void APredioGameMode::ColetarAtores()
 			{
 				RaioAro = FMath::Max(80.f, FCString::Atof(*T.RightChop(8)));
 			}
+			else if (T == TEXT("Coleta"))
+			{
+				PontoColeta = A->GetActorLocation();
+				bTemColeta = true;
+			}
+			else if (T.StartsWith(TEXT("Entrega_")) || T.StartsWith(TEXT("Foto_")))
+			{
+				FString Nome;
+				for (const FName& T2 : A->Tags)
+				{
+					if (T2.ToString().StartsWith(TEXT("Nome:"))) Nome = T2.ToString().RightChop(5);
+				}
+				const bool bEntrega = T.StartsWith(TEXT("Entrega_"));
+				(bEntrega ? Entregas : Fotos).Add(TPair<int32, TPair<FVector, FString>>(FCString::Atoi(*T.RightChop(bEntrega ? 8 : 5)), TPair<FVector, FString>(A->GetActorLocation(), Nome)));
+			}
+			else if (T.StartsWith(TEXT("Ferradura_")))
+			{
+				Ferrs.Add(TPair<int32, TWeakObjectPtr<AActor>>(FCString::Atoi(*T.RightChop(10)), A));
+			}
+			else if (T.StartsWith(TEXT("Gira_")))
+			{
+				Giratorios.Add(TPair<TWeakObjectPtr<AActor>, float>(A, FCString::Atof(*T.RightChop(5))));
+			}
+			else if (T.StartsWith(TEXT("Roca_")))
+			{
+				TArray<FString> V;
+				T.RightChop(5).ParseIntoArray(V, TEXT("_"));
+				if (V.Num() == 4)
+				{
+					Roca = FBox2D(FVector2D(FCString::Atof(*V[0]), FCString::Atof(*V[1])), FVector2D(FCString::Atof(*V[2]), FCString::Atof(*V[3])));
+				}
+			}
+			else if (T == TEXT("ModeloCaixa") || T == TEXT("ModeloFarol"))
+			{
+				if (const UStaticMeshComponent* C = A->FindComponentByClass<UStaticMeshComponent>())
+				{
+					if (T == TEXT("ModeloCaixa")) MalhaCaixa = C->GetStaticMesh();
+					else MalhaFarol = C->GetStaticMesh();
+				}
+			}
 			else if (T.StartsWith(TEXT("AlturaAndar_")))
 			{
 				AlturaAndar = FCString::Atof(*T.RightChop(12));
@@ -220,6 +270,25 @@ void APredioGameMode::ColetarAtores()
 	}
 	Rota.Sort([](const TPair<int32, FTransform>& A, const TPair<int32, FTransform>& B) { return A.Key < B.Key; });
 	NumAndares = MaiorAndar + 1;
+
+	auto PorIndice = [](const auto& A, const auto& B) { return A.Key < B.Key; };
+	Entregas.Sort(PorIndice);
+	Fotos.Sort(PorIndice);
+	Ferrs.Sort(PorIndice);
+	PontosEntrega.Reset(); NomesEntrega.Reset();
+	for (const auto& E : Entregas) { PontosEntrega.Add(E.Value.Key); NomesEntrega.Add(E.Value.Value); }
+	PontosFoto.Reset(); NomesFoto.Reset();
+	for (const auto& F : Fotos) { PontosFoto.Add(F.Value.Key); NomesFoto.Add(F.Value.Value); }
+	Ferraduras.Reset();
+	for (const auto& F : Ferrs) Ferraduras.Add(F.Value);
+	FotoFeita.Init(false, PontosFoto.Num());
+	FerraduraPega.Init(false, Ferraduras.Num());
+	if (MalhaFarol && !Farol.IsValid())
+	{
+		// criado depois de percorrer os atores (criar no meio da varredura atrapalha o iterador)
+		Farol = CriarAtorMalha(MalhaFarol, FTransform(FVector(0, 0, -100000)));
+		if (AActor* F = Farol.Get()) F->SetActorHiddenInGame(true);
+	}
 }
 
 void APredioGameMode::AtualizarAndares(bool bForcar)
@@ -669,8 +738,7 @@ void APredioGameMode::MudarItem(int32 Dir, bool bConfirmar)
 			const FAjustesDrone Antes = C;
 			C = FAjustesDrone();
 			// recordes e medalhas não são "opções"
-			C.RecordeTopo = Antes.RecordeTopo; C.RecordeAros = Antes.RecordeAros; C.RecordeRelogio = Antes.RecordeRelogio;
-			C.MedalhaTopo = Antes.MedalhaTopo; C.MedalhaAros = Antes.MedalhaAros; C.MedalhaRelogio = Antes.MedalhaRelogio;
+			for (int32 i = 0; i < FAjustesDrone::NumObjetivos; ++i) { C.Recordes[i] = Antes.Recordes[i]; C.Medalhas[i] = Antes.Medalhas[i]; }
 			C.AplicarGraficos();
 			NivelAjuste = 0;
 			AplicarNivelAjuste();
@@ -965,6 +1033,20 @@ void APredioGameMode::Tick(float DeltaSeconds)
 		if (!bMenuAberto && !bMenuPrincipal) TickObjetivo(DeltaSeconds);
 	}
 	if (bMenuPrincipal) MPRelogio += DtReal;
+	if (bEhCampo && !UGameplayStatics::IsGamePaused(this))
+	{
+		for (const TPair<TWeakObjectPtr<AActor>, float>& G : Giratorios)
+		{
+			if (AActor* A = G.Key.Get()) A->AddActorLocalRotation(FRotator(0.f, 0.f, G.Value * DeltaSeconds));
+		}
+		for (int32 i = 0; i < Ferraduras.Num(); ++i)
+		{
+			if (AActor* F = Ferraduras[i].Get()) F->AddActorWorldRotation(FRotator(0.f, 90.f * DeltaSeconds, 0.f));
+		}
+		MoverFarolECaixa();
+	}
+	Flash = FMath::Max(0.f, Flash - DtReal * 2.5f);
+	if (bMenuPrincipal && bFotoMenu) TickFotosMenu(DtReal);
 	AjusteAutomatico(DeltaSeconds);
 }
 
@@ -1112,7 +1194,7 @@ TArray<EObjetivo> APredioGameMode::ObjetivosDoCartao(ECartaoMapa C)
 {
 	switch (C)
 	{
-	case ECartaoMapa::Campo: return { EObjetivo::ArosOrdem, EObjetivo::ArosRelogio, EObjetivo::Livre };
+	case ECartaoMapa::Campo: return { EObjetivo::Entregas, EObjetivo::Pulverizar, EObjetivo::Fotos, EObjetivo::Ferraduras, EObjetivo::ArosOrdem, EObjetivo::ArosRelogio, EObjetivo::Livre };
 	case ECartaoMapa::Predio: return { EObjetivo::Topo, EObjetivo::Livre };
 	default: return {};
 	}
@@ -1130,6 +1212,10 @@ FString APredioGameMode::NomeObjetivo(EObjetivo O)
 	case EObjetivo::Topo: return TEXT("Chegue ao topo");
 	case EObjetivo::ArosOrdem: return TEXT("Aros em ordem");
 	case EObjetivo::ArosRelogio: return TEXT("Contra o relógio");
+	case EObjetivo::Entregas: return TEXT("Entregas da fazenda");
+	case EObjetivo::Pulverizar: return TEXT("Pulverizar o milharal");
+	case EObjetivo::Fotos: return TEXT("Inspeção com fotos");
+	case EObjetivo::Ferraduras: return TEXT("Ferraduras douradas");
 	default: return TEXT("Voo livre");
 	}
 }
@@ -1141,6 +1227,10 @@ FString APredioGameMode::DescricaoObjetivo(EObjetivo O)
 	case EObjetivo::Topo: return TEXT("Suba do térreo até a cobertura o mais rápido que puder");
 	case EObjetivo::ArosOrdem: return TEXT("Passe por todos os aros na ordem — o próximo fica marcado");
 	case EObjetivo::ArosRelogio: return TEXT("Cada aro dá mais tempo; se o relógio zerar, acabou");
+	case EObjetivo::Entregas: return TEXT("Pegue a caixa no galpão e leve para a casa, a caixa d'água, a carreta e o píer");
+	case EObjetivo::Pulverizar: return TEXT("Voe baixo (até 4 m) por cima do milho até cobrir 90% da roça");
+	case EObjetivo::Fotos: return TEXT("Mire de perto: transformador, cata-vento, caixa d'água, galpão, silo e chaminé");
+	case EObjetivo::Ferraduras: return TEXT("12 ferraduras escondidas pela fazenda — ache todas");
 	default: return TEXT("Sem cronômetro: explore o mapa à vontade");
 	}
 }
@@ -1171,7 +1261,7 @@ FString APredioGameMode::NomeMedalha(int32 M)
 
 FString APredioGameMode::TextoLocal() const
 {
-	return bEhCampo ? FString(TEXT("CAMPO BAIANO")) : TextoAndar(AndarAtual);
+	return bEhCampo ? FString(TEXT("FAZENDA")) : TextoAndar(AndarAtual);
 }
 
 float APredioGameMode::AlturaTopo() const
@@ -1214,19 +1304,29 @@ float APredioGameMode::LimiteMedalha(int32 M) const
 		const float L = ComprimentoCircuito();
 		return M >= 3 ? Arred5(L / 900.f + 8.f) : (M == 2 ? Arred5(L / 650.f + 15.f) : Arred5(L / 420.f + 25.f));
 	}
+	if (Objetivo == EObjetivo::Entregas)
+	{
+		// ida e volta do galpão a cada destino + o tempo de pegar/soltar
+		float L = 0.f;
+		for (const FVector& E : PontosEntrega) L += 2.f * FVector::Dist(PontoColeta, E);
+		const float Paradas = PontosEntrega.Num() * 2.f * 3.f;
+		return M >= 3 ? Arred5(L / 800.f + Paradas) : (M == 2 ? Arred5(L / 560.f + Paradas * 1.5f) : Arred5(L / 380.f + Paradas * 2.f));
+	}
+	if (Objetivo == EObjetivo::Pulverizar)
+	{
+		// faixas de 5 m cobrindo 90% da roça
+		const float L = Roca.bIsValid ? Roca.GetArea() / TamCelula * CoberturaMeta : 60000.f;
+		return M >= 3 ? Arred5(L / 650.f + 20.f) : (M == 2 ? Arred5(L / 450.f + 40.f) : Arred5(L / 300.f + 60.f));
+	}
+	if (Objetivo == EObjetivo::Fotos) return M >= 3 ? 120.f : (M == 2 ? 180.f : 270.f);
+	if (Objetivo == EObjetivo::Ferraduras) return M >= 3 ? 240.f : (M == 2 ? 360.f : 540.f);
 	return 0.f;
 }
 
 float APredioGameMode::RecordeAtual() const
 {
 	const FAjustesDrone& C = FAjustesDrone::Get();
-	switch (Objetivo)
-	{
-	case EObjetivo::Topo: return C.RecordeTopo;
-	case EObjetivo::ArosOrdem: return C.RecordeAros;
-	case EObjetivo::ArosRelogio: return C.RecordeRelogio;
-	default: return 0.f;
-	}
+	return (int32)Objetivo < FAjustesDrone::NumObjetivos ? C.Recordes[(int32)Objetivo] : 0.f;
 }
 
 void APredioGameMode::MontarAros()
@@ -1264,6 +1364,22 @@ void APredioGameMode::ReiniciarDesafio()
 	TempoDesdeAro = 99.f;
 	BonusUltimoAro = 0.f;
 	TempoRestante = BonusDoAro(0);
+	// missões da fazenda
+	EntregaAtual = 0;
+	bComCaixa = false;
+	TempoParado = 0.f;
+	for (const TWeakObjectPtr<AActor>& C : CaixasEntregues) if (AActor* A = C.Get()) A->Destroy();
+	CaixasEntregues.Reset();
+	for (bool& B : FotoFeita) B = false;
+	FotoMirando = INDEX_NONE;
+	TempoMira = 0.f;
+	for (int32 i = 0; i < Ferraduras.Num(); ++i)
+	{
+		FerraduraPega[i] = false;
+		if (AActor* F = Ferraduras[i].Get()) F->SetActorHiddenInGame(false);
+	}
+	for (uint8& C : CelulaFeita) C = 0;
+	bPulverizando = false;
 	MostrarAros();
 	if (const ADronePawn* D = Drone()) UltimaPosDrone = D->GetActorLocation();
 }
@@ -1287,6 +1403,10 @@ void APredioGameMode::IniciarObjetivo(EObjetivo O, bool bRecolocar)
 		case EObjetivo::Topo: Dica = TEXT("CHEGUE AO TOPO — o cronômetro começa quando você decolar"); break;
 		case EObjetivo::ArosOrdem: Dica = TEXT("AROS EM ORDEM — siga a marca do próximo aro"); break;
 		case EObjetivo::ArosRelogio: Dica = TEXT("CONTRA O RELÓGIO — cada aro dá mais tempo"); break;
+		case EObjetivo::Entregas: Dica = TEXT("ENTREGAS — pegue a caixa na plataforma do galpão (siga a luz laranja)"); break;
+		case EObjetivo::Pulverizar: Dica = TEXT("PULVERIZAR — voe baixo por cima do milharal, em faixas"); break;
+		case EObjetivo::Fotos: Dica = TEXT("INSPEÇÃO — chegue perto e mire cada alvo até a foto sair"); break;
+		case EObjetivo::Ferraduras: Dica = TEXT("FERRADURAS — 12 escondidas; o painel diz quando está perto"); break;
 		default: Dica = TEXT("VOO LIVRE"); break;
 		}
 		D->MostrarMensagem(Dica, 4.f);
@@ -1314,9 +1434,9 @@ void APredioGameMode::ConcluirDesafio(bool bSucesso)
 				if (TempoDesafio <= LimiteMedalha(M)) { Medalha = M; break; }
 			}
 		}
-		int32* Med = Objetivo == EObjetivo::Topo ? &C.MedalhaTopo : (Objetivo == EObjetivo::ArosOrdem ? &C.MedalhaAros : &C.MedalhaRelogio);
+		int32* Med = &C.Medalhas[FMath::Clamp((int32)Objetivo, 0, FAjustesDrone::NumObjetivos - 1)];
 		if (Medalha > *Med) { *Med = Medalha; C.Salvar(); }
-		float* Rec = Objetivo == EObjetivo::Topo ? &C.RecordeTopo : (Objetivo == EObjetivo::ArosOrdem ? &C.RecordeAros : &C.RecordeRelogio);
+		float* Rec = &C.Recordes[FMath::Clamp((int32)Objetivo, 0, FAjustesDrone::NumObjetivos - 1)];
 		if (*Rec <= 0.f || TempoDesafio < *Rec)
 		{
 			*Rec = TempoDesafio;
@@ -1375,7 +1495,11 @@ void APredioGameMode::TickObjetivo(float Dt)
 	}
 
 	TempoDesafio += Dt;
-	if (Objetivo == EObjetivo::Topo)
+	if (Objetivo == EObjetivo::Entregas || Objetivo == EObjetivo::Pulverizar || Objetivo == EObjetivo::Fotos || Objetivo == EObjetivo::Ferraduras)
+	{
+		TickMissoes(Dt, P);
+	}
+	else if (Objetivo == EObjetivo::Topo)
 	{
 		if (AndarAtual == NumAndares - 1 && P.Z > AlturaTopo())
 		{
@@ -1452,13 +1576,7 @@ FString APredioGameMode::NomeMapa(int32 Cartao)
 int32 APredioGameMode::MedalhaDe(EObjetivo O) const
 {
 	const FAjustesDrone& C = FAjustesDrone::Get();
-	switch (O)
-	{
-	case EObjetivo::Topo: return C.MedalhaTopo;
-	case EObjetivo::ArosOrdem: return C.MedalhaAros;
-	case EObjetivo::ArosRelogio: return C.MedalhaRelogio;
-	default: return 0;
-	}
+	return (O != EObjetivo::Livre && (int32)O < FAjustesDrone::NumObjetivos) ? C.Medalhas[(int32)O] : 0;
 }
 
 int32 APredioGameMode::MedalhasMapa(int32 Cartao, int32& Possiveis) const
@@ -1514,7 +1632,7 @@ FString APredioGameMode::ExtraLinhaMP(int32 L) const
 	if (!LinhaEhObjetivo(L, O)) return FString();
 	if (O == EObjetivo::Livre) return TEXT("sem cronômetro");
 	const FAjustesDrone& C = FAjustesDrone::Get();
-	const float R = O == EObjetivo::Topo ? C.RecordeTopo : (O == EObjetivo::ArosOrdem ? C.RecordeAros : C.RecordeRelogio);
+	const float R = (int32)O < FAjustesDrone::NumObjetivos ? C.Recordes[(int32)O] : 0.f;
 	return R > 0.f ? FString::Printf(TEXT("recorde %s"), *TextoTempo(R)) : FString(TEXT("sem recorde ainda"));
 }
 
@@ -1559,7 +1677,7 @@ void APredioGameMode::CriarDroneTitulo()
 		const TCHAR* Nomes[] = { TEXT("Helice0"), TEXT("Helice1"), TEXT("Helice2"), TEXT("Helice3") };
 		for (int32 i = 0; i < 4; ++i) HelicesTitulo.Add(Peca(Helice, Nomes[i], Eixos[i]));
 	}
-	A->SetActorScale3D(FVector(2.4f)); // maior que o real para aparecer bem na abertura
+	A->SetActorScale3D(FVector(2.6f)); // maior que o real para aparecer bem na abertura
 	DroneTitulo = A;
 }
 
@@ -1696,7 +1814,7 @@ void APredioGameMode::TickMenuPrincipal(float Dt)
 		bool bVolta = false;
 		if (MPVooS >= N - 1) { MPVooS = 0.35f; bVolta = true; }
 		const float SDrone = MPVooS;
-		const float SCam = FMath::Max(0.f, SDrone - 135.f / Comp(SDrone));
+		const float SCam = FMath::Max(0.f, SDrone - 100.f / Comp(SDrone));
 		const FTransform TD = PontoNoPercurso(SDrone);
 		const FTransform TC = PontoNoPercurso(SCam);
 		const float Bal = FMath::Sin(MPRelogio * 1.7f) * 4.f;
@@ -1734,25 +1852,7 @@ void APredioGameMode::TickMenuPrincipal(float Dt)
 		MPEscuro = 0.f;
 	}
 
-	// prints de conferência (-fotomenu): abertura, mapas, desafios do campo, sai
-	if (bFotoMenu)
-	{
-		FotoMenuT += Dt;
-		auto Foto = [this](const TCHAR* Nome) { FScreenshotRequest::RequestScreenshot(PastaTestes / Nome, true, false); };
-		if (FotoMenuFase == 0 && FotoMenuT > 7.f) { Foto(TEXT("menu_1_abertura.png")); FotoMenuFase = 1; }
-		else if (FotoMenuFase == 1 && FotoMenuT > 8.f) { IrParaTela(ETelaMP::Mapas); MPCartao = (int32)ECartaoMapa::Campo; FotoMenuFase = 2; }
-		else if (FotoMenuFase == 2 && FotoMenuT > 10.f) { Foto(TEXT("menu_2_mapas.png")); FotoMenuFase = 3; }
-		else if (FotoMenuFase == 3 && FotoMenuT > 11.f) { MPCartao = (int32)ECartaoMapa::Usina; FotoMenuFase = 4; }
-		else if (FotoMenuFase == 4 && FotoMenuT > 12.5f) { Foto(TEXT("menu_3_usina.png")); FotoMenuFase = 5; }
-		else if (FotoMenuFase == 5 && FotoMenuT > 13.5f) { MPCartao = (int32)ECartaoMapa::Campo; IrParaTela(ETelaMP::Desafios); FotoMenuFase = 6; }
-		else if (FotoMenuFase == 6 && FotoMenuT > 15.f) { Foto(TEXT("menu_4_desafios.png")); FotoMenuFase = 7; }
-		else if (FotoMenuFase == 7 && FotoMenuT > 16.f) { AbrirMenu(true); CategoriaSel = (int32)ECategoriaMenu::Video; FotoMenuFase = 8; }
-		else if (FotoMenuFase == 8 && FotoMenuT > 17.5f) { Foto(TEXT("menu_5_secoes.png")); FotoMenuFase = 9; }
-		else if (FotoMenuFase == 9 && FotoMenuT > 18.5f) { EntrarCategoria(ECategoriaMenu::Audio); FotoMenuFase = 10; }
-		else if (FotoMenuFase == 10 && FotoMenuT > 20.f) { Foto(TEXT("menu_6_audio.png")); FotoMenuFase = 11; }
-		else if (FotoMenuFase == 11 && FotoMenuT > 21.f) { FPlatformMisc::RequestExit(false); }
-		return;
-	}
+	if (bFotoMenu) return; // os prints de conferência cuidam do menu (TickFotosMenu)
 
 	if (!PC || bCarregando) return;
 	if (FPlatformTime::Seconds() - MenuMudouEm < 0.3) return;
@@ -1837,6 +1937,332 @@ void APredioGameMode::TickMenuPrincipal(float Dt)
 	}
 }
 
+void APredioGameMode::TickFotosMenu(float Dt)
+{
+	// prints de conferência (-fotomenu): abertura, mapas, desafios do campo, sai
+	FotoMenuT += Dt;
+	auto Foto = [this](const TCHAR* Nome) { FScreenshotRequest::RequestScreenshot(PastaTestes / Nome, true, false); };
+	if (FotoMenuFase == 0 && FotoMenuT > 7.f) { Foto(TEXT("menu_1_abertura.png")); FotoMenuFase = 1; }
+	else if (FotoMenuFase == 1 && FotoMenuT > 8.f) { IrParaTela(ETelaMP::Mapas); MPCartao = (int32)ECartaoMapa::Campo; FotoMenuFase = 2; }
+	else if (FotoMenuFase == 2 && FotoMenuT > 10.f) { Foto(TEXT("menu_2_mapas.png")); FotoMenuFase = 3; }
+	else if (FotoMenuFase == 3 && FotoMenuT > 11.f) { MPCartao = (int32)ECartaoMapa::Usina; FotoMenuFase = 4; }
+	else if (FotoMenuFase == 4 && FotoMenuT > 12.5f) { Foto(TEXT("menu_3_usina.png")); FotoMenuFase = 5; }
+	else if (FotoMenuFase == 5 && FotoMenuT > 13.5f) { MPCartao = (int32)ECartaoMapa::Campo; IrParaTela(ETelaMP::Desafios); FotoMenuFase = 6; }
+	else if (FotoMenuFase == 6 && FotoMenuT > 15.f) { Foto(TEXT("menu_4_desafios.png")); FotoMenuFase = 7; }
+	else if (FotoMenuFase == 7 && FotoMenuT > 16.f) { AbrirMenu(true); CategoriaSel = (int32)ECategoriaMenu::Video; FotoMenuFase = 8; }
+	else if (FotoMenuFase == 8 && FotoMenuT > 17.5f) { Foto(TEXT("menu_5_secoes.png")); FotoMenuFase = 9; }
+	else if (FotoMenuFase == 9 && FotoMenuT > 18.5f) { EntrarCategoria(ECategoriaMenu::Audio); FotoMenuFase = 10; }
+	else if (FotoMenuFase == 10 && FotoMenuT > 20.f) { Foto(TEXT("menu_6_audio.png")); FotoMenuFase = 11; }
+	else if (FotoMenuFase == 11 && FotoMenuT > 21.f) { FPlatformMisc::RequestExit(false); }
+}
+
+// ------------------------------------------------------------------ missões da fazenda
+
+AActor* APredioGameMode::CriarAtorMalha(UStaticMesh* M, const FTransform& T)
+{
+	if (!M) return nullptr;
+	AActor* A = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), T);
+	if (!A) return nullptr;
+	UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(A, TEXT("Malha"));
+	C->SetMobility(EComponentMobility::Movable);
+	C->SetStaticMesh(M);
+	C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	A->SetRootComponent(C);
+	C->RegisterComponent();
+	A->AddInstanceComponent(C);
+	A->SetActorTransform(T);
+	return A;
+}
+
+float APredioGameMode::Cobertura() const
+{
+	if (CelulaFeita.Num() == 0) return 0.f;
+	int32 N = 0;
+	for (const uint8 C : CelulaFeita) N += C ? 1 : 0;
+	return (float)N / (float)CelulaFeita.Num();
+}
+
+int32 APredioGameMode::Progresso() const
+{
+	switch (Objetivo)
+	{
+	case EObjetivo::ArosOrdem: case EObjetivo::ArosRelogio: return FMath::Min(ProximoAro, Aros.Num());
+	case EObjetivo::Entregas: return EntregaAtual;
+	case EObjetivo::Fotos: { int32 N = 0; for (const bool B : FotoFeita) N += B ? 1 : 0; return N; }
+	case EObjetivo::Ferraduras: { int32 N = 0; for (const bool B : FerraduraPega) N += B ? 1 : 0; return N; }
+	case EObjetivo::Pulverizar: return FMath::RoundToInt(Cobertura() * 100.f);
+	default: return 0;
+	}
+}
+
+int32 APredioGameMode::ProgressoTotal() const
+{
+	switch (Objetivo)
+	{
+	case EObjetivo::ArosOrdem: case EObjetivo::ArosRelogio: return Aros.Num();
+	case EObjetivo::Entregas: return PontosEntrega.Num();
+	case EObjetivo::Fotos: return PontosFoto.Num();
+	case EObjetivo::Ferraduras: return Ferraduras.Num();
+	case EObjetivo::Pulverizar: return FMath::RoundToInt(CoberturaMeta * 100.f);
+	default: return 0;
+	}
+}
+
+bool APredioGameMode::AlvoPrincipal(FVector& Out, FString& Rotulo) const
+{
+	if (Estado == EEstadoDesafio::Concluido || Estado == EEstadoDesafio::Falhou) return false;
+	switch (Objetivo)
+	{
+	case EObjetivo::ArosOrdem: case EObjetivo::ArosRelogio:
+		if (!Aros.IsValidIndex(ProximoAro)) return false;
+		Out = Aros[ProximoAro].GetLocation();
+		Rotulo = FString::Printf(TEXT("ARO %d"), ProximoAro + 1);
+		return true;
+	case EObjetivo::Entregas:
+		if (!bComCaixa)
+		{
+			if (!bTemColeta) return false;
+			Out = PontoColeta;
+			Rotulo = TEXT("PEGAR A CAIXA");
+			return true;
+		}
+		if (!PontosEntrega.IsValidIndex(EntregaAtual)) return false;
+		Out = PontosEntrega[EntregaAtual];
+		Rotulo = NomesEntrega.IsValidIndex(EntregaAtual) ? NomesEntrega[EntregaAtual].ToUpper() : TEXT("ENTREGA");
+		return true;
+	case EObjetivo::Pulverizar:
+		if (!Roca.bIsValid) return false;
+		Out = FVector(Roca.GetCenter(), ChaoCelula.Num() ? ChaoCelula[ChaoCelula.Num() / 2] + 300.f : 0.f);
+		Rotulo = TEXT("MILHARAL");
+		return !bPulverizando;
+	default:
+		return false;
+	}
+}
+
+void APredioGameMode::MoverFarolECaixa()
+{
+	ADronePawn* D = Drone();
+	// farol: coluna de luz no alvo principal (entregas / volta para a roça)
+	if (AActor* F = Farol.Get())
+	{
+		FVector Alvo;
+		FString R;
+		const bool bMostra = !bMenuPrincipal && (Objetivo == EObjetivo::Entregas || Objetivo == EObjetivo::Pulverizar) && AlvoPrincipal(Alvo, R);
+		F->SetActorHiddenInGame(!bMostra);
+		if (bMostra) F->SetActorLocation(Alvo - FVector(0, 0, 20.f));
+	}
+	// caixa: na plataforma do galpão esperando, ou pendurada embaixo do drone
+	if (AActor* C = CaixaAtor.Get())
+	{
+		const bool bVer = Objetivo == EObjetivo::Entregas && !bMenuPrincipal && Estado != EEstadoDesafio::Concluido && EntregaAtual < PontosEntrega.Num();
+		C->SetActorHiddenInGame(!bVer);
+		if (bComCaixa && D)
+		{
+			const float Balanco = FMath::Sin(GetWorld()->GetTimeSeconds() * 3.f) * 3.f;
+			C->SetActorLocationAndRotation(D->GetActorLocation() - FVector(0, 0, 26.f) + D->GetActorRightVector() * Balanco, FRotator(0, D->GetActorRotation().Yaw, 0));
+		}
+		else
+		{
+			C->SetActorLocationAndRotation(PontoColeta + FVector(0, 0, 15.f), FRotator::ZeroRotator);
+		}
+	}
+}
+
+void APredioGameMode::TickMissoes(float Dt, const FVector& P)
+{
+	ADronePawn* D = Drone();
+	if (!D) return;
+	const float Vel = D->Velocidade.Size();
+
+	if (Objetivo == EObjetivo::Entregas)
+	{
+		const FVector Alvo = bComCaixa ? (PontosEntrega.IsValidIndex(EntregaAtual) ? PontosEntrega[EntregaAtual] : P) : PontoColeta;
+		const float DH = FVector::Dist2D(P, Alvo);
+		const float DZ = P.Z - Alvo.Z;
+		const bool bEmCima = DH < (bComCaixa ? 220.f : 160.f) && DZ > -40.f && DZ < (bComCaixa ? 180.f : 130.f) && Vel < 350.f;
+		TempoParado = bEmCima ? TempoParado + Dt : FMath::Max(0.f, TempoParado - Dt * 2.f);
+		if (TempoParado >= TempoParaSoltar)
+		{
+			TempoParado = 0.f;
+			if (!bComCaixa)
+			{
+				bComCaixa = true;
+				D->MostrarMensagem(FString::Printf(TEXT("Caixa presa! Leve para: %s"), NomesEntrega.IsValidIndex(EntregaAtual) ? *NomesEntrega[EntregaAtual] : TEXT("o destino")), 3.f);
+			}
+			else
+			{
+				bComCaixa = false;
+				// deixa uma caixa no destino
+				if (AActor* Deixada = CriarAtorMalha(MalhaCaixa, FTransform(FRotator(0, D->GetActorRotation().Yaw, 0), Alvo + FVector(0, 0, 15.f))))
+				{
+					CaixasEntregues.Add(Deixada);
+				}
+				++EntregaAtual;
+				if (EntregaAtual >= PontosEntrega.Num())
+				{
+					ConcluirDesafio(true);
+					return;
+				}
+				D->MostrarMensagem(FString::Printf(TEXT("Entregue! %d de %d — volte ao galpão"), EntregaAtual, PontosEntrega.Num()), 3.f);
+			}
+		}
+	}
+	else if (Objetivo == EObjetivo::Pulverizar)
+	{
+		bPulverizando = false;
+		if (Roca.bIsValid && RocaNX > 0 && Roca.IsInside(FVector2D(P)))
+		{
+			const int32 IX = FMath::Clamp(FMath::FloorToInt((P.X - Roca.Min.X) / TamCelula), 0, RocaNX - 1);
+			const int32 IY = FMath::Clamp(FMath::FloorToInt((P.Y - Roca.Min.Y) / TamCelula), 0, RocaNY - 1);
+			const int32 I = IY * RocaNX + IX;
+			const float Altura = P.Z - ChaoCelula[I];
+			if (Altura < 400.f && Altura > 0.f)
+			{
+				bPulverizando = true;
+				// o jato cobre ~5 m: marca a célula embaixo e as vizinhas que o drone toca de raspão
+				for (int32 dy = -1; dy <= 1; ++dy)
+				{
+					for (int32 dx = -1; dx <= 1; ++dx)
+					{
+						const int32 X2 = IX + dx, Y2 = IY + dy;
+						if (X2 < 0 || Y2 < 0 || X2 >= RocaNX || Y2 >= RocaNY) continue;
+						const FVector2D Centro(Roca.Min.X + (X2 + 0.5f) * TamCelula, Roca.Min.Y + (Y2 + 0.5f) * TamCelula);
+						if (FVector2D::Distance(Centro, FVector2D(P)) < TamCelula * 0.75f) CelulaFeita[Y2 * RocaNX + X2] = 1;
+					}
+				}
+				if (Cobertura() >= CoberturaMeta)
+				{
+					ConcluirDesafio(true);
+					return;
+				}
+			}
+		}
+	}
+	else if (Objetivo == EObjetivo::Fotos)
+	{
+		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		if (!PC || !PC->PlayerCameraManager) return;
+		const FVector CL = PC->PlayerCameraManager->GetCameraLocation();
+		const FVector Frente = PC->PlayerCameraManager->GetCameraRotation().Vector();
+		int32 Melhor = INDEX_NONE;
+		float MelhorAng = 14.f;
+		for (int32 i = 0; i < PontosFoto.Num(); ++i)
+		{
+			if (FotoFeita[i]) continue;
+			const FVector Para = PontosFoto[i] - CL;
+			const float Dist = Para.Size();
+			if (Dist < 250.f || Dist > 2200.f) continue;
+			const float Ang = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Para / Dist, Frente), -1.f, 1.f)));
+			if (Ang < MelhorAng) { MelhorAng = Ang; Melhor = i; }
+		}
+		if (Melhor != FotoMirando) { FotoMirando = Melhor; TempoMira = 0.f; }
+		if (FotoMirando != INDEX_NONE)
+		{
+			TempoMira += Dt;
+			if (TempoMira >= TempoParaFoto)
+			{
+				FotoFeita[FotoMirando] = true;
+				Flash = 1.f;
+				D->MostrarMensagem(FString::Printf(TEXT("Foto: %s (%d de %d)"), *NomesFoto[FotoMirando], Progresso(), PontosFoto.Num()), 2.5f);
+				FotoMirando = INDEX_NONE;
+				TempoMira = 0.f;
+				if (Progresso() >= PontosFoto.Num())
+				{
+					ConcluirDesafio(true);
+					return;
+				}
+			}
+		}
+	}
+	else if (Objetivo == EObjetivo::Ferraduras)
+	{
+		DistFerradura = 1e9f;
+		for (int32 i = 0; i < Ferraduras.Num(); ++i)
+		{
+			AActor* F = Ferraduras[i].Get();
+			if (!F || FerraduraPega[i]) continue;
+			const float Dist = FVector::Dist(P, F->GetActorLocation());
+			if (Dist < 170.f)
+			{
+				FerraduraPega[i] = true;
+				F->SetActorHiddenInGame(true);
+				D->MostrarMensagem(FString::Printf(TEXT("Ferradura! %d de %d"), Progresso(), Ferraduras.Num()), 2.5f);
+				if (Progresso() >= Ferraduras.Num())
+				{
+					ConcluirDesafio(true);
+					return;
+				}
+				continue;
+			}
+			DistFerradura = FMath::Min(DistFerradura, Dist / 100.f);
+		}
+	}
+}
+
+void APredioGameMode::EspalharMilho()
+{
+	if (!Roca.bIsValid) return;
+	UStaticMesh* Malha = nullptr;
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		if (It->ActorHasTag(TEXT("ModeloMilho")))
+		{
+			if (const UStaticMeshComponent* C = It->FindComponentByClass<UStaticMeshComponent>()) Malha = C->GetStaticMesh();
+		}
+	}
+	// grade da pulverização: altura do chão no meio de cada célula
+	RocaNX = FMath::Max(1, FMath::FloorToInt(Roca.GetSize().X / TamCelula));
+	RocaNY = FMath::Max(1, FMath::FloorToInt(Roca.GetSize().Y / TamCelula));
+	ChaoCelula.SetNum(RocaNX * RocaNY);
+	CelulaFeita.Init(0, RocaNX * RocaNY);
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(Roca), true);
+	auto Chao = [this, &Q](const FVector2D& P, float& Z, AActor** Quem)
+	{
+		FHitResult Hit;
+		if (!GetWorld()->LineTraceSingleByChannel(Hit, FVector(P, 30000.f), FVector(P, -30000.f), ECC_Visibility, Q)) return false;
+		Z = Hit.ImpactPoint.Z;
+		if (Quem) *Quem = Hit.GetActor();
+		return true;
+	};
+	for (int32 y = 0; y < RocaNY; ++y)
+	{
+		for (int32 x = 0; x < RocaNX; ++x)
+		{
+			float Z = 0.f;
+			Chao(FVector2D(Roca.Min.X + (x + 0.5f) * TamCelula, Roca.Min.Y + (y + 0.5f) * TamCelula), Z, nullptr);
+			ChaoCelula[y * RocaNX + x] = Z;
+		}
+	}
+	if (!Malha) return;
+	AActor* Dono = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity);
+	if (!Dono) return;
+	UHierarchicalInstancedStaticMeshComponent* H = NewObject<UHierarchicalInstancedStaticMeshComponent>(Dono, TEXT("Milho"));
+	H->SetMobility(EComponentMobility::Movable);
+	H->SetStaticMesh(Malha);
+	H->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	H->SetCastShadow(true);
+	Dono->SetRootComponent(H);
+	H->RegisterComponent();
+	Dono->AddInstanceComponent(H);
+	FRandomStream R(77);
+	TArray<FTransform> Ts;
+	for (float X = Roca.Min.X + 60.f; X < Roca.Max.X - 30.f; X += 95.f)           // fileiras
+	{
+		for (float Y = Roca.Min.Y + 30.f; Y < Roca.Max.Y - 30.f; Y += 38.f)      // pés na fileira
+		{
+			const FVector2D P(X + R.FRandRange(-8.f, 8.f), Y + R.FRandRange(-6.f, 6.f));
+			float Z = 0.f;
+			AActor* Quem = nullptr;
+			if (!Chao(P, Z, &Quem) || !Quem || !Quem->ActorHasTag(TEXT("Terreno"))) continue;
+			const float E = R.FRandRange(0.85f, 1.15f);
+			Ts.Add(FTransform(FRotator(R.FRandRange(-4.f, 4.f), R.FRand() * 360.f, R.FRandRange(-4.f, 4.f)), FVector(P, Z - 3.f), FVector(E, E, E * R.FRandRange(0.9f, 1.1f))));
+		}
+	}
+	H->AddInstances(Ts, false, true);
+	UE_LOG(LogPredio, Log, TEXT("Campo: %d pés de milho, roça %dx%d células"), Ts.Num(), RocaNX, RocaNY);
+}
+
 // ------------------------------------------------------------------ capim do campo (espalhado ao abrir o mapa)
 
 void APredioGameMode::EspalharGrama()
@@ -1907,6 +2333,7 @@ void APredioGameMode::EspalharGrama()
 			const float Rad = FMath::Sqrt(FMath::Lerp(F.R0 * F.R0, F.R1 * F.R1, R.FRand()));
 			const FVector2D P(FMath::Cos(Ang) * Rad, FMath::Sin(Ang) * Rad);
 			if (DistEstrada(P) < 480.f) continue;
+			if (Roca.bIsValid && Roca.ExpandBy(300.f).IsInside(P)) continue;
 			if (Acude.Z > 0.f && FMath::Square((P.X - Acude.X) / Acude.Z) + FMath::Square((P.Y - Acude.Y) / Acude.W) < 1.f) continue;
 			FHitResult Hit;
 			if (!GetWorld()->LineTraceSingleByChannel(Hit, FVector(P, 30000.f), FVector(P, -30000.f), ECC_Visibility, Q)) continue;

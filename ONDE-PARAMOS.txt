@@ -1,5 +1,18 @@
-SIMULADOR DE DRONE — ONDE PARAMOS
+﻿SIMULADOR DE DRONE — ONDE PARAMOS
 =================================
+
+>>> 18/11/2026 À TARDE (17:30–18:40) — JOGO ÚNICO NO AR + FAZENDA NOVA <<<
+  [x] Jogo único empacotado; atalho "Simulador de Drone" na área de trabalho (o antigo foi para C:\drone\_antigos\atalhos).
+  [x] Abertura: E88 de verdade voando pelo prédio com a câmera atrás (/Game/Drone, construir_extras.py),
+      JOGAR / CONFIGURAÇÕES / SAIR. JOGAR -> mapas (1 Fazenda e 2 Prédio liberados; 3 Usina trancado com
+      imagem renderizada da usina, blender/conceito_usina.py) com progresso (medalhas) em cada cartão e no canto.
+      Depois do mapa -> lista de desafios. Configurações: uma tela por seção (Áudio só mostra áudio etc.).
+  [x] Fazenda reformulada (gerar_campo.py + construir_campo.py): casa sede com alpendre, caixa d'água azul
+      na torre, cata-vento girando, 2 silos, carreta, píer no açude, milharal (13 mil pés), capim próprio,
+      transformador num poste. Missões: Entregas (4 destinos), Pulverizar o milharal (mapinha da roça, 90%),
+      Inspeção com fotos (6 alvos), Ferraduras douradas (12 escondidas, quente/frio), Aros, Contra o relógio.
+  [ ] Conferir fotos dos testes (testes\menu, testes\campo) e corrigir o que aparecer.
+  [ ] Mapa 3 (usina): surpresa do Claude — começar depois da fazenda aprovada.
 
 >>> NOITE DE 18/11/2026 — O QUE JÁ FOI FEITO (código no repositório, commit ac2e7eb) <<<
   [x] JOGO ÚNICO: o mapa do prédio sem "?jogo" abre o MENU PRINCIPAL (voo de fundo pelo prédio):

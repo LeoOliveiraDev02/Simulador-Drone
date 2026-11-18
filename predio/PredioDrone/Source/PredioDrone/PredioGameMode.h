@@ -5,6 +5,8 @@
 #include "PredioGameMode.generated.h"
 
 class ADronePawn;
+class UStaticMeshComponent;
+class UStaticMesh;
 
 struct FGrupoVisivel
 {
@@ -54,7 +56,7 @@ enum class ECategoriaMenu : uint8
 enum class ETipoValor : uint8 { Acao, Texto, Chave, Nenhum };
 
 /** Objetivo do voo (escolhido no menu principal ou no menu de pausa). */
-enum class EObjetivo : uint8 { Livre, Topo, ArosOrdem, ArosRelogio };
+enum class EObjetivo : uint8 { Livre, Topo, ArosOrdem, ArosRelogio, Entregas, Pulverizar, Fotos, Ferraduras };
 
 /** Andamento do desafio. */
 enum class EEstadoDesafio : uint8 { Pronto, Correndo, Concluido, Falhou };
@@ -134,6 +136,41 @@ public:
 	bool bNovoRecorde = false;
 	float TempoNoResultado = 0.f;  // segundos desde o fim do desafio (painel de resultado)
 	float AlturaTopo() const;
+
+	// ---------------------------------------------------------------- missões da fazenda
+	// entregas: pegar a caixa na plataforma do galpão e levar a cada destino
+	FVector PontoColeta = FVector::ZeroVector;
+	bool bTemColeta = false;
+	TArray<FVector> PontosEntrega;
+	TArray<FString> NomesEntrega;
+	int32 EntregaAtual = 0;
+	bool bComCaixa = false;
+	float TempoParado = 0.f;          // segurando em cima do ponto (pegar/soltar)
+	static constexpr float TempoParaSoltar = 0.8f;
+	// fotos: mirar o alvo de perto por um instante
+	TArray<FVector> PontosFoto;
+	TArray<FString> NomesFoto;
+	TArray<bool> FotoFeita;
+	int32 FotoMirando = INDEX_NONE;
+	float TempoMira = 0.f;
+	float Flash = 0.f;
+	static constexpr float TempoParaFoto = 1.2f;
+	// ferraduras douradas escondidas
+	TArray<TWeakObjectPtr<AActor>> Ferraduras;
+	TArray<bool> FerraduraPega;
+	float DistFerradura = 0.f;        // a mais perto (m), para a dica "quente/frio"
+	// pulverizar a roça de milho (grade de células de 5 m)
+	FBox2D Roca = FBox2D(ForceInit);
+	int32 RocaNX = 0, RocaNY = 0;
+	TArray<uint8> CelulaFeita;
+	TArray<float> ChaoCelula;
+	bool bPulverizando = false;
+	float Cobertura() const;
+	static constexpr float CoberturaMeta = 0.9f;
+	static constexpr float TamCelula = 500.f;
+	int32 Progresso() const;          // quantos já fez (aros, entregas, fotos, ferraduras)
+	int32 ProgressoTotal() const;
+	bool AlvoPrincipal(FVector& Out, FString& Rotulo) const;  // para onde ir agora (marca na tela e farol)
 	float LimiteMedalha(int32 M) const;  // tempo máximo (s) para a medalha M (3 ouro, 2 prata, 1 bronze)
 	float RecordeAtual() const;
 	TArray<EObjetivo> ObjetivosDoMapa() const;
@@ -205,9 +242,19 @@ private:
 	void MostrarAros();
 	void IrParaMapa(const FString& Mapa, const FString& Opcoes);
 	void EspalharGrama();
+	void EspalharMilho();
+	void TickMissoes(float Dt, const FVector& P);
+	void MoverFarolECaixa();
+	TWeakObjectPtr<AActor> Farol;
+	TWeakObjectPtr<AActor> CaixaAtor;
+	TArray<TWeakObjectPtr<AActor>> CaixasEntregues;
+	TArray<TPair<TWeakObjectPtr<AActor>, float>> Giratorios;
+	UStaticMesh* MalhaCaixa = nullptr;
+	AActor* CriarAtorMalha(UStaticMesh* M, const FTransform& T);
 	void CriarDroneTitulo();
 	void DestruirDroneTitulo();
 	void SairDoMenuPrincipal();
+	void TickFotosMenu(float Dt);
 	TWeakObjectPtr<AActor> DroneTitulo;
 	TArray<TWeakObjectPtr<UStaticMeshComponent>> HelicesTitulo;
 	float AnguloHelices = 0.f;

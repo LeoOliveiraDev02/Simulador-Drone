@@ -46,12 +46,19 @@ void FAjustesDrone::Carregar()
 		else if (K == TEXT("Painel")) bPainel = B;
 		else if (K == TEXT("AjusteAuto")) bAjusteAuto = B;
 		else if (K == TEXT("EscalaInterface")) EscalaInterface = FMath::Clamp(F, 0.7f, 1.6f);
-		else if (K == TEXT("RecordeTopo")) RecordeTopo = FMath::Max(0.f, F);
-		else if (K == TEXT("RecordeAros")) RecordeAros = FMath::Max(0.f, F);
-		else if (K == TEXT("RecordeRelogio")) RecordeRelogio = FMath::Max(0.f, F);
-		else if (K == TEXT("MedalhaTopo")) MedalhaTopo = FMath::Clamp((int32)F, 0, 3);
-		else if (K == TEXT("MedalhaAros")) MedalhaAros = FMath::Clamp((int32)F, 0, 3);
-		else if (K == TEXT("MedalhaRelogio")) MedalhaRelogio = FMath::Clamp((int32)F, 0, 3);
+		else if (K.StartsWith(TEXT("Recorde_")) || K.StartsWith(TEXT("Medalha_")))
+		{
+			const int32 I = FCString::Atoi(*K.RightChop(8));
+			if (I >= 0 && I < NumObjetivos)
+			{
+				if (K.StartsWith(TEXT("Recorde_"))) Recordes[I] = FMath::Max(0.f, F);
+				else Medalhas[I] = FMath::Clamp((int32)F, 0, 3);
+			}
+		}
+		// nomes antigos (versão de 18/11 de madrugada)
+		else if (K == TEXT("RecordeTopo")) Recordes[1] = FMath::Max(0.f, F);
+		else if (K == TEXT("RecordeAros")) Recordes[2] = FMath::Max(0.f, F);
+		else if (K == TEXT("RecordeRelogio")) Recordes[3] = FMath::Max(0.f, F);
 	}
 }
 
@@ -72,12 +79,11 @@ void FAjustesDrone::Salvar() const
 	L.Add(FString::Printf(TEXT("Painel=%d"), bPainel ? 1 : 0));
 	L.Add(FString::Printf(TEXT("AjusteAuto=%d"), bAjusteAuto ? 1 : 0));
 	L.Add(FString::Printf(TEXT("EscalaInterface=%.2f"), EscalaInterface));
-	L.Add(FString::Printf(TEXT("RecordeTopo=%.2f"), RecordeTopo));
-	L.Add(FString::Printf(TEXT("RecordeAros=%.2f"), RecordeAros));
-	L.Add(FString::Printf(TEXT("RecordeRelogio=%.2f"), RecordeRelogio));
-	L.Add(FString::Printf(TEXT("MedalhaTopo=%d"), MedalhaTopo));
-	L.Add(FString::Printf(TEXT("MedalhaAros=%d"), MedalhaAros));
-	L.Add(FString::Printf(TEXT("MedalhaRelogio=%d"), MedalhaRelogio));
+	for (int32 i = 1; i < NumObjetivos; ++i)
+	{
+		L.Add(FString::Printf(TEXT("Recorde_%d=%.2f"), i, Recordes[i]));
+		L.Add(FString::Printf(TEXT("Medalha_%d=%d"), i, Medalhas[i]));
+	}
 	FFileHelper::SaveStringArrayToFile(L, *Arquivo());
 }
 
