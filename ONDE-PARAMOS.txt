@@ -1,5 +1,24 @@
-SIMULADOR DE DRONE — ONDE PARAMOS
+﻿SIMULADOR DE DRONE — ONDE PARAMOS
 =================================
+
+>>> NOITE DE 18/11/2026 — O QUE JÁ FOI FEITO (código no repositório, commit ac2e7eb) <<<
+  [x] JOGO ÚNICO: o mapa do prédio sem "?jogo" abre o MENU PRINCIPAL (voo de fundo pelo prédio):
+      cartões CAMPO BAIANO / PRÉDIO EM OBRA / USINA (em breve) + lista de desafios + Configurações + Sair.
+      Teclado, controle e mouse. Ícone próprio (drone com aro laranja) em PredioDrone/Build/Windows.
+      Nome do projeto: "Simulador de Drone". Atalho único "Simulador de Drone.lnk" (ferramentas/ATALHO_JOGO.ps1);
+      os atalhos antigos NÃO são apagados, vão para C:\drone\_antigos\atalhos.
+  [x] Menu de pausa ganhou "Objetivo" e "Menu principal".
+  [x] Objetivos: Chegue ao topo (prédio; ouro 1:20, prata 2:00, bronze 3:00), Aros em ordem e
+      Contra o relógio (campo), Voo livre. Cronômetro só corre com o jogo despausado; começa ao decolar
+      (1,5 m do início); voltar ao início/quebrar = recomeça. Recordes no Configuracoes_Drone.txt.
+      Painel do alto, losango laranja no próximo aro (seta na borda se estiver fora da vista), tela de resultado.
+  [x] Mapa 1 portado: blender/gerar_campo.py (relevo de 4,6 km com grade fina no centro, açude, base H, galpão,
+      biruta, cercas, postes com fios, 11 aros — os 2 originais da Godot entram no circuito) + layout_campo.json;
+      unreal/construir_campo.py (materiais, Nanite, árvores/pedras do zip da Godot, sol, atmosfera, nuvens).
+      Capim espalhado pelo jogo ao abrir o mapa (HISM, ~20 mil touceiras em volta da base).
+  [ ] FALTA (precisa do PC ligado): enviar arquivos -> ferramentas\JOGO_UNICO.bat (compila, monta o campo,
+      empacota, atalho, fotos do menu, voo de teste no campo e no prédio) -> conferir fotos e corrigir.
+      Gerar os FBX do campo: python3 predio/blender/gerar_campo.py SAIDA -> copiar para D:\DronePredio\conteudo_campo
 
 >>> PLANO COMBINADO COM O LEONARDO EM 18/11/2026 (00:00) — FAZER NESTA ORDEM <<<
 Regra fixa: toda mudança termina com o jogo empacotado e o atalho da área de trabalho atualizado.
