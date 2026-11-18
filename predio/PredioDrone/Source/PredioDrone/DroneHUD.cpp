@@ -12,6 +12,7 @@
 #include "Rendering/SlateRenderer.h"
 #include "RenderUtils.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Engine/Texture2D.h"
 
 void ADroneHUD::Texto(const FString& S, float X, float Y, float Escala, const FLinearColor& Cor, bool bCentro, bool bDireita)
 {
@@ -170,7 +171,7 @@ namespace
 	{
 		IcMonitor, IcMira, IcControle, IcSetasH, IcSetasV, IcGiro, IcLados, IcOlho, IcDrone, IcChip, IcQuadro,
 		IcMedidor, IcEngrenagem, IcRecarregar, IcEstrela, IcEnergia, IcTexto, IcSliders, IcAltoFalante,
-		IcAcessib, IcChave, IcDocumento, IcMonitorSync, IcBandeira, IcAro, IcRelogio, IcCasa
+		IcAcessib, IcChave, IcDocumento, IcMonitorSync, IcBandeira, IcAro, IcRelogio, IcCasa, IcPlay
 	};
 	const int32 IconeItem[] = {
 		IcMonitor,      // Continuar
@@ -382,6 +383,10 @@ void ADroneHUD::Icone(int32 Tipo, FVector2D C, float S, const FLinearColor& Cor)
 	switch (Tipo)
 	{
 	case IcMonitor: Monitor(); break;
+	case IcPlay:
+		Arco(C, 0.95f * S, E, Cor, 0.f, 360.f, 24);
+		Tri(P(-0.3f, -0.45f), P(-0.3f, 0.45f), P(0.5f, 0.f), Cor);
+		break;
 	case IcMonitorSync:
 		Monitor();
 		Arco(P(0, -0.12f), 0.3f * S, E, Cor, 30.f, 300.f, 14);
@@ -596,7 +601,7 @@ void ADroneHUD::DesenharMenu(APredioGameMode* GM)
 
 	// coluna da esquerda: categorias
 	const int32 NC = (int32)ECategoriaMenu::Total;
-	const ECategoriaMenu CatSel = APredioGameMode::CategoriaDoItem(GM->MenuIndice);
+	const ECategoriaMenu CatSel = (ECategoriaMenu)FMath::Clamp(GM->CategoriaSel, 0, NC - 1);
 	GM->AreaCategorias.SetNum(NC);
 	for (int32 c = 0; c < NC; ++c)
 	{
@@ -604,7 +609,9 @@ void ADroneHUD::DesenharMenu(APredioGameMode* GM)
 		const bool bSel = (ECategoriaMenu)c == CatSel;
 		if (bSel)
 		{
-			RetArred(X(22), Y(CY), 250 * e, 56 * e, 7 * e, Cor255(26, 102, 232), Cor255(14, 58, 150));
+			// seção aberta: azul forte quando o foco está nela; mais apagada quando está mexendo nas opções
+			const uint8 Al = GM->bFocoItens ? 150 : 255;
+			RetArred(X(22), Y(CY), 250 * e, 56 * e, 7 * e, Cor255(26, 102, 232, Al), Cor255(14, 58, 150, Al));
 			ContornoArred(X(22), Y(CY), 250 * e, 56 * e, 7 * e, FMath::Max(1.f, 1.3f * e), Cor255(100, 165, 255));
 			Linha(Pt(250, CY + 20), Pt(257, CY + 28), 2.f * e, Branco);
 			Linha(Pt(257, CY + 28), Pt(250, CY + 36), 2.f * e, Branco);
@@ -625,53 +632,68 @@ void ADroneHUD::DesenharMenu(APredioGameMode* GM)
 	T(TEXT("EXPLORE"), X(58), Y(797), 16 * e, TEXT("Italic"), AzulTexto, 0, 5.f * e);
 	T(TEXT("DOMINE"), X(58), Y(824), 16 * e, TEXT("Italic"), AzulTexto, 0, 5.f * e);
 
-	// lista de opções
-	const int32 N = (int32)EItemMenu::Total;
-	const float L0 = 300.f, L1 = 1228.f, Topo = 148.f, Base = 880.f;
-	const float RH = (Base - Topo) / N;
-	GM->AreaItens.SetNum(N);
-	for (int32 i = 0; i < N; ++i)
+	// tela da seção escolhida: título grande + só as opções dela
+	GM->AreaItens.Init(FBox2D(ForceInit), (int32)EItemMenu::Total);
+	const float L0 = 300.f, L1 = 1228.f;
 	{
-		const float RY = Topo + i * RH;
-		const bool bSel = i == GM->MenuIndice;
+		const FVector2D CI = Pt(L0 + 26, 172);
+		Icone(IconeCategoria[(int32)CatSel], CI, 18 * e, AzulClaro);
+		T(APredioGameMode::NomeCategoria(CatSel), X(L0 + 58), Y(146), 38 * e, TEXT("Bold Italic"), Branco);
+		T(APredioGameMode::DescricaoCategoria(CatSel), X(L0 + 60), Y(194), 15 * e, TEXT("Italic"), AzulTexto);
+		Linha(Pt(L0, 226), Pt(L1, 226), FMath::Max(1.f, e), Cor255(40, 70, 120, 200));
+	}
+	const TArray<int32> Itens = APredioGameMode::ItensDaCategoria(CatSel);
+	const float Topo = 244.f, RH = 76.f;
+	for (int32 k = 0; k < Itens.Num(); ++k)
+	{
+		const int32 i = Itens[k];
+		const float RY = Topo + k * RH;
+		const bool bSel = GM->bFocoItens && i == GM->MenuIndice;
 		if (bSel)
 		{
-			RetArred(X(L0), Y(RY + 1), (L1 - L0) * e, (RH - 3) * e, 6 * e, Cor255(21, 87, 214), Cor255(11, 38, 92));
-			ContornoArred(X(L0), Y(RY + 1), (L1 - L0) * e, (RH - 3) * e, 6 * e, FMath::Max(1.f, 1.4f * e), Cor255(76, 149, 255));
+			RetArred(X(L0), Y(RY + 2), (L1 - L0) * e, (RH - 8) * e, 7 * e, Cor255(21, 87, 214), Cor255(11, 38, 92));
+			ContornoArred(X(L0), Y(RY + 2), (L1 - L0) * e, (RH - 8) * e, 7 * e, FMath::Max(1.f, 1.4f * e), Cor255(76, 149, 255));
 		}
 		else
 		{
-			RetArred(X(L0), Y(RY + 1), (L1 - L0) * e, (RH - 3) * e, 5 * e, Cor255(13, 23, 39, 235), Cor255(11, 19, 33, 235));
+			RetArred(X(L0), Y(RY + 2), (L1 - L0) * e, (RH - 8) * e, 6 * e, Cor255(13, 23, 39, 235), Cor255(11, 19, 33, 235));
 		}
-		const float CY = RY + (RH - 2) * 0.5f;
-		Icone(IconeItem[i], Pt(L0 + 32, CY), 11.5f * e, bSel ? Branco : Cor255(205, 218, 238));
-		T(GM->NomeItem(i), X(L0 + 66), Y(RY + 3), 16.5f * e, TEXT("Regular"), Branco);
-		T(GM->DescricaoItem(i), X(L0 + 66), Y(RY + 21.5f), 11.5f * e, TEXT("Regular"), bSel ? Cor255(170, 195, 235) : Cinza);
+		const float CY = RY + (RH - 4) * 0.5f;
+		Icone(IconeItem[i], Pt(L0 + 36, CY), 14 * e, bSel ? Branco : Cor255(205, 218, 238));
+		T(GM->NomeItem(i), X(L0 + 74), Y(RY + 12), 21 * e, TEXT("Regular"), Branco);
+		T(GM->DescricaoItem(i), X(L0 + 74), Y(RY + 40), 13.5f * e, TEXT("Regular"), bSel ? Cor255(170, 195, 235) : Cinza);
 
 		const ETipoValor Tipo = GM->TipoItem(i);
 		const FString Val = GM->ValorItem(i);
-		const bool bTemSeta = Tipo != ETipoValor::Chave;
-		if (bTemSeta)
+		if (Tipo != ETipoValor::Chave)
 		{
 			const FLinearColor CS = Tipo == ETipoValor::Acao ? Apagado : Branco;
-			Linha(Pt(L1 - 26, CY - 6), Pt(L1 - 20, CY), 1.8f * e, CS);
-			Linha(Pt(L1 - 20, CY), Pt(L1 - 26, CY + 6), 1.8f * e, CS);
+			Linha(Pt(L1 - 28, CY - 7), Pt(L1 - 21, CY), 2.f * e, CS);
+			Linha(Pt(L1 - 21, CY), Pt(L1 - 28, CY + 7), 2.f * e, CS);
+			if (Tipo == ETipoValor::Texto && bSel)
+			{
+				// setinha para a esquerda também: dá para mudar nos dois sentidos
+				const float LV = Medir(Val, Fonte(19 * e, TEXT("Regular"))).X;
+				const float XS = X(L1 - 52) - LV - 18 * e;
+				Linha(FVector2D(XS + 7 * e, Y(CY - 7)), FVector2D(XS, Y(CY)), 2.f * e, Branco);
+				Linha(FVector2D(XS, Y(CY)), FVector2D(XS + 7 * e, Y(CY + 7)), 2.f * e, Branco);
+			}
 		}
-		const float VY = CY - 11.f;
+		const float VY = CY - 12.f;
 		switch (Tipo)
 		{
-		case ETipoValor::Nenhum: // Continuar: botão de play
+		case ETipoValor::Nenhum:
 		{
-			RetArred(X(L1 - 150), Y(CY - 13), 92 * e, 26 * e, 13 * e, Cor255(40, 120, 255), Cor255(25, 90, 230));
-			const FVector2D PC = Pt(L1 - 104, CY);
-			Tri(PC + FVector2D(-6, -8) * e, PC + FVector2D(-6, 8) * e, PC + FVector2D(8, 0) * e, Branco);
+			RetArred(X(L1 - 156), Y(CY - 15), 100 * e, 30 * e, 15 * e, Cor255(40, 120, 255), Cor255(25, 90, 230));
+			const FVector2D PC = Pt(L1 - 106, CY);
+			Tri(PC + FVector2D(-6, -9) * e, PC + FVector2D(-6, 9) * e, PC + FVector2D(9, 0) * e, Branco);
 			break;
 		}
 		case ETipoValor::Chave:
 		{
 			const bool bLig = GM->ChaveLigada(i);
-			T(Val, X(L1 - 88), Y(VY), 16.5f * e, TEXT("Regular"), Branco, 2);
-			const float SX0 = L1 - 72, SW = 44, SH = 22;
+			T(Val, X(L1 - 92), Y(VY), 19 * e, TEXT("Regular"), Branco, 2);
+			const float SX0 = L1 - 76, SW = 50, SH = 26;
 			RetArred(X(SX0), Y(CY - SH * 0.5f), SW * e, SH * e, SH * 0.5f * e,
 				bLig ? Cor255(40, 125, 255) : Cor255(52, 62, 80),
 				bLig ? Cor255(60, 145, 255) : Cor255(60, 70, 88));
@@ -679,23 +701,24 @@ void ADroneHUD::DesenharMenu(APredioGameMode* GM)
 			break;
 		}
 		case ETipoValor::Acao:
-			T(Val, X(L1 - 48), Y(VY), 16.5f * e, TEXT("Regular"), Cinza, 2);
+			T(Val, X(L1 - 52), Y(VY), 19 * e, TEXT("Regular"), Cinza, 2);
 			break;
 		default:
-			T(Val, X(L1 - 48), Y(VY), 16.5f * e, TEXT("Regular"), Branco, 2);
+			T(Val, X(L1 - 52), Y(VY), 19 * e, TEXT("Bold"), Branco, 2);
 			break;
 		}
-		GM->AreaItens[i] = FBox2D(Pt(L0, RY), Pt(L1, RY + RH));
+		GM->AreaItens[i] = FBox2D(Pt(L0, RY), Pt(L1, RY + RH - 4));
 	}
-	// barra de rolagem (tudo cabe, mas mantém o visual)
-	Linha(Pt(1244, Topo + 4), Pt(1244, Base - 4), 3.f * e, Cor255(25, 38, 60));
-	Linha(Pt(1244, Topo + 4), Pt(1244, Base - 60), 3.f * e, Cor255(60, 135, 255));
+	if (!GM->bFocoItens)
+	{
+		T(TEXT("A / Enter  ou  →  para abrir esta seção"), X((L0 + L1) * 0.5f), Y(Topo + Itens.Num() * RH + 18), 15 * e, TEXT("Italic"), Cor255(120, 150, 200), 1);
+	}
 
 	// rodapé com os botões
 	struct FDica { const TCHAR* Tecla; const TCHAR* Texto; };
 	const FDica Dicas[] = {
-		{ TEXT("↑↓"), TEXT("Selecionar") }, { TEXT("← →"), TEXT("Mudar") }, { TEXT("LB / RB"), TEXT("Categoria") },
-		{ TEXT("B / Esc"), TEXT("Voltar") }, { TEXT("A / Enter"), TEXT("Confirmar") } };
+		{ TEXT("↑↓"), TEXT("Selecionar") }, { TEXT("← →"), TEXT("Mudar") }, { TEXT("LB / RB"), TEXT("Seção") },
+		{ TEXT("B / Esc"), TEXT("Voltar") }, { TEXT("A / Enter"), TEXT("Abrir / Confirmar") } };
 	const FSlateFontInfo FT = Fonte(14 * e, TEXT("Bold"));
 	const FSlateFontInfo FL = Fonte(15.5f * e, TEXT("Regular"));
 	float Total = 0.f;
@@ -915,133 +938,334 @@ void ADroneHUD::Ilustracao(int32 Cartao, float X, float Y, float W, float H, boo
 	}
 }
 
+void ADroneHUD::Imagem(UTexture2D* Tex, float X, float Y, float W, float H, const FLinearColor& Cor)
+{
+	if (!Tex || !Tex->GetResource()) return;
+	FCanvasTileItem Tile(FVector2D(X, Y), Tex->GetResource(), FVector2D(W, H), Cor);
+	Tile.BlendMode = SE_BLEND_Translucent;
+	Canvas->DrawItem(Tile);
+}
+
+void ADroneHUD::Cadeado(FVector2D C, float S, const FLinearColor& Cor)
+{
+	Arco(C + FVector2D(0, -0.15f * S), 0.42f * S, 0.16f * S, Cor, 0.f, 180.f, 16);
+	Linha(C + FVector2D(-0.42f * S, -0.15f * S), C + FVector2D(-0.42f * S, 0.1f * S), 0.16f * S, Cor);
+	Linha(C + FVector2D(0.42f * S, -0.15f * S), C + FVector2D(0.42f * S, 0.1f * S), 0.16f * S, Cor);
+	RetArred(C.X - 0.62f * S, C.Y + 0.05f * S, 1.24f * S, 0.95f * S, 0.12f * S, Cor, Cor);
+	Disco(C + FVector2D(0, 0.45f * S), 0.12f * S, Cor255(20, 24, 34), 12);
+}
+
+static FLinearColor CorMedalha(int32 M)
+{
+	return M >= 3 ? Cor255(255, 196, 40) : (M == 2 ? Cor255(205, 215, 230) : (M == 1 ? Cor255(210, 130, 60) : Cor255(60, 72, 92)));
+}
+
 void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 {
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	Esc = FMath::Min(W * 0.92f / 1280.f, H * 0.94f / 960.f);
+	Esc = FMath::Min(W * 0.96f / 1280.f, H * 0.96f / 960.f);
 	const float OX = (W - 1280.f * Esc) * 0.5f;
 	const float OY = (H - 960.f * Esc) * 0.5f;
 	auto X = [&](float V) { return OX + V * Esc; };
 	auto Y = [&](float V) { return OY + V * Esc; };
 	auto Pt = [&](float A, float B) { return FVector2D(X(A), Y(B)); };
 	const float e = Esc;
-	const float Anim = FMath::Clamp(GM->MPRelogio * 2.5f, 0.f, 1.f);
+	const float TT = GM->MPTelaDesde;
+	auto Entrada = [TT](float Atraso) { const float t = FMath::Clamp((TT - Atraso) * 3.f, 0.f, 1.f); return 1.f - (1.f - t) * (1.f - t) * (1.f - t); };
+	if (!ImgUsina && !bTentouUsina)
+	{
+		bTentouUsina = true;
+		ImgUsina = LoadObject<UTexture2D>(nullptr, TEXT("/Game/UI/T_Usina.T_Usina"));
+	}
+	const int32 NCart = (int32)ECartaoMapa::Total;
 
-	// voo de fundo escurecido (mais escuro embaixo, onde ficam os cartões)
-	Caixa(0, 0, W, H, Cor255(2, 6, 14, 120));
-	Caixa(0, H * 0.45f, W, H * 0.55f, Cor255(2, 6, 14, 90));
+	// faixas de cinema + escurecido da esquerda (onde fica o texto)
+	const bool bTitulo = GM->TelaMP == ETelaMP::Titulo;
+	if (bTitulo)
+	{
+		RetArred(0, 0, W * 0.62f, H, 0.f, Cor255(2, 6, 14, 215), Cor255(2, 6, 14, 0));
+	}
+	else
+	{
+		Caixa(0, 0, W, H, Cor255(2, 6, 14, 165));
+	}
+	Caixa(0, 0, W, H * 0.06f, Cor255(0, 0, 0, 200));
+	Caixa(0, H * 0.94f, W, H * 0.06f, Cor255(0, 0, 0, 200));
 	if (GM->MPEscuro > 0.f) Caixa(0, 0, W, H, FLinearColor(0, 0, 0, GM->MPEscuro));
 
-	// título
-	Icone(IcDrone, Pt(96, 92), 30 * e, AzulClaro);
-	Linha(Pt(150, 132), Pt(220, 132), 2.2f * e, Cor255(70, 140, 255, 220));
-	T(TEXT("SIMULADOR DE DRONE"), X(146), Y(46), 62 * e, TEXT("Bold Italic"), Branco);
-	T(TEXT("ESCOLHA O MAPA E O DESAFIO"), X(230), Y(122), 17 * e, TEXT("Italic"), AzulTexto, 0, 4.f * e);
-
-	// cartões dos mapas
-	struct FInfo { const TCHAR* Tag; const TCHAR* Nome; const TCHAR* Sub; };
-	const FInfo Info[] = {
-		{ TEXT("MAPA 1"), TEXT("CAMPO BAIANO"), TEXT("Fazenda com açude, galpão e circuito de aros") },
-		{ TEXT("MAPA 2"), TEXT("PRÉDIO EM OBRA"), TEXT("Três andares em construção — voo por dentro") },
-		{ TEXT("MAPA 3"), TEXT("USINA ABANDONADA"), TEXT("Siderúrgica desativada — entregas difíceis") },
+	// rodapé com as teclas (muda conforme a tela)
+	struct FDicaMP { const TCHAR* Key; const TCHAR* Value; };
+	auto Rodape = [&](std::initializer_list<FDicaMP> Dicas)
+	{
+		const FSlateFontInfo FT = Fonte(14 * e, TEXT("Bold"));
+		const FSlateFontInfo FL = Fonte(15.5f * e, TEXT("Regular"));
+		float Total = 0.f;
+		for (const auto& Dc : Dicas) Total += Medir(Dc.Key, FT).X + 24 * e + Medir(Dc.Value, FL).X + 34 * e;
+		float FX = W - 40 * e - Total;
+		const float FY = H * 0.97f - 13 * e;
+		for (const auto& Dc : Dicas)
+		{
+			const float TW = Medir(Dc.Key, FT).X;
+			ContornoArred(FX, FY - 2 * e, TW + 16 * e, 26 * e, 4 * e, FMath::Max(1.f, 1.2f * e), Cor255(190, 205, 230, 220));
+			T(Dc.Key, FX + 8 * e, FY + 2 * e, 14 * e, TEXT("Bold"), Branco);
+			FX += TW + 24 * e;
+			T(Dc.Value, FX, FY + 1 * e, 15.5f * e, TEXT("Regular"), Cor255(220, 230, 250));
+			FX += Medir(Dc.Value, FL).X + 34 * e;
+		}
 	};
-	const int32 NCart = (int32)ECartaoMapa::Total;
-	GM->AreaCartoes.SetNum(NCart);
-	const float CW = 370.f, CH = 262.f, CG = 15.f, CX0 = (1280.f - (NCart * CW + (NCart - 1) * CG)) * 0.5f, CY0 = 186.f;
-	for (int32 c = 0; c < NCart; ++c)
+	auto BotaoVoltar = [&]()
 	{
-		const bool bSel = c == GM->MPCartao;
-		const bool bDisp = GM->CartaoDisponivel(c);
-		const float cx = CX0 + c * (CW + CG);
-		const float cy = CY0 - (bSel ? 8.f : 0.f) + (1.f - Anim) * (30.f + c * 12.f);
-		RetArred(X(cx), Y(cy), CW * e, CH * e, 10 * e, bSel ? Cor255(12, 30, 66, 245) : Cor255(8, 15, 28, 230), bSel ? Cor255(10, 22, 48, 245) : Cor255(8, 14, 26, 230));
-		ContornoArred(X(cx), Y(cy), CW * e, CH * e, 10 * e, FMath::Max(1.f, (bSel ? 2.4f : 1.1f) * e), bSel ? Cor255(90, 160, 255) : Cor255(40, 64, 104, 200));
-		Ilustracao(c, X(cx + 10), Y(cy + 10), (CW - 20) * e, 140 * e, bSel);
-		// etiqueta
-		const TCHAR* Tag = bDisp ? Info[c].Tag : TEXT("EM BREVE");
-		const float TW = Medir(Tag, Fonte(12 * e, TEXT("Bold"))).X;
-		RetArred(X(cx + 20), Y(cy + 20), TW + 18 * e, 22 * e, 11 * e, bDisp ? Cor255(30, 110, 250, 230) : Cor255(230, 130, 30, 235), bDisp ? Cor255(40, 125, 255, 230) : Cor255(240, 150, 40, 235));
-		T(Tag, X(cx + 20) + 9 * e, Y(cy + 23), 12 * e, TEXT("Bold"), Branco);
-		T(Info[c].Nome, X(cx + 20), Y(cy + 160), 27 * e, TEXT("Bold Italic"), bDisp ? Branco : Cinza);
-		T(Info[c].Sub, X(cx + 20), Y(cy + 200), 13.5f * e, TEXT("Regular"), bSel ? Cor255(175, 200, 240) : Cinza);
-		if (bSel)
+		const float BX = 40 * e, BY = H * 0.97f - 15 * e;
+		ContornoArred(BX, BY, 150 * e, 30 * e, 15 * e, FMath::Max(1.f, 1.3f * e), Cor255(120, 160, 230));
+		Linha(FVector2D(BX + 22 * e, BY + 15 * e), FVector2D(BX + 32 * e, BY + 7 * e), 2.f * e, Branco);
+		Linha(FVector2D(BX + 22 * e, BY + 15 * e), FVector2D(BX + 32 * e, BY + 23 * e), 2.f * e, Branco);
+		T(TEXT("VOLTAR"), BX + 44 * e, BY + 5 * e, 16 * e, TEXT("Bold"), Branco, 0, 2.f * e);
+		GM->AreaVoltarMP = FBox2D(FVector2D(BX, BY), FVector2D(BX + 150 * e, BY + 30 * e));
+	};
+	auto Barra = [&](float BX, float BY, float BW, float BH, float P, const FLinearColor& Cor)
+	{
+		RetArred(BX, BY, BW, BH, BH * 0.5f, Cor255(30, 42, 62), Cor255(30, 42, 62));
+		if (P > 0.f) RetArred(BX, BY, FMath::Max(BH, BW * P), BH, BH * 0.5f, Cor, Cor255(120, 200, 255));
+	};
+
+	// ======================================================================= ABERTURA
+	if (bTitulo)
+	{
+		GM->AreaVoltarMP = FBox2D(ForceInit);
+		const float A1 = Entrada(0.1f), A2 = Entrada(0.35f), A3 = Entrada(0.6f);
+		// mini drone com hélices girando ao lado do título
 		{
-			Linha(Pt(cx + 20, cy + 232), Pt(cx + 90, cy + 232), 3 * e, Cor255(70, 140, 255));
+			const FVector2D C = Pt(104 - (1.f - A1) * 60.f, 196);
+			const float Ang = GM->MPRelogio * 1440.f;
+			for (int32 k = 0; k < 4; ++k)
+			{
+				const FVector2D Off(((k & 1) ? 1.f : -1.f) * 22.f * e, ((k & 2) ? 1.f : -1.f) * 22.f * e);
+				Linha(C, C + Off, 4.f * e, Cor255(220, 232, 255, (uint8)(255 * A1)));
+				const FVector2D R = C + Off;
+				Arco(R, 13.f * e, 1.2f * e, Cor255(120, 170, 255, (uint8)(180 * A1)), 0.f, 360.f, 18);
+				const float a = FMath::DegreesToRadians(Ang + k * 45.f);
+				const FVector2D Pa(FMath::Cos(a) * 12.f * e, FMath::Sin(a) * 12.f * e);
+				Linha(R - Pa, R + Pa, 2.4f * e, Cor255(255, 255, 255, (uint8)(230 * A1)));
+			}
+			RetArred(C.X - 10 * e, C.Y - 8 * e, 20 * e, 16 * e, 4 * e, Cor255(40, 120, 255), Cor255(30, 90, 220));
 		}
-		GM->AreaCartoes[c] = FBox2D(Pt(cx, cy), Pt(cx + CW, cy + CH));
+		T(TEXT("SIMULADOR"), X(150 - (1.f - A1) * 80.f), Y(150), 92 * e, TEXT("Bold Italic"), Cor255(255, 255, 255, (uint8)(255 * A1)));
+		T(TEXT("DE DRONE"), X(150 - (1.f - A2) * 80.f), Y(244), 92 * e, TEXT("Bold Italic"), Cor255(94, 160, 255, (uint8)(255 * A2)));
+		Linha(Pt(154, 362), Pt(154 + 300 * A3, 362), 2.4f * e, Cor255(70, 140, 255, 220));
+		T(TEXT("VOE  •  EXPLORE  •  DOMINE"), X(156), Y(376), 17 * e, TEXT("Italic"), Cor255(160, 190, 235, (uint8)(255 * A3)), 0, 5.f * e);
+
+		const TCHAR* Itens[] = { TEXT("JOGAR"), TEXT("CONFIGURAÇÕES"), TEXT("SAIR") };
+		const TCHAR* Subs[] = { TEXT("Escolha o mapa e o desafio"), TEXT("Controle, vídeo (AMD FSR 4), áudio..."), TEXT("Fecha o simulador") };
+		const int32 Icones[] = { IcPlay, IcEngrenagem, IcEnergia };
+		GM->AreaTitulo.SetNum(3);
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const float Ai = Entrada(0.7f + i * 0.12f);
+			const float BY = 500.f + i * 92.f;
+			const float BX = 150.f - (1.f - Ai) * 60.f;
+			const bool bSel = GM->MPTitulo == i;
+			const float Pulso = bSel ? 0.5f + 0.5f * FMath::Sin(GM->MPRelogio * 4.f) : 0.f;
+			if (bSel)
+			{
+				RetArred(X(BX), Y(BY), 470 * e, 76 * e, 10 * e, Cor255(26, 102, 232, (uint8)(235 * Ai)), Cor255(14, 40, 100, (uint8)(60 * Ai)));
+				ContornoArred(X(BX), Y(BY), 470 * e, 76 * e, 10 * e, FMath::Max(1.f, 1.6f * e), Cor255(110, 175, 255, (uint8)(160 + 95 * Pulso)));
+				Linha(Pt(BX + 440, BY + 28), Pt(BX + 450, BY + 38), 2.6f * e, Branco);
+				Linha(Pt(BX + 450, BY + 38), Pt(BX + 440, BY + 48), 2.6f * e, Branco);
+			}
+			const FLinearColor Cor = bSel ? Branco : Cor255(170, 190, 225, (uint8)(255 * Ai));
+			Icone(Icones[i], Pt(BX + 40, BY + 38), 16 * e, Cor);
+			T(Itens[i], X(BX + 78), Y(BY + 9), (bSel ? 32.f : 28.f) * e, bSel ? TEXT("Bold Italic") : TEXT("Italic"), Cor);
+			T(Subs[i], X(BX + 80), Y(BY + 47), 13.5f * e, TEXT("Regular"), bSel ? Cor255(190, 210, 245) : Cor255(110, 130, 165, (uint8)(255 * Ai)));
+			GM->AreaTitulo[i] = FBox2D(Pt(BX, BY), Pt(BX + 470, BY + 76));
+		}
+
+		// canto de cima à direita: progresso geral
+		{
+			float Soma = 0.f;
+			for (int32 c = 0; c < NCart; ++c) Soma += GM->ProgressoMapa(c);
+			const float P = Soma / 2.f; // só os mapas liberados contam
+			const float PX = W - 330 * e, PY = H * 0.06f + 26 * e;
+			T(TEXT("PROGRESSO GERAL"), PX, PY, 14 * e, TEXT("Bold"), AzulTexto, 0, 2.5f * e);
+			T(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(P * 100.f)), W - 40 * e, PY - 6 * e, 30 * e, TEXT("Bold Italic"), Branco, 2);
+			Barra(PX, PY + 34 * e, 290 * e, 8 * e, P, Cor255(40, 125, 255));
+		}
+		T(TEXT("Unreal Engine 5.8  •  AMD FSR 4 + gerador de quadros"), 40 * e, H * 0.97f - 10 * e, 13.5f * e, TEXT("Regular"), Cor255(120, 140, 175));
+		Rodape({ { TEXT("↑↓"), TEXT("Escolher") }, { TEXT("A / Enter"), TEXT("Confirmar") } });
 	}
 
-	// lista: desafios do mapa escolhido + configurações + sair
-	const int32 NL = GM->NumLinhasMP();
-	const float L0 = CX0, L1 = 1280.f - CX0, LY0 = 476.f, LH = 58.f;
-	GM->AreaLinhas.SetNum(NL);
-	for (int32 l = 0; l < NL; ++l)
+	// ======================================================================= MAPAS
+	else if (GM->TelaMP == ETelaMP::Mapas)
 	{
-		const float ly = LY0 + l * LH + (1.f - Anim) * 40.f;
-		const bool bSel = l == GM->MPLinha;
-		EObjetivo O = EObjetivo::Livre;
-		const bool bObj = GM->LinhaEhObjetivo(l, O);
-		const bool bBloq = bObj && !GM->CartaoDisponivel(GM->MPCartao);
-		if (bSel)
+		T(TEXT("ESCOLHA O MAPA"), X(40), Y(66), 54 * e, TEXT("Bold Italic"), Branco);
+		T(TEXT("Mapas 1 e 2 liberados  •  o mapa 3 está em construção"), X(44), Y(130), 16 * e, TEXT("Italic"), AzulTexto, 0, 1.5f * e);
+
+		// cantinho do progresso (em cima, à direita)
 		{
-			RetArred(X(L0), Y(ly), (L1 - L0) * e, (LH - 6) * e, 7 * e, Cor255(21, 87, 214, 240), Cor255(11, 38, 92, 240));
-			ContornoArred(X(L0), Y(ly), (L1 - L0) * e, (LH - 6) * e, 7 * e, FMath::Max(1.f, 1.4f * e), Cor255(76, 149, 255));
+			const float PX = 870.f, PY = 50.f, PW = 370.f;
+			RetArred(X(PX), Y(PY), PW * e, 112 * e, 8 * e, Cor255(8, 16, 30, 220), Cor255(10, 22, 42, 220));
+			T(TEXT("SEU PROGRESSO"), X(PX + 16), Y(PY + 10), 13 * e, TEXT("Bold"), AzulTexto, 0, 2.5f * e);
+			for (int32 c = 0; c < NCart; ++c)
+			{
+				const float LY = PY + 34 + c * 25;
+				const bool bLib = GM->CartaoDisponivel(c);
+				T(FString::Printf(TEXT("%d  %s"), c + 1, *APredioGameMode::NomeMapa(c)), X(PX + 16), Y(LY), 14 * e, TEXT("Regular"), bLib ? Branco : Cinza);
+				if (bLib)
+				{
+					const float P = GM->ProgressoMapa(c);
+					Barra(X(PX + 210), Y(LY + 7), 100 * e, 6 * e, P, Cor255(40, 125, 255));
+					T(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(P * 100.f)), X(PX + PW - 14), Y(LY), 14 * e, TEXT("Bold"), Branco, 2);
+				}
+				else
+				{
+					Cadeado(Pt(PX + PW - 26, LY + 8), 9 * e, Cinza);
+				}
+			}
 		}
-		else
+
+		const TCHAR* Subs[] = { TEXT("Pasto, açude, galpão e missões pela fazenda"), TEXT("Três andares em construção — voo por dentro"), TEXT("Siderúrgica desativada — entregas difíceis") };
+		const float CW = 392.f, CH = 520.f, CG = 18.f, CX0 = (1280.f - (NCart * CW + (NCart - 1) * CG)) * 0.5f, CY0 = 200.f;
+		GM->AreaCartoes.SetNum(NCart);
+		for (int32 c = 0; c < NCart; ++c)
 		{
-			RetArred(X(L0), Y(ly), (L1 - L0) * e, (LH - 6) * e, 6 * e, Cor255(10, 18, 32, 215), Cor255(9, 16, 28, 215));
+			const float Ac = Entrada(0.05f + c * 0.1f);
+			const bool bSel = c == GM->MPCartao;
+			const bool bLib = GM->CartaoDisponivel(c);
+			const float cx = CX0 + c * (CW + CG);
+			const float cy = CY0 - (bSel ? 10.f : 0.f) + (1.f - Ac) * 50.f;
+			RetArred(X(cx), Y(cy), CW * e, CH * e, 12 * e, bSel ? Cor255(12, 30, 66, 245) : Cor255(8, 15, 28, 230), bSel ? Cor255(10, 22, 48, 245) : Cor255(8, 14, 26, 230));
+			ContornoArred(X(cx), Y(cy), CW * e, CH * e, 12 * e, FMath::Max(1.f, (bSel ? 2.6f : 1.1f) * e), bSel ? Cor255(90, 160, 255) : Cor255(40, 64, 104, 200));
+			// figura do mapa (a usina usa a imagem renderizada)
+			const float IX = X(cx + 12), IY = Y(cy + 12), IW = (CW - 24) * e, IHt = 230 * e;
+			if ((ECartaoMapa)c == ECartaoMapa::Usina && ImgUsina)
+			{
+				Imagem(ImgUsina, IX, IY, IW, IHt, bSel ? FLinearColor(0.85f, 0.85f, 0.85f, 1) : FLinearColor(0.5f, 0.5f, 0.5f, 1));
+			}
+			else
+			{
+				Ilustracao(c, IX, IY, IW, IHt, bSel);
+			}
+			if (!bLib)
+			{
+				Caixa(IX, IY, IW, IHt, Cor255(0, 0, 0, 110));
+				Cadeado(FVector2D(IX + IW * 0.5f, IY + IHt * 0.42f), 34 * e, Cor255(255, 190, 70));
+				RetArred(IX + IW * 0.5f - 105 * e, IY + IHt * 0.7f, 210 * e, 34 * e, 17 * e, Cor255(230, 130, 30, 235), Cor255(240, 150, 40, 235));
+				T(TEXT("EM CONSTRUÇÃO"), IX + IW * 0.5f, IY + IHt * 0.7f + 7 * e, 16 * e, TEXT("Bold"), Branco, 1, 2.f * e);
+			}
+			// etiqueta MAPA N
+			const FString Tag = FString::Printf(TEXT("MAPA %d"), c + 1);
+			const float TW = Medir(Tag, Fonte(13 * e, TEXT("Bold"))).X;
+			RetArred(X(cx + 24), Y(cy + 24), TW + 20 * e, 24 * e, 12 * e, bLib ? Cor255(30, 110, 250, 235) : Cor255(70, 76, 90, 235), bLib ? Cor255(40, 125, 255, 235) : Cor255(80, 86, 100, 235));
+			T(Tag, X(cx + 24) + 10 * e, Y(cy + 28), 13 * e, TEXT("Bold"), Branco);
+
+			T(APredioGameMode::NomeMapa(c), X(cx + 24), Y(cy + 262), 30 * e, TEXT("Bold Italic"), bLib ? Branco : Cinza);
+			T(Subs[c], X(cx + 24), Y(cy + 306), 14 * e, TEXT("Regular"), bSel ? Cor255(175, 200, 240) : Cinza);
+			Linha(Pt(cx + 24, cy + 342), Pt(cx + CW - 24, cy + 342), FMath::Max(1.f, e), Cor255(40, 64, 104, 200));
+			if (bLib)
+			{
+				// progresso do mapa: barra + medalhas de cada desafio
+				int32 Poss = 0;
+				const int32 Tem = GM->MedalhasMapa(c, Poss);
+				const float P = Poss ? (float)Tem / Poss : 0.f;
+				T(TEXT("PROGRESSO"), X(cx + 24), Y(cy + 358), 13 * e, TEXT("Bold"), AzulTexto, 0, 2.f * e);
+				T(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(P * 100.f)), X(cx + CW - 24), Y(cy + 352), 22 * e, TEXT("Bold Italic"), Branco, 2);
+				Barra(X(cx + 24), Y(cy + 386), (CW - 48) * e, 8 * e, P, Cor255(40, 125, 255));
+				float MX = cx + 36;
+				int32 NComMedalha = 0, NDesafios = 0;
+				for (const EObjetivo O : APredioGameMode::ObjetivosDoCartao((ECartaoMapa)c))
+				{
+					if (O == EObjetivo::Livre) continue;
+					const int32 Md = GM->MedalhaDe(O);
+					++NDesafios;
+					if (Md > 0) ++NComMedalha;
+					Disco(Pt(MX, cy + 428), 12 * e, CorMedalha(Md), 20);
+					if (Md > 0) Icone(IcEstrela, Pt(MX, cy + 428), 6.5f * e, Cor255(20, 24, 34));
+					T(APredioGameMode::NomeObjetivo(O), X(MX + 20), Y(cy + 419), 14 * e, TEXT("Regular"), Cor255(205, 218, 238));
+					MX += 30 + Medir(APredioGameMode::NomeObjetivo(O), Fonte(14 * e, TEXT("Regular"))).X / e + 18;
+				}
+				T(FString::Printf(TEXT("%d de %d desafios com medalha"), NComMedalha, NDesafios), X(cx + 24), Y(cy + 458), 13 * e, TEXT("Italic"), Cinza);
+				if (bSel)
+				{
+					RetArred(X(cx + CW - 150), Y(cy + CH - 52), 126 * e, 34 * e, 17 * e, Cor255(40, 120, 255), Cor255(25, 90, 230));
+					T(TEXT("ABRIR"), X(cx + CW - 100), Y(cy + CH - 45), 16 * e, TEXT("Bold"), Branco, 1, 2.f * e);
+					Tri(Pt(cx + CW - 56, cy + CH - 43), Pt(cx + CW - 56, cy + CH - 27), Pt(cx + CW - 44, cy + CH - 35), Branco);
+				}
+			}
+			else
+			{
+				T(TEXT("Em breve: missões de pegar e entregar cargas"), X(cx + 24), Y(cy + 360), 14 * e, TEXT("Italic"), Cor255(240, 160, 70));
+				T(TEXT("em pontes rolantes, esteiras e no alto-forno."), X(cx + 24), Y(cy + 382), 14 * e, TEXT("Italic"), Cor255(240, 160, 70));
+			}
+			GM->AreaCartoes[c] = FBox2D(Pt(cx, cy), Pt(cx + CW, cy + CH));
 		}
-		int32 Ic = IcEngrenagem;
-		if (bObj) Ic = O == EObjetivo::Topo ? IcBandeira : (O == EObjetivo::ArosOrdem ? IcAro : (O == EObjetivo::ArosRelogio ? IcRelogio : IcOlho));
-		else if (l == NL - 1) Ic = IcEnergia;
-		const float CY = ly + (LH - 6) * 0.5f;
-		Icone(Ic, Pt(L0 + 34, CY), 12 * e, bSel ? Branco : AzulTexto);
-		T(GM->NomeLinhaMP(l), X(L0 + 70), Y(ly + 5), 19 * e, TEXT("Regular"), bBloq ? Cinza : Branco);
-		T(GM->DescricaoLinhaMP(l), X(L0 + 70), Y(ly + 28), 12.5f * e, TEXT("Regular"), bSel ? Cor255(175, 200, 240) : Cinza);
-		const FString Extra = GM->ExtraLinhaMP(l);
-		if (!Extra.IsEmpty())
+		if (GM->MPAvisoT > 0.f && !GM->MPAviso.IsEmpty())
 		{
-			T(Extra, X(L1 - 54), Y(ly + 15), 15 * e, TEXT("Italic"), bBloq ? Cor255(240, 150, 60) : AzulTexto, 2);
+			T(GM->MPAviso, W * 0.5f, Y(CY0 + CH + 20), 18 * e, TEXT("Bold"), Cor255(255, 170, 70, (uint8)(255 * FMath::Clamp(GM->MPAvisoT, 0.f, 1.f))), 1);
 		}
-		if (bSel)
-		{
-			// botão de play na linha escolhida
-			const FVector2D PC = Pt(L1 - 28, CY);
-			Tri(PC + FVector2D(-6, -8) * e, PC + FVector2D(-6, 8) * e, PC + FVector2D(8, 0) * e, Branco);
-		}
-		GM->AreaLinhas[l] = FBox2D(Pt(L0, ly), Pt(L1, ly + LH - 6));
+		BotaoVoltar();
+		Rodape({ { TEXT("← →"), TEXT("Mapa") }, { TEXT("A / Enter"), TEXT("Abrir") }, { TEXT("B / Esc"), TEXT("Voltar") } });
 	}
 
-	if (GM->MPAvisoT > 0.f && !GM->MPAviso.IsEmpty())
+	// ======================================================================= DESAFIOS DO MAPA
+	else
 	{
-		T(GM->MPAviso, W * 0.5f, Y(LY0 + NL * LH + 8), 17 * e, TEXT("Bold"), Cor255(255, 170, 70, (uint8)(255 * FMath::Clamp(GM->MPAvisoT, 0.f, 1.f))), 1);
-	}
+		const int32 c = GM->MPCartao;
+		const float A1 = Entrada(0.f);
+		T(FString::Printf(TEXT("MAPA %d"), c + 1), X(40), Y(64), 16 * e, TEXT("Bold"), AzulTexto, 0, 3.f * e);
+		T(APredioGameMode::NomeMapa(c), X(40 - (1.f - A1) * 40.f), Y(84), 52 * e, TEXT("Bold Italic"), Branco);
+		Ilustracao(c, X(40), Y(170), 470 * e, 270 * e, true);
+		ContornoArred(X(40), Y(170), 470 * e, 270 * e, 6 * e, FMath::Max(1.f, 1.2f * e), Cor255(60, 110, 200));
+		const float P = GM->ProgressoMapa(c);
+		T(TEXT("PROGRESSO DO MAPA"), X(40), Y(462), 13 * e, TEXT("Bold"), AzulTexto, 0, 2.f * e);
+		T(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(P * 100.f)), X(510), Y(456), 22 * e, TEXT("Bold Italic"), Branco, 2);
+		Barra(X(40), Y(490), 470 * e, 8 * e, P, Cor255(40, 125, 255));
+		T(TEXT("Medalhas: ouro, prata e bronze por tempo."), X(40), Y(516), 14 * e, TEXT("Italic"), Cinza);
+		T(TEXT("Voo livre: explore o mapa sem cronômetro."), X(40), Y(538), 14 * e, TEXT("Italic"), Cinza);
 
-	// lema e rodapé
-	T(TEXT("VOE • EXPLORE • DOMINE"), W * 0.5f, Y(868), 14 * e, TEXT("Italic"), Cor255(110, 140, 190), 1, 5.f * e);
-	struct FDica { const TCHAR* Tecla; const TCHAR* Texto; };
-	const FDica Dicas[] = {
-		{ TEXT("← →"), TEXT("Mapa") }, { TEXT("↑↓"), TEXT("Desafio") }, { TEXT("A / Enter"), TEXT("Voar") },
-		{ TEXT("Start"), TEXT("Configurações") }, { TEXT("B / Esc"), TEXT("Sair") } };
-	const FSlateFontInfo FT = Fonte(14 * e, TEXT("Bold"));
-	const FSlateFontInfo FL = Fonte(15.5f * e, TEXT("Regular"));
-	float Total = 0.f;
-	for (const FDica& Dc : Dicas) Total += Medir(Dc.Tecla, FT).X + 16 * e + 8 * e + Medir(Dc.Texto, FL).X + 34 * e;
-	float FX = W * 0.5f - Total * 0.5f;
-	const float FY = Y(912);
-	for (const FDica& Dc : Dicas)
-	{
-		const float TW = Medir(Dc.Tecla, FT).X;
-		ContornoArred(FX, FY - 2 * e, TW + 16 * e, 26 * e, 4 * e, FMath::Max(1.f, 1.2f * e), Cor255(190, 205, 230, 220));
-		T(Dc.Tecla, FX + 8 * e, FY + 2 * e, 14 * e, TEXT("Bold"), Branco);
-		FX += TW + 16 * e + 8 * e;
-		T(Dc.Texto, FX, FY + 1 * e, 15.5f * e, TEXT("Regular"), Cor255(220, 230, 250));
-		FX += Medir(Dc.Texto, FL).X + 34 * e;
+		const int32 NL = GM->NumLinhasMP();
+		const float L0 = 560.f, L1 = 1240.f, LY0 = 170.f, LH = 86.f;
+		GM->AreaLinhas.SetNum(NL);
+		for (int32 l = 0; l < NL; ++l)
+		{
+			const float Al = Entrada(0.1f + l * 0.08f);
+			const float ly = LY0 + l * LH + (1.f - Al) * 40.f;
+			const bool bSel = l == GM->MPLinha;
+			EObjetivo O = EObjetivo::Livre;
+			const bool bObj = GM->LinhaEhObjetivo(l, O);
+			if (bSel)
+			{
+				RetArred(X(L0), Y(ly), (L1 - L0) * e, (LH - 10) * e, 8 * e, Cor255(21, 87, 214, 240), Cor255(11, 38, 92, 240));
+				ContornoArred(X(L0), Y(ly), (L1 - L0) * e, (LH - 10) * e, 8 * e, FMath::Max(1.f, 1.4f * e), Cor255(76, 149, 255));
+			}
+			else
+			{
+				RetArred(X(L0), Y(ly), (L1 - L0) * e, (LH - 10) * e, 7 * e, Cor255(10, 18, 32, 220), Cor255(9, 16, 28, 220));
+			}
+			const float CY = ly + (LH - 10) * 0.5f;
+			int32 Ic = IcRecarregar;
+			if (bObj) Ic = O == EObjetivo::Topo ? IcBandeira : (O == EObjetivo::ArosOrdem ? IcAro : (O == EObjetivo::ArosRelogio ? IcRelogio : IcOlho));
+			Icone(Ic, Pt(L0 + 38, CY), 15 * e, bSel ? Branco : AzulTexto);
+			T(GM->NomeLinhaMP(l), X(L0 + 78), Y(ly + 12), 23 * e, bObj ? TEXT("Regular") : TEXT("Italic"), Branco);
+			T(GM->DescricaoLinhaMP(l), X(L0 + 78), Y(ly + 44), 13.5f * e, TEXT("Regular"), bSel ? Cor255(175, 200, 240) : Cinza);
+			if (bObj && O != EObjetivo::Livre)
+			{
+				const int32 Md = GM->MedalhaDe(O);
+				Disco(Pt(L1 - 40, CY), 15 * e, CorMedalha(Md), 22);
+				if (Md > 0) Icone(IcEstrela, Pt(L1 - 40, CY), 8 * e, Cor255(20, 24, 34));
+				T(GM->ExtraLinhaMP(l), X(L1 - 66), Y(CY - 10), 15 * e, TEXT("Italic"), AzulTexto, 2);
+			}
+			else if (bObj)
+			{
+				T(GM->ExtraLinhaMP(l), X(L1 - 30), Y(CY - 10), 15 * e, TEXT("Italic"), AzulTexto, 2);
+			}
+			GM->AreaLinhas[l] = FBox2D(Pt(L0, ly), Pt(L1, ly + LH - 10));
+		}
+		BotaoVoltar();
+		Rodape({ { TEXT("↑↓"), TEXT("Desafio") }, { TEXT("A / Enter"), TEXT("Voar") }, { TEXT("B / Esc"), TEXT("Voltar") } });
 	}
 
 	if (GM->bCarregando)
 	{
-		Caixa(0, 0, W, H, FLinearColor(0, 0, 0, 0.85f));
+		Caixa(0, 0, W, H, FLinearColor(0, 0, 0, 0.88f));
 		T(TEXT("CARREGANDO…"), W * 0.5f, H * 0.5f - 20 * e, 34 * e, TEXT("Bold Italic"), Branco, 1, 4.f * e);
 	}
 }

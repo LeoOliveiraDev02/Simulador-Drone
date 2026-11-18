@@ -49,6 +49,9 @@ void FAjustesDrone::Carregar()
 		else if (K == TEXT("RecordeTopo")) RecordeTopo = FMath::Max(0.f, F);
 		else if (K == TEXT("RecordeAros")) RecordeAros = FMath::Max(0.f, F);
 		else if (K == TEXT("RecordeRelogio")) RecordeRelogio = FMath::Max(0.f, F);
+		else if (K == TEXT("MedalhaTopo")) MedalhaTopo = FMath::Clamp((int32)F, 0, 3);
+		else if (K == TEXT("MedalhaAros")) MedalhaAros = FMath::Clamp((int32)F, 0, 3);
+		else if (K == TEXT("MedalhaRelogio")) MedalhaRelogio = FMath::Clamp((int32)F, 0, 3);
 	}
 }
 
@@ -72,6 +75,9 @@ void FAjustesDrone::Salvar() const
 	L.Add(FString::Printf(TEXT("RecordeTopo=%.2f"), RecordeTopo));
 	L.Add(FString::Printf(TEXT("RecordeAros=%.2f"), RecordeAros));
 	L.Add(FString::Printf(TEXT("RecordeRelogio=%.2f"), RecordeRelogio));
+	L.Add(FString::Printf(TEXT("MedalhaTopo=%d"), MedalhaTopo));
+	L.Add(FString::Printf(TEXT("MedalhaAros=%d"), MedalhaAros));
+	L.Add(FString::Printf(TEXT("MedalhaRelogio=%d"), MedalhaRelogio));
 	FFileHelper::SaveStringArrayToFile(L, *Arquivo());
 }
 

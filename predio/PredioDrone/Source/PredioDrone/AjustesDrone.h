@@ -23,6 +23,10 @@ struct FAjustesDrone
 	float RecordeTopo = 0.f;      // prédio: chegar ao topo
 	float RecordeAros = 0.f;      // campo: aros em ordem
 	float RecordeRelogio = 0.f;   // campo: contra o relógio (tempo total)
+	// melhor medalha de cada desafio (0 nenhuma, 1 bronze, 2 prata, 3 ouro) — é o "progresso" do mapa
+	int32 MedalhaTopo = 0;
+	int32 MedalhaAros = 0;
+	int32 MedalhaRelogio = 0;
 
 	static FAjustesDrone& Get();
 	static FString Arquivo();

@@ -59,6 +59,9 @@ enum class EObjetivo : uint8 { Livre, Topo, ArosOrdem, ArosRelogio };
 /** Andamento do desafio. */
 enum class EEstadoDesafio : uint8 { Pronto, Correndo, Concluido, Falhou };
 
+/** Telas do menu principal: abertura -> mapas -> desafios do mapa. */
+enum class ETelaMP : uint8 { Titulo, Mapas, Desafios };
+
 /** Cartões do menu principal. */
 enum class ECartaoMapa : uint8 { Campo, Predio, Usina, Total };
 
@@ -102,6 +105,11 @@ public:
 	static ECategoriaMenu CategoriaDoItem(int32 I);
 	static int32 PrimeiroItemDa(ECategoriaMenu C);
 	static FString NomeCategoria(ECategoriaMenu C);
+	static FString DescricaoCategoria(ECategoriaMenu C);
+	static TArray<int32> ItensDaCategoria(ECategoriaMenu C);
+	void EntrarCategoria(ECategoriaMenu C);
+	int32 CategoriaSel = 0;     // seção escolhida na coluna da esquerda
+	bool bFocoItens = false;    // false = escolhendo a seção; true = mexendo nas opções dela
 
 	// áreas clicáveis do menu (o HUD preenche ao desenhar; o mouse usa no quadro seguinte)
 	TArray<FBox2D> AreaItens;
@@ -138,7 +146,17 @@ public:
 
 	// ---------------------------------------------------------------- menu principal
 	bool bMenuPrincipal = false;
-	int32 MPCartao = (int32)ECartaoMapa::Predio;
+	ETelaMP TelaMP = ETelaMP::Titulo;
+	int32 MPTitulo = 0;                 // JOGAR / CONFIGURAÇÕES / SAIR
+	float MPTelaDesde = 0.f;            // segundos desde que a tela atual abriu (animação de entrada)
+	TArray<FBox2D> AreaTitulo;
+	FBox2D AreaVoltarMP = FBox2D(ForceInit);
+	int32 MedalhaDe(EObjetivo O) const;
+	float ProgressoMapa(int32 Cartao) const;     // 0..1 (medalhas conquistadas / possíveis)
+	int32 MedalhasMapa(int32 Cartao, int32& Possiveis) const;
+	static FString NomeMapa(int32 Cartao);
+	void IrParaTela(ETelaMP T);
+	int32 MPCartao = (int32)ECartaoMapa::Campo;
 	int32 MPLinha = 0;
 	bool bCampoExiste = false;
 	int32 NumLinhasMP() const;
@@ -187,6 +205,12 @@ private:
 	void MostrarAros();
 	void IrParaMapa(const FString& Mapa, const FString& Opcoes);
 	void EspalharGrama();
+	void CriarDroneTitulo();
+	void DestruirDroneTitulo();
+	void SairDoMenuPrincipal();
+	TWeakObjectPtr<AActor> DroneTitulo;
+	TArray<TWeakObjectPtr<UStaticMeshComponent>> HelicesTitulo;
+	float AnguloHelices = 0.f;
 	TArray<TPair<int32, TWeakObjectPtr<AActor>>> AtoresAros;
 	int32 UltimosReinicios = 0;
 	FVector UltimaPosDrone = FVector::ZeroVector;

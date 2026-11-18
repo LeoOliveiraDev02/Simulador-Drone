@@ -332,13 +332,13 @@ ECategoriaMenu APredioGameMode::CategoriaDoItem(int32 I)
 	case EItemMenu::Objetivo: case EItemMenu::ModoVoo: case EItemMenu::VoltarInicio: case EItemMenu::MenuPrincipal:
 		return ECategoriaMenu::Jogabilidade;
 	case EItemMenu::Sensibilidade: case EItemMenu::Expo: return ECategoriaMenu::Sensibilidade;
-	case EItemMenu::ModoFSR: case EItemMenu::Gerador: case EItemMenu::VSync: case EItemMenu::Painel: case EItemMenu::AjusteAuto:
+	case EItemMenu::ModoFSR: case EItemMenu::Gerador: case EItemMenu::VSync:
 		return ECategoriaMenu::Video;
 	case EItemMenu::Volume: return ECategoriaMenu::Audio;
 	case EItemMenu::InvFrente: case EItemMenu::InvSubir: case EItemMenu::InvGiro: case EItemMenu::InvLados:
 		return ECategoriaMenu::Controles;
 	case EItemMenu::EscalaHUD: return ECategoriaMenu::Acessibilidade;
-	case EItemMenu::Padrao: return ECategoriaMenu::Avancado;
+	case EItemMenu::Painel: case EItemMenu::AjusteAuto: case EItemMenu::Padrao: return ECategoriaMenu::Avancado;
 	default: return ECategoriaMenu::Sair;
 	}
 }
@@ -350,6 +350,45 @@ int32 APredioGameMode::PrimeiroItemDa(ECategoriaMenu C)
 		if (CategoriaDoItem(i) == C) return i;
 	}
 	return 0;
+}
+
+TArray<int32> APredioGameMode::ItensDaCategoria(ECategoriaMenu C)
+{
+	TArray<int32> R;
+	for (int32 i = 0; i < (int32)EItemMenu::Total; ++i)
+	{
+		if (CategoriaDoItem(i) == C) R.Add(i);
+	}
+	return R;
+}
+
+FString APredioGameMode::DescricaoCategoria(ECategoriaMenu C)
+{
+	switch (C)
+	{
+	case ECategoriaMenu::Continuar: return TEXT("Volta para o voo");
+	case ECategoriaMenu::Jogabilidade: return TEXT("Objetivo, modo de voo e volta ao início");
+	case ECategoriaMenu::Sensibilidade: return TEXT("Quanto o drone responde aos comandos");
+	case ECategoriaMenu::Video: return TEXT("AMD FSR 4, gerador de quadros e V-Sync");
+	case ECategoriaMenu::Audio: return TEXT("Som do motor do drone");
+	case ECategoriaMenu::Controles: return TEXT("Inverter os eixos dos comandos");
+	case ECategoriaMenu::Acessibilidade: return TEXT("Tamanho do painel de voo na tela");
+	case ECategoriaMenu::Avancado: return TEXT("Painel de desempenho, ajuste automático e padrões");
+	default: return TEXT("Fecha o simulador (as configurações ficam salvas)");
+	}
+}
+
+void APredioGameMode::EntrarCategoria(ECategoriaMenu C)
+{
+	CategoriaSel = (int32)C;
+	if (C == ECategoriaMenu::Continuar)
+	{
+		AbrirMenu(false);
+		return;
+	}
+	bFocoItens = true;
+	MenuIndice = PrimeiroItemDa(C);
+	MenuMudouEm = FPlatformTime::Seconds();
 }
 
 FString APredioGameMode::NomeCategoria(ECategoriaMenu C)
@@ -490,6 +529,8 @@ void APredioGameMode::AbrirMenu(bool bAbrir)
 	if (bAbrir)
 	{
 		MenuIndice = 0;
+		CategoriaSel = 0;
+		bFocoItens = false;
 	}
 	else
 	{
@@ -625,9 +666,11 @@ void APredioGameMode::MudarItem(int32 Dir, bool bConfirmar)
 	case EItemMenu::Padrao:
 		if (bConfirmar)
 		{
-			const float RT = C.RecordeTopo, RA = C.RecordeAros, RR = C.RecordeRelogio;
+			const FAjustesDrone Antes = C;
 			C = FAjustesDrone();
-			C.RecordeTopo = RT; C.RecordeAros = RA; C.RecordeRelogio = RR; // recordes não são "opções"
+			// recordes e medalhas não são "opções"
+			C.RecordeTopo = Antes.RecordeTopo; C.RecordeAros = Antes.RecordeAros; C.RecordeRelogio = Antes.RecordeRelogio;
+			C.MedalhaTopo = Antes.MedalhaTopo; C.MedalhaAros = Antes.MedalhaAros; C.MedalhaRelogio = Antes.MedalhaRelogio;
 			C.AplicarGraficos();
 			NivelAjuste = 0;
 			AplicarNivelAjuste();
@@ -659,24 +702,37 @@ void APredioGameMode::TickMenu(float Dt)
 	// logo depois de abrir, ignora as teclas de fechar (o mesmo toque não fecha o menu)
 	const bool bPodeFechar = FPlatformTime::Seconds() - MenuMudouEm > 0.3;
 
-	if (bPodeFechar && Apertou({ EKeys::Escape, EKeys::Gamepad_Special_Right, EKeys::Gamepad_FaceButton_Right, EKeys::BackSpace }))
+	const int32 NC = (int32)ECategoriaMenu::Total;
+	const ECategoriaMenu Cat = (ECategoriaMenu)FMath::Clamp(CategoriaSel, 0, NC - 1);
+
+	// Start fecha de qualquer lugar; Esc / B / Backspace voltam uma tela (das opções para as seções, das seções fecha)
+	if (bPodeFechar && Apertou({ EKeys::Gamepad_Special_Right }))
 	{
-		Registrar(TEXT("fechar pedido por Esc / Start / B"));
+		AbrirMenu(false);
+		return;
+	}
+	if (bPodeFechar && Apertou({ EKeys::Escape, EKeys::Gamepad_FaceButton_Right, EKeys::BackSpace }))
+	{
+		if (bFocoItens)
+		{
+			bFocoItens = false;
+			MenuMudouEm = FPlatformTime::Seconds();
+			return;
+		}
+		Registrar(TEXT("fechar pedido por Esc / B"));
 		AbrirMenu(false);
 		return;
 	}
 
-	const int32 N = (int32)EItemMenu::Total;
-	const int32 NC = (int32)ECategoriaMenu::Total;
-
-	// troca de categoria: LB / RB (ou Q / E, Tab)
-	int32 Cat = 0;
-	if (Apertou({ EKeys::Gamepad_LeftShoulder, EKeys::Q })) Cat = -1;
-	if (Apertou({ EKeys::Gamepad_RightShoulder, EKeys::E, EKeys::Tab })) Cat = 1;
-	if (Cat != 0)
+	// troca de seção: LB / RB (ou Q / E, Tab)
+	int32 Pulo = 0;
+	if (Apertou({ EKeys::Gamepad_LeftShoulder, EKeys::Q })) Pulo = -1;
+	if (Apertou({ EKeys::Gamepad_RightShoulder, EKeys::E, EKeys::Tab })) Pulo = 1;
+	if (Pulo != 0)
 	{
-		const int32 Atual = (int32)CategoriaDoItem(MenuIndice);
-		MenuIndice = PrimeiroItemDa((ECategoriaMenu)((Atual + Cat + NC) % NC));
+		CategoriaSel = (CategoriaSel + Pulo + NC) % NC;
+		if ((ECategoriaMenu)CategoriaSel == ECategoriaMenu::Continuar) CategoriaSel = (CategoriaSel + Pulo + NC) % NC;
+		if (bFocoItens) MenuIndice = PrimeiroItemDa((ECategoriaMenu)CategoriaSel);
 	}
 
 	int32 V = 0, Hz = 0;
@@ -703,12 +759,37 @@ void APredioGameMode::TickMenu(float Dt)
 	UltimaDirVert = DirV;
 	UltimaDirHoriz = DirH;
 
-	if (V != 0) MenuIndice = (MenuIndice + V + N) % N;
-	if (Hz != 0) MudarItem(Hz, false);
-	if (bPodeFechar && Apertou({ EKeys::Enter, EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom }))
+	if (!bFocoItens)
 	{
-		MudarItem(0, true);
-		if (!bMenuAberto) return;
+		// coluna das seções
+		if (V != 0) CategoriaSel = (CategoriaSel + V + NC) % NC;
+		if (Hz > 0 || (bPodeFechar && Apertou({ EKeys::Enter, EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom })))
+		{
+			EntrarCategoria((ECategoriaMenu)CategoriaSel);
+			if (!bMenuAberto) return;
+		}
+	}
+	else
+	{
+		// opções da seção aberta
+		const TArray<int32> Itens = ItensDaCategoria(Cat);
+		int32 Pos = FMath::Max(0, Itens.IndexOfByKey(MenuIndice));
+		if (!Itens.Contains(MenuIndice) && Itens.Num()) MenuIndice = Itens[0];
+		if (V != 0 && Itens.Num()) { Pos = (Pos + V + Itens.Num()) % Itens.Num(); MenuIndice = Itens[Pos]; }
+		const ETipoValor Tipo = TipoItem(MenuIndice);
+		if (Hz < 0 && (Tipo == ETipoValor::Acao || Tipo == ETipoValor::Nenhum))
+		{
+			bFocoItens = false; // seta para a esquerda num botão: volta para as seções
+		}
+		else if (Hz != 0)
+		{
+			MudarItem(Hz, false);
+		}
+		if (bPodeFechar && Apertou({ EKeys::Enter, EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom }))
+		{
+			MudarItem(0, true);
+			if (!bMenuAberto) return;
+		}
 	}
 
 	// mouse: passar por cima escolhe, clique esquerdo muda/confirma, direito volta, roda ajusta
@@ -723,7 +804,7 @@ void APredioGameMode::TickMenu(float Dt)
 		{
 			if (AreaItens[i].bIsValid && AreaItens[i].IsInside(M)) { Sob = i; break; }
 		}
-		if (Sob != INDEX_NONE && bMexeu) MenuIndice = Sob;
+		if (Sob != INDEX_NONE && bMexeu) { MenuIndice = Sob; bFocoItens = true; }
 		if (bPodeFechar && this->Apertou(EKeys::LeftMouseButton))
 		{
 			if (AreaFechar.bIsValid && AreaFechar.IsInside(M))
@@ -735,8 +816,8 @@ void APredioGameMode::TickMenu(float Dt)
 			{
 				if (AreaCategorias[c].bIsValid && AreaCategorias[c].IsInside(M))
 				{
-					MenuIndice = PrimeiroItemDa((ECategoriaMenu)c);
-					if ((ECategoriaMenu)c == ECategoriaMenu::Continuar) { AbrirMenu(false); return; }
+					EntrarCategoria((ECategoriaMenu)c);
+					if (!bMenuAberto) return;
 				}
 			}
 			if (Sob != INDEX_NONE)
@@ -1233,6 +1314,8 @@ void APredioGameMode::ConcluirDesafio(bool bSucesso)
 				if (TempoDesafio <= LimiteMedalha(M)) { Medalha = M; break; }
 			}
 		}
+		int32* Med = Objetivo == EObjetivo::Topo ? &C.MedalhaTopo : (Objetivo == EObjetivo::ArosOrdem ? &C.MedalhaAros : &C.MedalhaRelogio);
+		if (Medalha > *Med) { *Med = Medalha; C.Salvar(); }
 		float* Rec = Objetivo == EObjetivo::Topo ? &C.RecordeTopo : (Objetivo == EObjetivo::ArosOrdem ? &C.RecordeAros : &C.RecordeRelogio);
 		if (*Rec <= 0.f || TempoDesafio < *Rec)
 		{
@@ -1344,6 +1427,7 @@ void APredioGameMode::TickObjetivo(float Dt)
 }
 
 // ------------------------------------------------------------------ menu principal (jogo único)
+//  ABERTURA (drone E88 voando pelo prédio, câmera perseguindo)  ->  MAPAS (cartões + progresso)  ->  DESAFIOS do mapa
 
 bool APredioGameMode::CartaoDisponivel(int32 C) const
 {
@@ -1351,13 +1435,55 @@ bool APredioGameMode::CartaoDisponivel(int32 C) const
 	{
 	case ECartaoMapa::Predio: return true;
 	case ECartaoMapa::Campo: return bCampoExiste;
-	default: return false;
+	default: return false; // usina: em construção
 	}
+}
+
+FString APredioGameMode::NomeMapa(int32 Cartao)
+{
+	switch ((ECartaoMapa)Cartao)
+	{
+	case ECartaoMapa::Campo: return TEXT("FAZENDA");
+	case ECartaoMapa::Predio: return TEXT("PRÉDIO EM OBRA");
+	default: return TEXT("USINA ABANDONADA");
+	}
+}
+
+int32 APredioGameMode::MedalhaDe(EObjetivo O) const
+{
+	const FAjustesDrone& C = FAjustesDrone::Get();
+	switch (O)
+	{
+	case EObjetivo::Topo: return C.MedalhaTopo;
+	case EObjetivo::ArosOrdem: return C.MedalhaAros;
+	case EObjetivo::ArosRelogio: return C.MedalhaRelogio;
+	default: return 0;
+	}
+}
+
+int32 APredioGameMode::MedalhasMapa(int32 Cartao, int32& Possiveis) const
+{
+	int32 Tem = 0;
+	Possiveis = 0;
+	for (const EObjetivo O : ObjetivosDoCartao((ECartaoMapa)Cartao))
+	{
+		if (O == EObjetivo::Livre) continue;
+		Possiveis += 3;
+		Tem += MedalhaDe(O);
+	}
+	return Tem;
+}
+
+float APredioGameMode::ProgressoMapa(int32 Cartao) const
+{
+	int32 P = 0;
+	const int32 T = MedalhasMapa(Cartao, P);
+	return P > 0 ? (float)T / (float)P : 0.f;
 }
 
 int32 APredioGameMode::NumLinhasMP() const
 {
-	return ObjetivosDoCartao((ECartaoMapa)MPCartao).Num() + 2; // + Configurações + Sair
+	return ObjetivosDoCartao((ECartaoMapa)MPCartao).Num() + 1; // + Voltar
 }
 
 bool APredioGameMode::LinhaEhObjetivo(int32 L, EObjetivo& Out) const
@@ -1372,25 +1498,76 @@ FString APredioGameMode::NomeLinhaMP(int32 L) const
 {
 	EObjetivo O = EObjetivo::Livre;
 	if (LinhaEhObjetivo(L, O)) return NomeObjetivo(O);
-	return L == NumLinhasMP() - 2 ? TEXT("Configurações") : TEXT("Sair do jogo");
+	return TEXT("Voltar aos mapas");
 }
 
 FString APredioGameMode::DescricaoLinhaMP(int32 L) const
 {
 	EObjetivo O = EObjetivo::Livre;
 	if (LinhaEhObjetivo(L, O)) return DescricaoObjetivo(O);
-	return L == NumLinhasMP() - 2 ? TEXT("Sensibilidade, inverter eixos, vídeo (AMD FSR 4) e som") : TEXT("Fecha o simulador");
+	return TEXT("Escolher outro mapa");
 }
 
 FString APredioGameMode::ExtraLinhaMP(int32 L) const
 {
 	EObjetivo O = EObjetivo::Livre;
 	if (!LinhaEhObjetivo(L, O)) return FString();
-	if (!CartaoDisponivel(MPCartao)) return TEXT("mapa ainda não instalado");
-	const FAjustesDrone& C = FAjustesDrone::Get();
-	const float R = O == EObjetivo::Topo ? C.RecordeTopo : (O == EObjetivo::ArosOrdem ? C.RecordeAros : (O == EObjetivo::ArosRelogio ? C.RecordeRelogio : 0.f));
 	if (O == EObjetivo::Livre) return TEXT("sem cronômetro");
+	const FAjustesDrone& C = FAjustesDrone::Get();
+	const float R = O == EObjetivo::Topo ? C.RecordeTopo : (O == EObjetivo::ArosOrdem ? C.RecordeAros : C.RecordeRelogio);
 	return R > 0.f ? FString::Printf(TEXT("recorde %s"), *TextoTempo(R)) : FString(TEXT("sem recorde ainda"));
+}
+
+void APredioGameMode::IrParaTela(ETelaMP T)
+{
+	TelaMP = T;
+	MPTelaDesde = 0.f;
+	MenuMudouEm = FPlatformTime::Seconds();
+	if (T == ETelaMP::Desafios) MPLinha = 0;
+	Registrar(FString::Printf(TEXT("menu principal: tela %d"), (int32)T));
+}
+
+void APredioGameMode::CriarDroneTitulo()
+{
+	if (DroneTitulo.IsValid()) return;
+	UStaticMesh* Corpo = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Drone/E88_Corpo.E88_Corpo"));
+	UStaticMesh* Helice = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Drone/E88_Helice.E88_Helice"));
+	if (!Corpo) return; // sem o modelo: a abertura fica só com o voo da câmera
+	AActor* A = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity);
+	if (!A) return;
+	USceneComponent* Raiz = NewObject<USceneComponent>(A, TEXT("Raiz"));
+	Raiz->SetMobility(EComponentMobility::Movable);
+	A->SetRootComponent(Raiz);
+	Raiz->RegisterComponent();
+	auto Peca = [A, Raiz](UStaticMesh* M, const TCHAR* Nome, const FVector& Pos)
+	{
+		UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(A, Nome);
+		C->SetMobility(EComponentMobility::Movable);
+		C->SetStaticMesh(M);
+		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		C->SetupAttachment(Raiz);
+		C->SetRelativeLocation(Pos);
+		C->RegisterComponent();
+		A->AddInstanceComponent(C);
+		return C;
+	};
+	Peca(Corpo, TEXT("Corpo"), FVector::ZeroVector);
+	HelicesTitulo.Reset();
+	if (Helice)
+	{
+		const FVector Eixos[] = { FVector(9.15f, 9.31f, 1.43f), FVector(9.16f, -9.31f, 1.43f), FVector(-9.14f, 9.34f, 1.43f), FVector(-9.17f, -9.34f, 1.43f) };
+		const TCHAR* Nomes[] = { TEXT("Helice0"), TEXT("Helice1"), TEXT("Helice2"), TEXT("Helice3") };
+		for (int32 i = 0; i < 4; ++i) HelicesTitulo.Add(Peca(Helice, Nomes[i], Eixos[i]));
+	}
+	A->SetActorScale3D(FVector(2.4f)); // maior que o real para aparecer bem na abertura
+	DroneTitulo = A;
+}
+
+void APredioGameMode::DestruirDroneTitulo()
+{
+	if (AActor* A = DroneTitulo.Get()) A->Destroy();
+	DroneTitulo.Reset();
+	HelicesTitulo.Reset();
 }
 
 void APredioGameMode::EntrarMenuPrincipal()
@@ -1399,7 +1576,9 @@ void APredioGameMode::EntrarMenuPrincipal()
 	MPRelogio = 0.f;
 	MPVooS = 0.f;
 	MPLinha = 0;
+	MPTitulo = 0;
 	MPAviso.Reset();
+	IrParaTela(ETelaMP::Titulo);
 	Objetivo = EObjetivo::Livre;
 	ReiniciarDesafio();
 	MenuMudouEm = FPlatformTime::Seconds();
@@ -1409,6 +1588,7 @@ void APredioGameMode::EntrarMenuPrincipal()
 		D->bCongelado = true;
 		if (D->Audio) D->Audio->SetPaused(true);
 	}
+	CriarDroneTitulo();
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
 		FInputModeGameAndUI Modo;
@@ -1418,6 +1598,24 @@ void APredioGameMode::EntrarMenuPrincipal()
 		PC->bShowMouseCursor = true;
 	}
 	Registrar(TEXT("menu principal"));
+}
+
+void APredioGameMode::SairDoMenuPrincipal()
+{
+	bMenuPrincipal = false;
+	DestruirDroneTitulo();
+	if (ADronePawn* D = Drone())
+	{
+		D->bModoTour = false;
+		D->bCongelado = false;
+		if (D->Audio) D->Audio->SetPaused(false);
+	}
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		PC->bShowMouseCursor = false;
+		PC->SetInputMode(FInputModeGameOnly());
+	}
+	MenuMudouEm = FPlatformTime::Seconds();
 }
 
 void APredioGameMode::IrParaMapa(const FString& Mapa, const FString& Opcoes)
@@ -1431,52 +1629,51 @@ void APredioGameMode::IrParaMapa(const FString& Mapa, const FString& Opcoes)
 
 void APredioGameMode::ConfirmarMenuPrincipal()
 {
-	EObjetivo O = EObjetivo::Livre;
-	const int32 NL = NumLinhasMP();
-	if (LinhaEhObjetivo(MPLinha, O))
+	if (TelaMP == ETelaMP::Titulo)
+	{
+		if (MPTitulo == 0) { IrParaTela(ETelaMP::Mapas); return; }
+		if (MPTitulo == 1)
+		{
+			AbrirMenu(true);
+			CategoriaSel = (int32)ECategoriaMenu::Sensibilidade;
+			return;
+		}
+		FAjustesDrone::Get().Salvar();
+		UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
+		return;
+	}
+	if (TelaMP == ETelaMP::Mapas)
 	{
 		if (!CartaoDisponivel(MPCartao))
 		{
-			MPAviso = TEXT("Esse mapa ainda não foi instalado nesta versão");
+			MPAviso = (ECartaoMapa)MPCartao == ECartaoMapa::Usina ? TEXT("A usina ainda está sendo construída — em breve!") : TEXT("Esse mapa ainda não foi instalado nesta versão");
 			MPAvisoT = 3.f;
 			return;
 		}
-		if ((ECartaoMapa)MPCartao == ECartaoMapa::Campo)
-		{
-			IrParaMapa(TEXT("/Game/Mapas/Campo"), FString::Printf(TEXT("jogo?modo=%d"), (int32)O));
-			return;
-		}
-		if (bEhCampo)
-		{
-			IrParaMapa(TEXT("/Game/Mapas/Predio"), FString::Printf(TEXT("jogo?modo=%d"), (int32)O));
-			return;
-		}
-		// prédio: já estamos nele, começa aqui mesmo
-		bMenuPrincipal = false;
-		if (ADronePawn* D = Drone())
-		{
-			D->bModoTour = false;
-			D->bCongelado = false;
-			if (D->Audio) D->Audio->SetPaused(false);
-		}
-		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
-		{
-			PC->bShowMouseCursor = false;
-			PC->SetInputMode(FInputModeGameOnly());
-		}
-		MenuMudouEm = FPlatformTime::Seconds();
-		IniciarObjetivo(O, true);
-		AtualizarAndares(true);
+		IrParaTela(ETelaMP::Desafios);
 		return;
 	}
-	if (MPLinha == NL - 2)
+	// desafios
+	EObjetivo O = EObjetivo::Livre;
+	if (!LinhaEhObjetivo(MPLinha, O))
 	{
-		AbrirMenu(true);
-		MenuIndice = PrimeiroItemDa(ECategoriaMenu::Sensibilidade);
+		IrParaTela(ETelaMP::Mapas);
 		return;
 	}
-	FAjustesDrone::Get().Salvar();
-	UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
+	if ((ECartaoMapa)MPCartao == ECartaoMapa::Campo)
+	{
+		IrParaMapa(TEXT("/Game/Mapas/Campo"), FString::Printf(TEXT("jogo?modo=%d"), (int32)O));
+		return;
+	}
+	if (bEhCampo)
+	{
+		IrParaMapa(TEXT("/Game/Mapas/Predio"), FString::Printf(TEXT("jogo?modo=%d"), (int32)O));
+		return;
+	}
+	// prédio: já estamos nele, começa aqui mesmo
+	SairDoMenuPrincipal();
+	IniciarObjetivo(O, true);
+	AtualizarAndares(true);
 }
 
 void APredioGameMode::TickMenuPrincipal(float Dt)
@@ -1484,51 +1681,76 @@ void APredioGameMode::TickMenuPrincipal(float Dt)
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	ADronePawn* D = Drone();
 	if (MPAvisoT > 0.f) MPAvisoT -= Dt;
+	MPTelaDesde += Dt;
 
-	// voo de fundo pelo prédio (o mesmo percurso do voo de teste), dando a volta com um escurecido
+	// voo de fundo: o E88 voa pelo percurso do prédio e a câmera vai atrás dele
 	if (D && TourPontos.Num() >= 2)
 	{
 		const int32 N = TourPontos.Num();
-		const int32 I = FMath::Clamp(FMath::FloorToInt(MPVooS), 0, N - 2);
-		const float Comp = FMath::Max(50.f, FVector::Dist(TourPontos[I], TourPontos[I + 1]));
-		MPVooS += Dt * 140.f / Comp;
+		auto Comp = [this, N](float S)
+		{
+			const int32 I = FMath::Clamp(FMath::FloorToInt(S), 0, N - 2);
+			return FMath::Max(50.f, (float)FVector::Dist(TourPontos[I], TourPontos[I + 1]));
+		};
+		MPVooS += Dt * 150.f / Comp(MPVooS);
 		bool bVolta = false;
-		if (MPVooS >= N - 1) { MPVooS = 0.f; bVolta = true; }
-		const FTransform T = PontoNoPercurso(MPVooS);
-		const FRotator R = bVolta ? T.Rotator() : FMath::RInterpTo(D->GetActorRotation(), T.Rotator(), Dt, 2.f);
-		D->SetActorLocationAndRotation(T.GetLocation(), R);
+		if (MPVooS >= N - 1) { MPVooS = 0.35f; bVolta = true; }
+		const float SDrone = MPVooS;
+		const float SCam = FMath::Max(0.f, SDrone - 135.f / Comp(SDrone));
+		const FTransform TD = PontoNoPercurso(SDrone);
+		const FTransform TC = PontoNoPercurso(SCam);
+		const float Bal = FMath::Sin(MPRelogio * 1.7f) * 4.f;
+		FVector PosDrone = TD.GetLocation() + FVector(0, 0, 8.f + Bal);
+		FVector PosCam = TC.GetLocation() + FVector(0, 0, 32.f);
+		if (AActor* A = DroneTitulo.Get())
+		{
+			const FRotator Antes = A->GetActorRotation();
+			FRotator Alvo = TD.Rotator();
+			const float GiroYaw = FMath::FindDeltaAngleDegrees(Antes.Yaw, Alvo.Yaw);
+			Alvo.Pitch = -9.f + Alvo.Pitch * 0.5f;                       // inclinado para a frente (está voando)
+			Alvo.Roll = FMath::Clamp(GiroYaw * 2.5f, -28.f, 28.f);      // deita nas curvas
+			const FRotator R = bVolta ? Alvo : FMath::RInterpTo(Antes, Alvo, Dt, 3.5f);
+			A->SetActorLocationAndRotation(PosDrone, R);
+			AnguloHelices = FMath::Fmod(AnguloHelices + Dt * 2600.f, 360.f);
+			for (int32 i = 0; i < HelicesTitulo.Num(); ++i)
+			{
+				if (UStaticMeshComponent* H = HelicesTitulo[i].Get()) H->SetRelativeRotation(FRotator(0.f, (i == 0 || i == 3) ? AnguloHelices : -AnguloHelices, 0.f));
+			}
+			// a câmera olha para o drone, um pouco à frente dele (ele fica no terço direito da tela)
+			const FVector Olhar = PosDrone + TD.GetRotation().GetForwardVector() * 60.f - TD.GetRotation().GetRightVector() * 22.f;
+			const FRotator RC = (Olhar - PosCam).Rotation();
+			D->SetActorLocationAndRotation(PosCam, bVolta ? RC : FMath::RInterpTo(D->GetActorRotation(), RC, Dt, 4.f));
+		}
+		else
+		{
+			const FRotator R = bVolta ? TD.Rotator() : FMath::RInterpTo(D->GetActorRotation(), TD.Rotator(), Dt, 2.f);
+			D->SetActorLocationAndRotation(TD.GetLocation(), R);
+		}
 		const float Fim = (N - 1) - MPVooS;
-		MPEscuro = FMath::Clamp(FMath::Max(1.f - MPVooS / 0.35f, 1.f - Fim / 0.35f), 0.f, 1.f);
+		MPEscuro = FMath::Clamp(FMath::Max(1.f - (MPVooS - 0.35f) / 0.3f, 1.f - Fim / 0.35f), 0.f, 1.f);
 	}
 	else
 	{
 		MPEscuro = 0.f;
 	}
 
-	// prints de conferência (-fotomenu): cartão do prédio, cartão do campo, sai
+	// prints de conferência (-fotomenu): abertura, mapas, desafios do campo, sai
 	if (bFotoMenu)
 	{
 		FotoMenuT += Dt;
-		if (FotoMenuFase == 0 && FotoMenuT > 6.f)
-		{
-			FScreenshotRequest::RequestScreenshot(PastaTestes / TEXT("menu_principal_predio.png"), true, false);
-			FotoMenuFase = 1;
-		}
-		else if (FotoMenuFase == 1 && FotoMenuT > 7.f)
-		{
-			MPCartao = (int32)ECartaoMapa::Campo;
-			MPLinha = 0;
-			FotoMenuFase = 2;
-		}
-		else if (FotoMenuFase == 2 && FotoMenuT > 8.5f)
-		{
-			FScreenshotRequest::RequestScreenshot(PastaTestes / TEXT("menu_principal_campo.png"), true, false);
-			FotoMenuFase = 3;
-		}
-		else if (FotoMenuFase == 3 && FotoMenuT > 10.f)
-		{
-			FPlatformMisc::RequestExit(false);
-		}
+		auto Foto = [this](const TCHAR* Nome) { FScreenshotRequest::RequestScreenshot(PastaTestes / Nome, true, false); };
+		if (FotoMenuFase == 0 && FotoMenuT > 7.f) { Foto(TEXT("menu_1_abertura.png")); FotoMenuFase = 1; }
+		else if (FotoMenuFase == 1 && FotoMenuT > 8.f) { IrParaTela(ETelaMP::Mapas); MPCartao = (int32)ECartaoMapa::Campo; FotoMenuFase = 2; }
+		else if (FotoMenuFase == 2 && FotoMenuT > 10.f) { Foto(TEXT("menu_2_mapas.png")); FotoMenuFase = 3; }
+		else if (FotoMenuFase == 3 && FotoMenuT > 11.f) { MPCartao = (int32)ECartaoMapa::Usina; FotoMenuFase = 4; }
+		else if (FotoMenuFase == 4 && FotoMenuT > 12.5f) { Foto(TEXT("menu_3_usina.png")); FotoMenuFase = 5; }
+		else if (FotoMenuFase == 5 && FotoMenuT > 13.5f) { MPCartao = (int32)ECartaoMapa::Campo; IrParaTela(ETelaMP::Desafios); FotoMenuFase = 6; }
+		else if (FotoMenuFase == 6 && FotoMenuT > 15.f) { Foto(TEXT("menu_4_desafios.png")); FotoMenuFase = 7; }
+		else if (FotoMenuFase == 7 && FotoMenuT > 16.f) { AbrirMenu(true); CategoriaSel = (int32)ECategoriaMenu::Video; FotoMenuFase = 8; }
+		else if (FotoMenuFase == 8 && FotoMenuT > 17.5f) { Foto(TEXT("menu_5_secoes.png")); FotoMenuFase = 9; }
+		else if (FotoMenuFase == 9 && FotoMenuT > 18.5f) { EntrarCategoria(ECategoriaMenu::Audio); FotoMenuFase = 10; }
+		else if (FotoMenuFase == 10 && FotoMenuT > 20.f) { Foto(TEXT("menu_6_audio.png")); FotoMenuFase = 11; }
+		else if (FotoMenuFase == 11 && FotoMenuT > 21.f) { FPlatformMisc::RequestExit(false); }
 		return;
 	}
 
@@ -1539,7 +1761,6 @@ void APredioGameMode::TickMenuPrincipal(float Dt)
 		for (const FKey& K : Teclas) if (this->Apertou(K)) return true;
 		return false;
 	};
-	const int32 NCart = (int32)ECartaoMapa::Total;
 	int32 V = 0, Hz = 0;
 	if (Apertou({ EKeys::Up, EKeys::W, EKeys::Gamepad_DPad_Up })) V = -1;
 	if (Apertou({ EKeys::Down, EKeys::S, EKeys::Gamepad_DPad_Down })) V = 1;
@@ -1557,40 +1778,58 @@ void APredioGameMode::TickMenuPrincipal(float Dt)
 	if (DirH != 0 && DirH != UltimaDirHoriz) Hz = DirH;
 	UltimaDirVert = DirV;
 	UltimaDirHoriz = DirH;
+	const bool bConfirma = Apertou({ EKeys::Enter, EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom });
+	const bool bVolta = Apertou({ EKeys::Escape, EKeys::Gamepad_FaceButton_Right, EKeys::BackSpace });
+	const bool bStart = Apertou({ EKeys::Gamepad_Special_Right });
 
-	if (Hz != 0) { MPCartao = (MPCartao + Hz + NCart) % NCart; MPLinha = 0; }
-	if (V != 0) { const int32 NL = NumLinhasMP(); MPLinha = (MPLinha + V + NL) % NL; }
-	if (Apertou({ EKeys::Escape, EKeys::Gamepad_FaceButton_Right, EKeys::BackSpace })) MPLinha = NumLinhasMP() - 1;
-	if (Apertou({ EKeys::Gamepad_Special_Right }))
+	switch (TelaMP)
 	{
-		MPLinha = NumLinhasMP() - 2;
+	case ETelaMP::Titulo:
+		if (V != 0) MPTitulo = (MPTitulo + V + 3) % 3;
+		if (bVolta) MPTitulo = 2;
+		if (bStart) { MPTitulo = 1; ConfirmarMenuPrincipal(); return; }
+		break;
+	case ETelaMP::Mapas:
+		if (Hz != 0) MPCartao = (MPCartao + Hz + (int32)ECartaoMapa::Total) % (int32)ECartaoMapa::Total;
+		if (bVolta) { IrParaTela(ETelaMP::Titulo); return; }
+		break;
+	case ETelaMP::Desafios:
+		if (V != 0) { const int32 NL = NumLinhasMP(); MPLinha = (MPLinha + V + NL) % NL; }
+		if (bVolta) { IrParaTela(ETelaMP::Mapas); return; }
+		break;
+	}
+	if (bConfirma)
+	{
 		ConfirmarMenuPrincipal();
 		return;
 	}
-	if (Apertou({ EKeys::Enter, EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom }))
-	{
-		ConfirmarMenuPrincipal();
-		return;
-	}
 
+	// mouse
 	float MX = 0.f, MY = 0.f;
 	if (PC->GetMousePosition(MX, MY))
 	{
 		const FVector2D M(MX, MY);
 		const bool bMexeu = FVector2D::Distance(M, UltimoMouse) > 1.5f;
 		UltimoMouse = M;
-		for (int32 c = 0; c < AreaCartoes.Num(); ++c)
+		const bool bClique = this->Apertou(EKeys::LeftMouseButton);
+		if (this->Apertou(EKeys::RightMouseButton) && TelaMP != ETelaMP::Titulo)
 		{
-			if (!AreaCartoes[c].bIsValid || !AreaCartoes[c].IsInside(M)) continue;
-			if ((bMexeu || this->Apertou(EKeys::LeftMouseButton)) && MPCartao != c) { MPCartao = c; MPLinha = 0; }
+			IrParaTela(TelaMP == ETelaMP::Desafios ? ETelaMP::Mapas : ETelaMP::Titulo);
+			return;
 		}
-		for (int32 l = 0; l < AreaLinhas.Num() && l < NumLinhasMP(); ++l)
+		if (bClique && AreaVoltarMP.bIsValid && AreaVoltarMP.IsInside(M) && TelaMP != ETelaMP::Titulo)
 		{
-			if (!AreaLinhas[l].bIsValid || !AreaLinhas[l].IsInside(M)) continue;
-			if (bMexeu) MPLinha = l;
-			if (this->Apertou(EKeys::LeftMouseButton))
+			IrParaTela(TelaMP == ETelaMP::Desafios ? ETelaMP::Mapas : ETelaMP::Titulo);
+			return;
+		}
+		const TArray<FBox2D>& Areas = TelaMP == ETelaMP::Titulo ? AreaTitulo : (TelaMP == ETelaMP::Mapas ? AreaCartoes : AreaLinhas);
+		for (int32 i = 0; i < Areas.Num(); ++i)
+		{
+			if (!Areas[i].bIsValid || !Areas[i].IsInside(M)) continue;
+			int32& Sel = TelaMP == ETelaMP::Titulo ? MPTitulo : (TelaMP == ETelaMP::Mapas ? MPCartao : MPLinha);
+			if (bMexeu || bClique) Sel = i;
+			if (bClique)
 			{
-				MPLinha = l;
 				ConfirmarMenuPrincipal();
 				return;
 			}

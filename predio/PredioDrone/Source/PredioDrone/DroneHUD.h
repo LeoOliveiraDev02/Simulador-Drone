@@ -26,6 +26,8 @@ private:
 	void DesenharMenu(APredioGameMode* GM);
 	void DesenharMenuPrincipal(APredioGameMode* GM);
 	void Ilustracao(int32 Cartao, float X, float Y, float W, float H, bool bSel);
+	void Imagem(class UTexture2D* Tex, float X, float Y, float W, float H, const FLinearColor& Cor);
+	void Cadeado(FVector2D C, float S, const FLinearColor& Cor);
 	void DesenharObjetivo(APredioGameMode* GM, const class ADronePawn* D, float E);
 	void DesenharResultado(APredioGameMode* GM, float E);
 	FSlateFontInfo Fonte(float Px, const TCHAR* Face) const;
@@ -42,6 +44,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UFont> Roboto;
+
+	UPROPERTY()
+	TObjectPtr<class UTexture2D> ImgUsina;
+	bool bTentouUsina = false;
 
 	float Esc = 1.f; // escala do menu (pixels por unidade de desenho)
 };
