@@ -4,6 +4,10 @@
 shader_type canvas_item;
 render_mode unshaded, blend_disabled;
 
+// imagem de entrada (o script passa a textura do SubViewport; não usa o TEXTURE embutido,
+// que não pode ser passado para funções em todos os renderizadores)
+uniform sampler2D fonte : filter_nearest;
+
 // nitidez em "stops": 0 = máxima, 1 = metade, 2 = um quarto
 uniform float nitidez : hint_range(0.0, 2.0) = 0.25;
 
@@ -12,17 +16,17 @@ vec3 px(sampler2D t, ivec2 p, ivec2 m) {
 }
 
 void fragment() {
-	vec2 tam = 1.0 / TEXTURE_PIXEL_SIZE;
+	vec2 tam = vec2(textureSize(fonte, 0));
 	ivec2 m = ivec2(tam) - ivec2(1);
 	ivec2 p = clamp(ivec2(UV * tam), ivec2(0), m);
 	//   b
 	// d e f
 	//   h
-	vec3 b = px(TEXTURE, p + ivec2(0, -1), m);
-	vec3 d = px(TEXTURE, p + ivec2(-1, 0), m);
-	vec3 e = px(TEXTURE, p, m);
-	vec3 f = px(TEXTURE, p + ivec2(1, 0), m);
-	vec3 h = px(TEXTURE, p + ivec2(0, 1), m);
+	vec3 b = px(fonte, p + ivec2(0, -1), m);
+	vec3 d = px(fonte, p + ivec2(-1, 0), m);
+	vec3 e = px(fonte, p, m);
+	vec3 f = px(fonte, p + ivec2(1, 0), m);
+	vec3 h = px(fonte, p + ivec2(0, 1), m);
 
 	vec3 mn4 = min(min(b, d), min(f, h));
 	vec3 mx4 = max(max(b, d), max(f, h));

@@ -1,9 +1,13 @@
 // AMD FidelityFX Super Resolution 1.0 — EASU (Edge Adaptive Spatial Upsampling)
 // Portado à mão do ffx_fsr1.h (AMD, licença MIT) para o renderizador de Compatibilidade (OpenGL) do Godot,
-// que não tem o FSR 1 embutido. Lê a imagem pequena do 3D (TEXTURE) e desenha no tamanho da tela.
+// que não tem o FSR 1 embutido. Lê a imagem pequena do 3D (fonte) e desenha no tamanho da tela.
 // 12 amostras em volta do pixel; detecta a direção da borda e usa um filtro tipo Lanczos esticado nela.
 shader_type canvas_item;
 render_mode unshaded, blend_disabled;
+
+// imagem de entrada (o script passa a textura do SubViewport; não usa o TEXTURE embutido,
+// que não pode ser passado para funções em todos os renderizadores)
+uniform sampler2D fonte : filter_nearest;
 
 vec3 px(sampler2D t, ivec2 p, ivec2 m) {
 	return texelFetch(t, clamp(p, ivec2(0), m), 0).rgb;
@@ -50,7 +54,7 @@ void easu_tap(inout vec3 acc, inout float acc_w, vec2 off, vec2 dir, vec2 len2, 
 }
 
 void fragment() {
-	vec2 tam = 1.0 / TEXTURE_PIXEL_SIZE;
+	vec2 tam = vec2(textureSize(fonte, 0));
 	ivec2 m = ivec2(tam) - ivec2(1);
 	// posição do pixel de saída na imagem pequena (centro do pixel)
 	vec2 pp = UV * tam - 0.5;
@@ -62,18 +66,18 @@ void fragment() {
 	//  e f g h
 	//  i j k l
 	//    n o
-	vec3 b = px(TEXTURE, f0 + ivec2(0, -1), m);
-	vec3 c = px(TEXTURE, f0 + ivec2(1, -1), m);
-	vec3 e = px(TEXTURE, f0 + ivec2(-1, 0), m);
-	vec3 f = px(TEXTURE, f0, m);
-	vec3 g = px(TEXTURE, f0 + ivec2(1, 0), m);
-	vec3 h = px(TEXTURE, f0 + ivec2(2, 0), m);
-	vec3 i = px(TEXTURE, f0 + ivec2(-1, 1), m);
-	vec3 j = px(TEXTURE, f0 + ivec2(0, 1), m);
-	vec3 k = px(TEXTURE, f0 + ivec2(1, 1), m);
-	vec3 l = px(TEXTURE, f0 + ivec2(2, 1), m);
-	vec3 n = px(TEXTURE, f0 + ivec2(0, 2), m);
-	vec3 o = px(TEXTURE, f0 + ivec2(1, 2), m);
+	vec3 b = px(fonte, f0 + ivec2(0, -1), m);
+	vec3 c = px(fonte, f0 + ivec2(1, -1), m);
+	vec3 e = px(fonte, f0 + ivec2(-1, 0), m);
+	vec3 f = px(fonte, f0, m);
+	vec3 g = px(fonte, f0 + ivec2(1, 0), m);
+	vec3 h = px(fonte, f0 + ivec2(2, 0), m);
+	vec3 i = px(fonte, f0 + ivec2(-1, 1), m);
+	vec3 j = px(fonte, f0 + ivec2(0, 1), m);
+	vec3 k = px(fonte, f0 + ivec2(1, 1), m);
+	vec3 l = px(fonte, f0 + ivec2(2, 1), m);
+	vec3 n = px(fonte, f0 + ivec2(0, 2), m);
+	vec3 o = px(fonte, f0 + ivec2(1, 2), m);
 
 	float bl = luma(b); float cl = luma(c); float el = luma(e); float fl = luma(f);
 	float gl = luma(g); float hl = luma(h); float il = luma(i); float jl = luma(j);

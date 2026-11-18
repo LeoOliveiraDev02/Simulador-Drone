@@ -8,6 +8,7 @@ extends Node3D
 ##   --optiplex          PC com vídeo integrado antigo (Intel HD 2500 etc.): mapa leve + FSR 1 feito à mão.
 ##                       Liga sozinho quando o jogo abre no renderizador de Compatibilidade (OpenGL);
 ##                       --sem-optiplex desliga; --grafico=0/1/2 fixa o nível (baixo/médio/alto).
+##   --teste-desempenho  decola e roda o teste de desempenho (o mesmo do F3) sozinho
 
 const ZONA_MORTA := 0.08
 const ORDENS_RADIO := [["A", "E", "T", "R"], ["T", "A", "E", "R"], ["A", "E", "R", "T"]]
@@ -22,6 +23,7 @@ var toque: ControleToque
 var movel_ativo := false
 var optiplex := false            # PC fraco no OpenGL (ver --optiplex)
 var fsr1: Fsr1Compat
+var teste_desempenho: TesteDesempenho
 var grafico := 1                  # celular: 0 baixo, 1 médio, 2 alto (ajusta sozinho se o FPS cair)
 var grafico_auto := true
 var _tempo_fps_baixo := 0.0
@@ -172,6 +174,10 @@ func _ready() -> void:
 	camera.alvo = drone
 	camera.current = true
 	camera.posicionar_ja()
+	if "--teste-desempenho" in OS.get_cmdline_user_args():
+		# decola, espera estabilizar e roda o teste de desempenho sozinho (igual a apertar F3)
+		get_tree().create_timer(6.0).timeout.connect(_decolar_para_teste)
+		get_tree().create_timer(14.0).timeout.connect(_iniciar_teste_desempenho)
 	if optiplex:
 		fsr1 = Fsr1Compat.new()
 		fsr1.name = "FSR1"
@@ -355,6 +361,13 @@ func _unhandled_input(ev: InputEvent) -> void:
 				tutorial_t = 0.0
 			# trocar o tipo de controle e inverter eixos mexe muito no voo: só com Shift
 			# (antes F5/F6/F7 ficavam ao lado do F8 e eram apertadas sem querer)
+			KEY_F3:
+				# teste de desempenho automático (ver teste_desempenho.gd)
+				if teste_desempenho and is_instance_valid(teste_desempenho):
+					teste_desempenho.queue_free()
+					teste_desempenho = null
+				else:
+					_iniciar_teste_desempenho()
 			KEY_F5:
 				if ev.shift_pressed:
 					mapa_controle = (maxi(mapa_controle, 0) + 1) % NOMES_MAPA.size()
@@ -425,6 +438,21 @@ func _botao_toque(nome: String) -> void:
 		"vento":
 			vento.velocidade = fmod(vento.velocidade + 1.5, 9.0)
 			hud.mostrar("Vento: " + vento.texto(), 1.5)
+
+
+func _decolar_para_teste() -> void:
+	if drone and drone.estado == "pousado":
+		drone.decolar_ou_pousar()
+
+
+func _iniciar_teste_desempenho() -> void:
+	if teste_desempenho and is_instance_valid(teste_desempenho):
+		return
+	grafico_auto = false   # o ajuste automático mexeria na resolução no meio das medições
+	teste_desempenho = TesteDesempenho.new()
+	teste_desempenho.voo = self
+	teste_desempenho.mapa = mapa
+	add_child(teste_desempenho)
 
 
 func _aplicar_grafico() -> void:

@@ -11,6 +11,9 @@ uniform vec2 vento_dir = vec2(1.0, 0.35);
 uniform float vento_forca = 0.05;
 uniform float altura_ref = 4.0;
 uniform float corte = 0.3;
+// mapa leve (celular/OptiPlex): de longe o mipmap "apaga" o recorte e a copa vira pontinhos;
+// aumenta o alfa conforme o nível do mipmap para manter a copa cheia (0 = desligado)
+uniform float compensar_mip = 0.0;
 varying vec3 wpos_f;
 
 void vertex() {
@@ -28,6 +31,11 @@ void vertex() {
 
 void fragment() {
 	vec4 c = texture(alb, UV) * tom;
+	if (compensar_mip > 0.0) {
+		vec2 tx = UV * vec2(textureSize(alb, 0));
+		float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx)))));
+		c.a *= 1.0 + lod * compensar_mip;
+	}
 	ALBEDO = c.rgb * sombra_nuvem(wpos_f);
 	ALPHA = c.a;
 	ALPHA_SCISSOR_THRESHOLD = corte;

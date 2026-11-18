@@ -67,6 +67,8 @@ func _ready() -> void:
 	_tela.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	camada.add_child(_tela)
 
+	_mat_easu.set_shader_parameter("fonte", _pequena.get_texture())
+	_mat_rcas.set_shader_parameter("fonte", _saida.get_texture())
 	var raiz := get_viewport()
 	raiz.disable_3d = true
 	raiz.audio_listener_enable_3d = false

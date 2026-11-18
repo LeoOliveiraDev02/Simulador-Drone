@@ -12,6 +12,7 @@ var blocos_grama: Array[MultiMeshInstance3D] = []
 var luz_sol: DirectionalLight3D
 var ambiente: Environment
 var arvores_longe: Array[Node3D] = []
+var plantas: Array[Node3D] = []   # todas as árvores e arbustos plantados (teste de desempenho)
 var movel := false    # celular (Android): menos capim, árvores mais simples, sombras menores
 var previa := false   # prévia no servidor sem placa de vídeo: quase sem capim
 
@@ -895,6 +896,8 @@ func _ajustar_folhas(n: Node, alt_ref := 4.0) -> void:
 					if bm.normal_enabled and bm.normal_texture:
 						sm.set_shader_parameter("nor", bm.normal_texture)
 					sm.set_shader_parameter("altura_ref", alt_ref)
+					if movel:
+						sm.set_shader_parameter("compensar_mip", 0.35)
 					mi.mesh.surface_set_material(s, sm)
 					mats_folhas.append(sm)
 	for f in n.get_children():
@@ -917,6 +920,7 @@ func _plantar(nome: String, x: float, z: float, escala: float, giro := -1.0, esc
 		versao = "pc" if dist < 160.0 else "movel"
 	var no: Node3D = _cena(nome, versao).instantiate()
 	add_child(no)
+	plantas.append(no)
 	no.position = Vector3(x, altura(x, z) - 0.05, z)
 	no.rotation.y = rng.randf() * TAU if giro < 0.0 else giro
 	no.scale = Vector3.ONE * escala if escala_v == Vector3.ZERO else escala_v
