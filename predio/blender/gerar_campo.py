@@ -875,6 +875,8 @@ MOLDES = {}
 
 def molde(bm):
     """copia vértices, faces e material de um bmesh (para espalhar milhares de cópias com numpy)."""
+    bm = bm.copy()
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])   # o FBX SDK não triangula malhas gigantes: já vai em triângulos
     bm.verts.ensure_lookup_table()
     v = np.array([vv.co[:] for vv in bm.verts], dtype=np.float64)
     f = [[vv.index for vv in ff.verts] for ff in bm.faces]
