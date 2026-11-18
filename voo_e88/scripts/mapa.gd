@@ -63,6 +63,22 @@ const HORAS := [
 const NOMES_HORA := ["TARDE COM NUVENS", "PÔR DO SOL", "CÉU LIMPO"]
 var obstaculos: Array = []  # [centro xz, raio, altura do topo] — fazem sombra de vento
 
+# chão no estilo PS2 (F4 alterna com o chão atual; ver seção "chão PS2")
+var usar_chao_ps2 := false     # montar o chão PS2 (o voo liga no OptiPlex ou com --chao-ps2)
+var chao_ps2_ativo := false
+var chao_atual: MeshInstance3D
+var chao_ps2: MeshInstance3D
+var mat_chao_ps2: ShaderMaterial
+var sombra_drone: MeshInstance3D
+var _ps2_coords := PackedFloat32Array()
+var _ps2_alt := PackedFloat32Array()
+var _ps2_normais := PackedVector3Array()
+var _ps2_arrays: Array = []
+var _ps2_mesh: ArrayMesh
+var _ps2_sombra_tinha := true
+var _ps2_morros := PackedFloat32Array()   # alturas numa grade de 16 m (sombra dos morros)
+var _ps2_sombreiros: Array = []             # [centro xz, raio, topo] de árvores, arbustos e galpão
+
 
 signal progresso(fracao: float, texto: String)
 
@@ -98,6 +114,9 @@ func montar(baixa := false) -> void:
 	_montar_ambiente()
 	await _passo(0.08, "Relevo do pasto")
 	_montar_terreno()
+	if usar_chao_ps2:
+		await _passo(0.14, "Chão estilo PS2")
+		_montar_chao_ps2()
 	await _passo(0.2, "Chão firme (colisão do terreno)")
 	_colisao_terreno()
 	await _passo(0.3, "Açude")
@@ -434,6 +453,7 @@ func _montar_terreno() -> void:
 	mi.material_override = sm
 	mi.name = "Terreno"
 	add_child(mi)
+	chao_atual = mi
 
 
 func _montar_agua() -> void:
@@ -1309,7 +1329,8 @@ func set_drone_na_grama(p: Vector3, forca: float) -> void:
 ## nível de gráfico no celular: 0 baixo, 1 médio, 2 alto
 func nivel_grafico(n: int) -> void:
 	if luz_sol:
-		luz_sol.shadow_enabled = n >= 1
+		_ps2_sombra_tinha = n >= 1
+		luz_sol.shadow_enabled = n >= 1 and not chao_ps2_ativo
 	for b in blocos_grama:
 		b.visibility_range_end = [18.0, 30.0, 60.0][n]
 	for a in arvores_longe:
@@ -1330,7 +1351,8 @@ func nivel_grafico_pc(n: int) -> void:
 		ambiente.ssil_enabled = n >= 3
 		ambiente.glow_enabled = true
 	if luz_sol:
-		luz_sol.shadow_enabled = true
+		_ps2_sombra_tinha = true
+		luz_sol.shadow_enabled = not chao_ps2_ativo
 		luz_sol.directional_shadow_max_distance = [70.0, 140.0, 220.0, 320.0][n]
 		luz_sol.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if n == 0 else DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 		luz_sol.shadow_blur = 1.5 if n >= 3 else 1.0
@@ -1358,6 +1380,8 @@ func definir_hora(i: int) -> void:
 		luz_sol.look_at_from_position(Vector3.ZERO, -dir_sol, Vector3.UP)
 		luz_sol.light_color = h[3]
 		luz_sol.light_energy = h[4]
+		if chao_ps2:
+			_assar_luz_ps2(dir_sol, h)
 	if ambiente:
 		ambiente.tonemap_exposure = h[6]
 		ambiente.fog_light_color = h[7]
@@ -1581,3 +1605,374 @@ func _montar_flores() -> void:
 		mmi2.visibility_range_end = 70.0
 		blocos_flores.append(mmi2)
 		add_child(mmi2)
+
+
+# ------------------------------------------------------------------ chão PS2
+# O jeito da velha guarda (PDF "Otimização da velha guarda"):
+#  - malha com vértices a cada 4 m na área de voo e células crescendo até o horizonte;
+#  - a luz é calculada UMA vez (ao montar e ao trocar a hora) e gravada nos vértices,
+#    com sombra dos morros e "manchas" de sombra das árvores, como as cores dia/noite do San Andreas;
+#  - shader sem luz por pixel, 5 texturas pequenas; sem capim 3D e sem sombra do sol em tempo real;
+#  - sombra redonda debaixo do drone (como no SWAT de PS2).
+
+const PS2_PASSO := 4.0
+const PS2_INTERNO := 512.0
+const PS2_ANEIS := 30
+const PS2_CRESCE := 1.15
+const PS2_MASCARA := "res://texturas_ps2/mascara.png"
+const PS2_MASC_AREA := Vector4(-512.0, -1536.0, 1024.0, 2048.0)
+const PS2_MASC_TAM := Vector2i(512, 1024)   # 2 m por pixel
+const PS2_MORRO_PASSO := 16.0
+const PS2_MORRO_N := 257                    # 257 x 257 pontos de 16 m = 4 x 4 km
+
+
+func _ps2_eixo() -> PackedFloat32Array:
+	var lado := PackedFloat32Array()
+	var x := PS2_INTERNO
+	var passo := PS2_PASSO
+	for k in PS2_ANEIS:
+		passo *= PS2_CRESCE
+		x += passo
+		lado.append(x)
+	var c := PackedFloat32Array()
+	for k in range(PS2_ANEIS - 1, -1, -1):
+		c.append(-lado[k])
+	var n_int := int(2.0 * PS2_INTERNO / PS2_PASSO)
+	for i in n_int + 1:
+		c.append(-PS2_INTERNO + i * PS2_PASSO)
+	c.append_array(lado)
+	return c
+
+
+func _montar_chao_ps2() -> void:
+	var t0 := Time.get_ticks_msec()
+	_ps2_coords = _ps2_eixo()
+	var c := _ps2_coords
+	var n := c.size()
+	var verts := PackedVector3Array()
+	var cores := PackedColorArray()
+	var uv2 := PackedVector2Array()
+	verts.resize(n * n)
+	cores.resize(n * n)
+	uv2.resize(n * n)
+	_ps2_alt.resize(n * n)
+	_ps2_normais.resize(n * n)
+	for j in n:
+		var z := c[j]
+		for i in n:
+			var x := c[i]
+			var k := j * n + i
+			var h := altura(x, z)
+			_ps2_alt[k] = h
+			verts[k] = Vector3(x, h, z)
+			# secura do pasto (manchas grandes de capim seco), vai no alfa da cor do vértice
+			var s := ruido_a.get_noise_2d(x * 0.006 + 13.0, z * 0.006) * 0.5 + 0.5
+			s = clampf(s * 1.4 - 0.62 + smoothstep(300.0, 1200.0, Vector2(x, z).length()) * 0.3, 0.0, 1.0)
+			cores[k] = Color(1, 1, 1, s)
+			uv2[k] = Vector2(0.8, 1.0)
+	for j in n:
+		for i in n:
+			var i0 := maxi(i - 1, 0)
+			var i1 := mini(i + 1, n - 1)
+			var j0 := maxi(j - 1, 0)
+			var j1 := mini(j + 1, n - 1)
+			var hx := _ps2_alt[j * n + i1] - _ps2_alt[j * n + i0]
+			var hz := _ps2_alt[j1 * n + i] - _ps2_alt[j0 * n + i]
+			_ps2_normais[j * n + i] = Vector3(-hx / (c[i1] - c[i0]), 1.0, -hz / (c[j1] - c[j0])).normalized()
+	var indices := PackedInt32Array()
+	indices.resize((n - 1) * (n - 1) * 6)
+	var q := 0
+	for j in n - 1:
+		for i in n - 1:
+			var a := j * n + i
+			var b := a + 1
+			var d := a + n
+			var e := d + 1
+			indices[q] = a; indices[q + 1] = b; indices[q + 2] = d
+			indices[q + 3] = b; indices[q + 4] = e; indices[q + 5] = d
+			q += 6
+	_ps2_arrays = []
+	_ps2_arrays.resize(Mesh.ARRAY_MAX)
+	_ps2_arrays[Mesh.ARRAY_VERTEX] = verts
+	_ps2_arrays[Mesh.ARRAY_NORMAL] = _ps2_normais
+	_ps2_arrays[Mesh.ARRAY_COLOR] = cores
+	_ps2_arrays[Mesh.ARRAY_TEX_UV2] = uv2
+	_ps2_arrays[Mesh.ARRAY_INDEX] = indices
+	_ps2_mesh = ArrayMesh.new()
+	_ps2_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _ps2_arrays)
+
+	var sm := ShaderMaterial.new()
+	sm.shader = load("res://shaders/terreno_ps2.gdshader")
+	for nome in ["capim_verde", "capim_seco", "terra_vermelha", "terra_batida"]:
+		sm.set_shader_parameter(nome, load("res://texturas_ps2/%s.png" % nome))
+	sm.set_shader_parameter("mascara", _mascara_ps2())
+	sm.set_shader_parameter("mascara_area", PS2_MASC_AREA)
+	mat_chao_ps2 = sm
+
+	chao_ps2 = MeshInstance3D.new()
+	chao_ps2.name = "ChaoPS2"
+	chao_ps2.mesh = _ps2_mesh
+	chao_ps2.material_override = sm
+	chao_ps2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	chao_ps2.visible = false
+	add_child(chao_ps2)
+
+	# sombra redonda do drone: um quadrado com degradê, sempre "deitado" no chão
+	var g := Gradient.new()
+	g.set_color(0, Color(0, 0, 0, 1))
+	g.set_color(1, Color(0, 0, 0, 0))
+	g.add_point(0.55, Color(0, 0, 0, 0.85))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.0, 0.5)
+	gt.width = 64
+	gt.height = 64
+	var ms := StandardMaterial3D.new()
+	ms.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ms.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ms.albedo_texture = gt
+	ms.albedo_color = Color(0.03, 0.04, 0.02, 0.78)
+	ms.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ms.render_priority = 1
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(1, 1)
+	sombra_drone = MeshInstance3D.new()
+	sombra_drone.name = "SombraDrone"
+	sombra_drone.mesh = pm
+	sombra_drone.material_override = ms
+	sombra_drone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sombra_drone.visible = false
+	add_child(sombra_drone)
+	print("Chão PS2: %d vértices, %d triângulos, %d ms" % [n * n, (n - 1) * (n - 1) * 2, Time.get_ticks_msec() - t0])
+
+
+## máscara da estrada (R), lama do açude (G) e terra batida da base/galpão (B), 2 m por pixel.
+## Vem pronta do disco; sem o arquivo, calcula (alguns segundos). --gerar-mascara-ps2 grava o arquivo.
+func _mascara_ps2() -> Texture2D:
+	var gravar := "--gerar-mascara-ps2" in OS.get_cmdline_user_args()
+	if ResourceLoader.exists(PS2_MASCARA) and not gravar:
+		return load(PS2_MASCARA)
+	var t0 := Time.get_ticks_msec()
+	var img := Image.create(PS2_MASC_TAM.x, PS2_MASC_TAM.y, false, Image.FORMAT_RGB8)
+	var px := PS2_MASC_AREA.z / PS2_MASC_TAM.x
+	for y in PS2_MASC_TAM.y:
+		var z := PS2_MASC_AREA.y + (y + 0.5) * px
+		for x in PS2_MASC_TAM.x:
+			var m := _mascara(PS2_MASC_AREA.x + (x + 0.5) * px, z)
+			img.set_pixel(x, y, Color(m.r, m.g, m.b))
+	print("Máscara do chão PS2 calculada em %d ms" % (Time.get_ticks_msec() - t0))
+	if gravar:
+		img.save_png(ProjectSettings.globalize_path(PS2_MASCARA))
+		print("Máscara gravada em ", PS2_MASCARA)
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+## altura exata da malha do chão PS2 (o triângulo em que o ponto cai)
+func altura_chao_ps2(x: float, z: float) -> float:
+	var c := _ps2_coords
+	var n := c.size()
+	var i := clampi(c.bsearch(x) - 1, 0, n - 2)
+	var j := clampi(c.bsearch(z) - 1, 0, n - 2)
+	var fx := clampf((x - c[i]) / (c[i + 1] - c[i]), 0.0, 1.0)
+	var fz := clampf((z - c[j]) / (c[j + 1] - c[j]), 0.0, 1.0)
+	var ha := _ps2_alt[j * n + i]
+	var hb := _ps2_alt[j * n + i + 1]
+	var hd := _ps2_alt[(j + 1) * n + i]
+	var he := _ps2_alt[(j + 1) * n + i + 1]
+	if fx + fz <= 1.0:
+		return ha + (hb - ha) * fx + (hd - ha) * fz
+	return he + (hd - he) * (1.0 - fx) + (hb - he) * (1.0 - fz)
+
+
+func _morro_alt(x: float, z: float) -> float:
+	# altura na grade de 16 m (bilinear), só para a sombra dos morros
+	var meio := (PS2_MORRO_N - 1) * 0.5
+	var gx := clampf(x / PS2_MORRO_PASSO + meio, 0.0, PS2_MORRO_N - 1.001)
+	var gz := clampf(z / PS2_MORRO_PASSO + meio, 0.0, PS2_MORRO_N - 1.001)
+	var i := int(gx)
+	var j := int(gz)
+	var fx := gx - i
+	var fz := gz - j
+	var k := j * PS2_MORRO_N + i
+	var a := lerpf(_ps2_morros[k], _ps2_morros[k + 1], fx)
+	var b := lerpf(_ps2_morros[k + PS2_MORRO_N], _ps2_morros[k + PS2_MORRO_N + 1], fx)
+	return lerpf(a, b, fz)
+
+
+## Calcula a luz do chão para a posição do sol e grava nos vértices (UV2.x = sol, UV2.y = céu).
+func _assar_luz_ps2(dir_sol: Vector3, hora: Array) -> void:
+	var t0 := Time.get_ticks_msec()
+	var c := _ps2_coords
+	var n := c.size()
+	var el := asin(clampf(dir_sol.y, 0.02, 1.0))
+	var tan_el := tan(el)
+	var s2 := Vector2(dir_sol.x, dir_sol.z).normalized()
+	var sombra := PackedFloat32Array()
+	sombra.resize(n * n)
+	sombra.fill(1.0)
+	var ceu := PackedFloat32Array()
+	ceu.resize(n * n)
+	for k in n * n:
+		ceu[k] = 0.62 + 0.38 * _ps2_normais[k].y
+
+	# 1) sombra dos morros: só com o sol baixo (com o sol alto, nenhum morro daqui faz sombra)
+	if el < deg_to_rad(28.0):
+		if _ps2_morros.is_empty():
+			_ps2_morros.resize(PS2_MORRO_N * PS2_MORRO_N)
+			var meio := (PS2_MORRO_N - 1) * 0.5
+			for j in PS2_MORRO_N:
+				for i in PS2_MORRO_N:
+					_ps2_morros[j * PS2_MORRO_N + i] = altura_chao_ps2((i - meio) * PS2_MORRO_PASSO, (j - meio) * PS2_MORRO_PASSO)
+		# grade de sombra de 16 m (macia), depois cada vértice lê dela
+		var luzg := PackedFloat32Array()
+		luzg.resize(PS2_MORRO_N * PS2_MORRO_N)
+		var meio := (PS2_MORRO_N - 1) * 0.5
+		for j in PS2_MORRO_N:
+			for i in PS2_MORRO_N:
+				var x := (i - meio) * PS2_MORRO_PASSO
+				var z := (j - meio) * PS2_MORRO_PASSO
+				var h0 := _ps2_morros[j * PS2_MORRO_N + i] + 0.5
+				var v := 1.0
+				for passo in range(1, 40):
+					var d := passo * 16.0
+					var raio := h0 + d * tan_el
+					if raio > 260.0:
+						break
+					var acima := _morro_alt(x + s2.x * d, z + s2.y * d) - raio
+					if acima > 0.0:
+						v = minf(v, clampf(1.0 - acima / 6.0, 0.0, 1.0))
+						if v <= 0.0:
+							break
+				luzg[j * PS2_MORRO_N + i] = v
+		for j in n:
+			for i in n:
+				var gx := clampf(c[i] / PS2_MORRO_PASSO + meio, 0.0, PS2_MORRO_N - 1.001)
+				var gz := clampf(c[j] / PS2_MORRO_PASSO + meio, 0.0, PS2_MORRO_N - 1.001)
+				var a := int(gx)
+				var b := int(gz)
+				var kk := b * PS2_MORRO_N + a
+				var v1 := lerpf(luzg[kk], luzg[kk + 1], gx - a)
+				var v2 := lerpf(luzg[kk + PS2_MORRO_N], luzg[kk + PS2_MORRO_N + 1], gx - a)
+				sombra[j * n + i] = lerpf(v1, v2, gz - b)
+
+	# 2) manchas de sombra das árvores e do galpão: uma "cápsula" deitada no chão, do lado oposto ao sol
+	if _ps2_sombreiros.is_empty():
+		for pl in plantas:
+			if is_instance_valid(pl):
+				var cx := _caixa_global(pl)
+				if cx.size.y > 1.0:
+					_ps2_sombreiros.append([Vector2(cx.get_center().x, cx.get_center().z), minf(cx.size.x, cx.size.z) * 0.42, cx.end.y])
+		for o in obstaculos:
+			if float(o[1]) > 5.0:      # galpão (as árvores já vieram da lista de plantas)
+				_ps2_sombreiros.append(o)
+	for o in _ps2_sombreiros:
+		var cen: Vector2 = o[0]
+		var r: float = o[1]
+		var base := altura(cen.x, cen.y)
+		var alt: float = float(o[2]) - base
+		if alt < 1.0:
+			continue
+		var p0 := cen - s2 * (alt * 0.3 / tan_el)
+		var p1 := cen - s2 * (alt * 0.85 / tan_el)
+		var rr := r * 1.15
+		var lo := Vector2(minf(p0.x, minf(p1.x, cen.x)), minf(p0.y, minf(p1.y, cen.y))) - Vector2(rr, rr)
+		var hi := Vector2(maxf(p0.x, maxf(p1.x, cen.x)), maxf(p0.y, maxf(p1.y, cen.y))) + Vector2(rr, rr)
+		var i0 := maxi(c.bsearch(lo.x) - 1, 0)
+		var i1 := mini(c.bsearch(hi.x) + 1, n)
+		var j0 := maxi(c.bsearch(lo.y) - 1, 0)
+		var j1 := mini(c.bsearch(hi.y) + 1, n)
+		var seg := p1 - p0
+		var seg2 := maxf(seg.length_squared(), 0.0001)
+		for j in range(j0, j1):
+			for i in range(i0, i1):
+				var p := Vector2(c[i], c[j])
+				var t := clampf((p - p0).dot(seg) / seg2, 0.0, 1.0)
+				var dist := p.distance_to(p0 + seg * t)
+				var k := j * n + i
+				var f := 1.0 - smoothstep(rr * 0.45, rr * 1.1, dist)
+				if f > 0.0:
+					sombra[k] *= 1.0 - f * 0.7
+				# debaixo da copa o céu também aparece menos
+				var dc := p.distance_to(cen)
+				if dc < rr:
+					ceu[k] *= lerpf(0.72, 1.0, dc / rr)
+
+	# 3) junta tudo nos vértices
+	var uv2: PackedVector2Array = _ps2_arrays[Mesh.ARRAY_TEX_UV2]
+	for k in n * n:
+		uv2[k] = Vector2(maxf(_ps2_normais[k].dot(dir_sol), 0.0) * sombra[k], ceu[k])
+	_ps2_arrays[Mesh.ARRAY_TEX_UV2] = uv2
+	_ps2_mesh.clear_surfaces()
+	_ps2_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _ps2_arrays)
+	var sol_cor: Color = hora[3]
+	var ceu_cor: Color = Color(hora[7]).lerp(Color(1, 1, 1), 0.25)
+	mat_chao_ps2.set_shader_parameter("sol_cor", sol_cor)
+	mat_chao_ps2.set_shader_parameter("sol_forca", float(hora[4]) * PS2_LUZ_SOL)
+	mat_chao_ps2.set_shader_parameter("ceu_cor", ceu_cor)
+	# sol baixo: o chão recebe pouco sol direto, então o céu (alaranjado) pesa mais, como no olho
+	mat_chao_ps2.set_shader_parameter("ceu_forca", PS2_LUZ_CEU * (1.0 + (1.0 - dir_sol.y) * 0.9))
+	var na_sombra := 0
+	for k in n * n:
+		if sombra[k] < 0.5:
+			na_sombra += 1
+	print("Luz do chão PS2 calculada em %d ms (%d sombras assadas, %d vértices na sombra)" % [Time.get_ticks_msec() - t0, _ps2_sombreiros.size(), na_sombra])
+
+
+const PS2_LUZ_SOL := 0.5
+const PS2_LUZ_CEU := 0.34
+
+
+## liga/desliga o chão PS2 (F4). Junto vão: capim 3D e flores (somem) e a sombra do sol (vira a
+## sombra redonda do drone + as manchas assadas no chão).
+func ativar_chao_ps2(v: bool) -> void:
+	if chao_ps2 == null:
+		if not v:
+			return
+		_montar_chao_ps2()
+		definir_hora(hora_atual)
+	chao_ps2_ativo = v
+	chao_ps2.visible = v
+	if chao_atual:
+		chao_atual.visible = not v
+	for b in blocos_grama:
+		if is_instance_valid(b):
+			b.visible = not v
+	for b in blocos_flores:
+		if is_instance_valid(b):
+			b.visible = not v
+	if luz_sol:
+		luz_sol.shadow_enabled = _ps2_sombra_tinha and not v
+	if not v and sombra_drone:
+		sombra_drone.visible = false
+
+
+## sombra redonda debaixo do drone (só com o chão PS2)
+func atualizar_sombra_drone(drone: RigidBody3D) -> void:
+	if not chao_ps2_ativo or sombra_drone == null:
+		return
+	var p := drone.global_position
+	var y := altura_chao_ps2(p.x, p.z)
+	var normal := Vector3.UP
+	var q := PhysicsRayQueryParameters3D.create(p, p + Vector3.DOWN * 80.0)
+	q.exclude = [drone.get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if not hit.is_empty() and hit.position.y > y + 0.15:
+		y = hit.position.y          # em cima de algo (base, telhado, pedra)
+		normal = hit.normal
+	var alt := p.y - y
+	if alt > 40.0 or alt < -0.5:
+		sombra_drone.visible = false
+		return
+	sombra_drone.visible = true
+	var lado := normal.cross(Vector3.FORWARD)
+	if lado.length_squared() < 0.01:
+		lado = Vector3.RIGHT
+	lado = lado.normalized()
+	var tam := 0.5 * (1.0 + maxf(alt, 0.0) * 0.05)
+	var b := Basis(lado * tam, normal, lado.cross(normal).normalized() * tam)
+	sombra_drone.global_transform = Transform3D(b, Vector3(p.x, y + 0.03, p.z))
+	var mat := sombra_drone.material_override as StandardMaterial3D
+	mat.albedo_color.a = clampf(0.78 - maxf(alt, 0.0) * 0.018, 0.0, 0.78)

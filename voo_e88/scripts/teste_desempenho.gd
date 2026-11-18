@@ -53,6 +53,8 @@ func _montar_passos() -> void:
 	_passos.append(["Como está agora", "nada"])
 	if voo.get("fsr1"):
 		_passos.append(["Sem FSR 1 (aumento simples)", "fsr"])
+	if mapa.chao_ps2 != null:
+		_passos.append(["Chão atual no lugar do PS2" if mapa.chao_ps2_ativo else "Chão PS2 no lugar do atual", "chao"])
 	_passos.append(["3D em 35% (menos pixels)", "escala"])
 	_passos.append(["Sem capim e flores", "capim"])
 	_passos.append(["Sem árvores e arbustos", "plantas"])
@@ -74,6 +76,8 @@ func _desligar(id: String) -> void:
 			else:
 				_salvo["escala"] = get_viewport().scaling_3d_scale
 				get_viewport().scaling_3d_scale = 0.35
+		"chao":
+			mapa.ativar_chao_ps2(not mapa.chao_ps2_ativo)
 		"capim":
 			_ver_capim(false)
 		"plantas":
@@ -101,6 +105,8 @@ func _religar(id: String) -> void:
 				fsr._redimensionar()
 			else:
 				get_viewport().scaling_3d_scale = _salvo["escala"]
+		"chao":
+			mapa.ativar_chao_ps2(not mapa.chao_ps2_ativo)
 		"capim":
 			_ver_capim(true)
 		"plantas":
@@ -118,16 +124,24 @@ func _religar(id: String) -> void:
 func _ver_capim(v: bool) -> void:
 	for b in mapa.blocos_grama:
 		if is_instance_valid(b):
-			b.visible = v
+			b.visible = v and not mapa.chao_ps2_ativo
 	for b in mapa.blocos_flores:
 		if is_instance_valid(b):
-			b.visible = v
+			b.visible = v and not mapa.chao_ps2_ativo
 
 
 func _ver_plantas(v: bool) -> void:
-	for p in mapa.plantas:
-		if is_instance_valid(p):
-			p.visible = v
+	# religa só o que estava ligado (as árvores de longe ficam escondidas no gráfico baixo)
+	if not v:
+		_salvo["plantas"] = []
+		for p in mapa.plantas:
+			if is_instance_valid(p) and p.visible:
+				_salvo["plantas"].append(p)
+				p.visible = false
+	else:
+		for p in _salvo.get("plantas", []):
+			if is_instance_valid(p):
+				p.visible = true
 
 
 func _proximo() -> void:

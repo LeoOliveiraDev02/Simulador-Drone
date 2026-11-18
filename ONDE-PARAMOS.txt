@@ -1,4 +1,4 @@
-﻿SIMULADOR DE DRONE — ONDE PARAMOS
+SIMULADOR DE DRONE — ONDE PARAMOS
 =================================
 
 >>> NOITE DE 18/11/2026 — O QUE JÁ FOI FEITO (código no repositório, commit ac2e7eb) <<<
@@ -191,8 +191,23 @@ RECURSOS (não ficam no Git):
     senão o shader das folhas não é aplicado) + optiplex/regravar_glb.mjs (JPEGs do Blender que o Godot recusa).
   - texturas: compressão S3TC + mipmaps só no pacote do OptiPlex.
 
+CHÃO ESTILO PS2 (18/11 tarde) — pedido do Leonardo depois do PDF "Otimização da velha guarda"
+  - Padrão no modo OptiPlex (ou --chao-ps2 em qualquer PC; --chao-antigo começa no chão de antes).
+    F4 troca durante o voo. O teste F3 ganhou a etapa "Chão atual no lugar do PS2".
+  - Texturas ORIGINAIS de 128 px e 16 cores, geradas por scripts/gerar_texturas_ps2.py
+    (capim verde, capim seco, terra vermelha da estrada, terra batida) em voo_e88/texturas_ps2/.
+  - Malha: vértices a cada 4 m em ±512 m e 30 anéis crescendo 15% até ~2,5 km (100 mil vértices).
+  - Luz pintada nos vértices (UV2.x sol, UV2.y céu), recalculada só ao trocar a hora (mapa._assar_luz_ps2):
+    sombra dos morros com sol baixo (grade de 16 m) e "manchas" de sombra das árvores/galpão (cápsulas).
+  - shaders/terreno_ps2.gdshader: unshaded, 5 texturas; máscara de 2 m/pixel (texturas_ps2/mascara.png,
+    regravar com -- --chao-ps2 --gerar-mascara-ps2 se mudar estrada/açude/galpão).
+  - Com o chão PS2: some o capim 3D e as flores, desliga a sombra do sol em tempo real;
+    sombra redonda debaixo do drone (mapa.atualizar_sombra_drone).
+  - Entregue: SimuladorDrone-OptiPlex-chao-ps2.zip (atualização com ATUALIZAR.sh).
+
 PENDENTE:
-  - Leonardo testar no OptiPlex e mandar o FPS de cada nível (BAIXO/MÉDIO).
+  - Leonardo testar no OptiPlex: F3 com o chão PS2 e mandar a tabela + FPS do F4 (PS2 x antigo).
+  - Próximos passos do modo PS2 (só se ele pedir): árvores longe viram imagem, névoa curta, 30 FPS fixos.
   - Erros "Compound hierarchy is too deep" na colisão das árvores originais (só com os modelos pesados; no
     modo OptiPlex sumiram).
 

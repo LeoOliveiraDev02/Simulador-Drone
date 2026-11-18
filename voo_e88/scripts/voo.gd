@@ -136,6 +136,8 @@ func _ready() -> void:
 	mapa.name = "Mapa"
 	mapa.previa = "--previa" in OS.get_cmdline_user_args()
 	mapa.movel = movel or optiplex
+	# chão estilo PS2: padrão no OptiPlex; --chao-ps2 liga em qualquer PC; --chao-antigo começa no chão atual
+	mapa.usar_chao_ps2 = (optiplex or "--chao-ps2" in OS.get_cmdline_user_args()) and not movel_ativo
 	mapa.progresso.connect(carregando.definir)
 	add_child(mapa)
 	await mapa.montar(qualidade_baixa or modo_teste)
@@ -155,9 +157,14 @@ func _ready() -> void:
 	drone.vento = vento
 	drone.recomecar(mapa.ponto_partida(), 0.0)
 	drone.marcha = marcha_cfg
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--hora="):   # 0 tarde com nuvens, 1 pôr do sol, 2 céu limpo
+			hora_cfg = clampi(int(a.get_slice("=", 1)), 0, Mapa.HORAS.size() - 1)
 	mapa.definir_hora(hora_cfg)
 	if not movel and not qualidade_baixa:
 		mapa.nivel_grafico_pc(qualidade_pc)
+	if mapa.usar_chao_ps2 and not "--chao-antigo" in OS.get_cmdline_user_args():
+		mapa.ativar_chao_ps2(true)
 	if not modo_teste:
 		var som := SomMotor.new()
 		som.drone = drone
@@ -368,6 +375,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 					teste_desempenho = null
 				else:
 					_iniciar_teste_desempenho()
+			KEY_F4:
+				if not movel_ativo:
+					mapa.ativar_chao_ps2(not mapa.chao_ps2_ativo)
+					hud.mostrar("Chão: " + ("ESTILO PS2 (luz pintada, sem capim 3D, sombra redonda)" if mapa.chao_ps2_ativo else "ATUAL (capim 3D e sombra do sol)") + "  (F4 troca)", 3.0)
 			KEY_F5:
 				if ev.shift_pressed:
 					mapa_controle = (maxi(mapa_controle, 0) + 1) % NOMES_MAPA.size()
@@ -586,6 +597,7 @@ func _physics_process(delta: float) -> void:
 func _process(_delta: float) -> void:
 	if drone == null or hud == null:
 		return
+	mapa.atualizar_sombra_drone(drone)
 	_ajuste_automatico(_delta)
 	if hud and camera and drone:
 		var p := drone.global_position

@@ -136,7 +136,7 @@ TECLADO
   M modo   R recomeçar   B desligar   +/- vento   PgUp/PgDn câmera   G rajadas   H ajuda
   F flip   K modo sem cabeça   V direção do vento   F11 tela cheia   F12 print   T tutorial
   Esc configurações   J desafios (balões, entrega, pouso, corrida)   N velocidade (lenta/normal/esporte)
-  F8 imagem (FSR)   F9 gerador de quadros   F3 teste de desempenho (deixe o drone parado)
+  F4 chão PS2/atual   F8 imagem (FSR)   F9 gerador de quadros   F3 teste de desempenho (drone parado)
 
 RÁDIO VIA USB (EdgeTX/OpenTX em modo joystick)
   É detectado sozinho. Shift+F5 troca a ordem dos canais (AETR/TAER/AERT), Shift+F6 inverte o acelerador,
