@@ -656,26 +656,89 @@ def em_mundo(bm, cx, cz, h, giro=0.0):
     bmesh.ops.transform(bm, matrix=M, verts=bm.verts)
 
 
+def parede_com_vaos(bm, eixo, fixo, a0, a1, z0, z1, esp, vaos, mi=0):
+    """parede reta com vãos (porta/janelas) de verdade: dá para ver e voar por dentro.
+    eixo "x": a parede corre em x (y = fixo); eixo "y": corre em y (x = fixo).
+    vaos: lista de (centro, largura, z_baixo, z_cima)."""
+    def bloco(u0, u1, w0, w1):
+        if u1 - u0 < 0.01 or w1 - w0 < 0.01:
+            return
+        cu, cw = (u0 + u1) / 2, (w0 + w1) / 2
+        if eixo == "x":
+            caixa(bm, (cu, fixo, cw), (u1 - u0, esp, w1 - w0), mi=mi)
+        else:
+            caixa(bm, (fixo, cu, cw), (esp, u1 - u0, w1 - w0), mi=mi)
+    u = a0
+    for (c, larg, zb, zt) in sorted(vaos):
+        bloco(u, c - larg / 2, z0, z1)
+        bloco(c - larg / 2, c + larg / 2, z0, zb)
+        bloco(c - larg / 2, c + larg / 2, zt, z1)
+        u = c + larg / 2
+    bloco(u, a1, z0, z1)
+
+
+def moldura(bm, eixo, fixo, c, larg, zb, zt, esp, mi=2):
+    """batente de madeira em volta do vão."""
+    e = 0.07
+    for (du, dz, tu, tz) in ((0, zb - e / 2, larg + 2 * e, e), (0, zt + e / 2, larg + 2 * e, e),
+                             (-larg / 2 - e / 2, (zb + zt) / 2, e, zt - zb), (larg / 2 + e / 2, (zb + zt) / 2, e, zt - zb)):
+        if eixo == "x":
+            caixa(bm, (c + du, fixo, dz), (tu, esp + 0.04, tz), mi=mi)
+        else:
+            caixa(bm, (fixo, c + du, dz), (esp + 0.04, tu, tz), mi=mi)
+
+
 def casa():
-    """casa sede: alpendre virado para o norte (para a base), telhado de duas águas, chaminé."""
+    """casa sede: alpendre virado para o norte (para a base), telhado de duas águas, chaminé.
+    Porta aberta e janelas sem vidro: dá para entrar com o drone; lá dentro tem mesa, bancos, rede e um lampião."""
     bm = bmesh.new()
     L, P, H = 12.0, 9.0, 3.2
     VAR = 2.8
+    ESP = 0.22
+    z0, z1 = 0.4, 0.4 + H
     caixa(bm, (0, VAR / 2, 0.15), (L + 0.8, P + VAR + 0.6, 0.5), mi=3)                    # base/calçada
-    for (cx, cy, w, d) in ((0, -P / 2, L, 0.22), (0, P / 2, L, 0.22), (-L / 2, 0, 0.22, P), (L / 2, 0, 0.22, P)):
-        caixa(bm, (cx, cy, 0.4 + H / 2), (w, d, H), mi=0)
-    # janelas e porta (na frente, a norte)
-    for x in (-4.2, -1.8, 2.6, 4.6):
-        if abs(x - 0.4) < 1.0:
-            continue
-        caixa(bm, (x, P / 2 + 0.12, 2.0), (1.2, 0.06, 1.2), mi=5)
-        caixa(bm, (x, P / 2 + 0.15, 1.36), (1.4, 0.12, 0.08), mi=2)
-    caixa(bm, (0.4, P / 2 + 0.12, 1.45), (1.1, 0.08, 2.1), mi=2)
-    for x in (-3.5, 3.5):
-        caixa(bm, (x, -P / 2 - 0.12, 2.0), (1.2, 0.06, 1.2), mi=5)
-    for y in (-2.0, 2.0):
-        caixa(bm, (-L / 2 - 0.12, y, 2.0), (0.06, 1.2, 1.2), mi=5)
-        caixa(bm, (L / 2 + 0.12, y, 2.0), (0.06, 1.2, 1.2), mi=5)
+    PORTA = (0.4, 1.3, z0, 2.55)
+    JAN = 1.3
+    frente = [PORTA] + [(x, JAN, 1.35, 2.65) for x in (-4.2, -1.8, 2.6, 4.6)]
+    fundo = [(-3.5, JAN, 1.35, 2.65), (1.0, 1.0, z0, 2.45), (3.5, JAN, 1.35, 2.65)]           # porta dos fundos também
+    lados = [(-2.0, JAN, 1.35, 2.65), (2.0, JAN, 1.35, 2.65)]
+    parede_com_vaos(bm, "x", P / 2, -L / 2, L / 2, z0, z1, ESP, frente, mi=0)
+    parede_com_vaos(bm, "x", -P / 2, -L / 2, L / 2, z0, z1, ESP, fundo, mi=0)
+    parede_com_vaos(bm, "y", -L / 2, -P / 2 + ESP / 2, P / 2 - ESP / 2, z0, z1, ESP, lados, mi=0)
+    parede_com_vaos(bm, "y", L / 2, -P / 2 + ESP / 2, P / 2 - ESP / 2, z0, z1, ESP, lados, mi=0)
+    for (c, w, zb, zt) in frente:
+        moldura(bm, "x", P / 2, c, w, zb, zt, ESP)
+    for (c, w, zb, zt) in fundo:
+        moldura(bm, "x", -P / 2, c, w, zb, zt, ESP)
+    for (c, w, zb, zt) in lados:
+        moldura(bm, "y", -L / 2, c, w, zb, zt, ESP)
+        moldura(bm, "y", L / 2, c, w, zb, zt, ESP)
+    # parede interna (sala | quarto) com vão de passagem largo
+    parede_com_vaos(bm, "y", 1.8, -P / 2 + ESP, P / 2 - ESP, z0, z1, 0.14, [(0.6, 1.6, z0, 2.7)], mi=0)
+    # forro de madeira (o telhado fica por cima; sem ele a casa por dentro some no escuro do telhado)
+    caixa(bm, (0, 0, z1 + 0.04), (L - 0.1, P - 0.1, 0.06), mi=2)
+    # móveis da sala: mesa com 2 bancos, prateleira, filtro de barro no canto
+    caixa(bm, (-2.6, 0.2, z0 + 0.76), (2.0, 0.9, 0.06), mi=2)
+    for dx in (-0.9, 0.9):
+        for dy in (-0.38, 0.38):
+            caixa(bm, (-2.6 + dx, 0.2 + dy, z0 + 0.37), (0.07, 0.07, 0.74), mi=2)
+    for dy in (-0.75, 1.15):
+        caixa(bm, (-2.6, dy, z0 + 0.45), (1.8, 0.32, 0.05), mi=2)
+        for dx in (-0.8, 0.8):
+            caixa(bm, (-2.6 + dx, dy, z0 + 0.22), (0.06, 0.28, 0.44), mi=2)
+    for k in range(3):
+        caixa(bm, (-L / 2 + 0.35, -1.5, z0 + 1.1 + k * 0.45), (0.3, 1.6, 0.04), mi=2)
+    cilindro(bm, (-L / 2 + 0.55, P / 2 - 0.7, z0 + 0.7), 0.2, 0.16, 0.45, lados=12, mi=3)
+    caixa(bm, (-L / 2 + 0.55, P / 2 - 0.7, z0 + 0.35), (0.5, 0.5, 0.7), mi=2)
+    # quarto: cama e rede armada na diagonal
+    caixa(bm, (4.4, -2.6, z0 + 0.28), (1.9, 2.0, 0.3), mi=2)
+    caixa(bm, (4.4, -2.6, z0 + 0.48), (1.8, 1.9, 0.12), mi=5)
+    for k in range(9):
+        t = k / 8.0
+        x = 2.4 + t * 3.0
+        y = 2.9 - t * 2.2
+        zz = z0 + 1.55 - 0.55 * math.sin(math.pi * t)
+        caixa(bm, (x, y, zz), (0.42, 0.95, 0.03), giro_z=-36.0, mi=5)
     # alpendre: piso, pilares e telhadinho
     for x in (-L / 2 + 0.3, -L / 6, L / 6, L / 2 - 0.3):
         cilindro(bm, (x, P / 2 + VAR - 0.3, 0.4), 0.11, 0.12, 2.75, lados=10, mi=2)
@@ -700,10 +763,16 @@ def casa():
     h = alt1(*CASA_C)
     em_mundo(bm, CASA_C[0], CASA_C[1], h - 0.15)
     uv_caixa(bm, 2.0)
-    novo_obj("Casa", bm, ["PAREDE", "TELHA", "MADEIRA", "PISO", "METAL", "VIDRO"])
+    novo_obj("Casa", bm, ["PAREDE", "TELHA", "MADEIRA", "PISO", "METAL", "PANO_CHITA"])
+    # luz de dentro (lampião da sala e do quarto) — o Unreal cria as luzes nesses pontos
+    zl = h - 0.15 + z1 - 0.35
+    LAYOUT.setdefault("luzes", []).extend([
+        {"x": CASA_C[0] - 2.4, "y": -CASA_C[1] + 0.2, "z": zl, "intensidade": 1800.0, "raio": 900.0},
+        {"x": CASA_C[0] + 3.8, "y": -CASA_C[1] - 1.0, "z": zl, "intensidade": 1200.0, "raio": 700.0},
+    ])
     topo_chamine = (CASA_C[0] + 3.0, CASA_C[1] + 1.4, h - 0.15 + 0.4 + H + 3.4)
-    frente = (CASA_C[0], CASA_C[1] - (P / 2 + VAR + 3.5))
-    return topo_chamine, frente
+    frente_p = (CASA_C[0], CASA_C[1] - (P / 2 + VAR + 3.5))
+    return topo_chamine, frente_p
 
 
 def caixa_dagua():
@@ -838,6 +907,7 @@ def plataforma(nome, cx, cz, h):
     em_mundo(bm, cx, cz, h)
     uv_caixa(bm, 1.0)
     novo_obj(nome, bm, ["MADEIRA", "PINTURA_AMARELA"])
+    SEM_MATO.append((cx, cz, 2.6))
 
 
 def transformador():
@@ -871,6 +941,7 @@ def transformador():
 
 
 MOLDES = {}
+SEM_MATO = []   # (x, z Godot, raio m): lugares onde não nasce capim/flor (plataformas etc.)
 
 
 def molde(bm):
@@ -921,8 +992,42 @@ def espalhar(nome, mold, posicoes, materiais):
     return ob
 
 
+def normais_para_cima(ob):
+    """capim e flores com a normal virada para cima: a luz bate neles como bate no chão
+    (sem isso cada folha fica com um lado preto na sombra)."""
+    me = ob.data
+    try:
+        me.normals_split_custom_set_from_vertices([(0.0, 0.0, 1.0)] * len(me.vertices))
+    except Exception as e:
+        print("normais personalizadas falharam:", e)
+
+
+def pontos_livres(rr, N, r_min, r_max, perto=0.45, r_perto=45.0, folga_estrada=4.8):
+    """pontos (x, z Godot) em volta da base, mais densos perto, fora de estrada, açude, roça, construções."""
+    ang = rr.uniform(0, 2 * np.pi, N)
+    r = np.sqrt(rr.uniform(r_min ** 2, r_max ** 2, N))
+    r = np.where(rr.uniform(0, 1, N) < perto, np.sqrt(rr.uniform(r_min ** 2, r_perto ** 2, N)), r)
+    gx, gz = np.cos(ang) * r, np.sin(ang) * r + 4.0
+    ok = dist_estrada(gx, gz) > folga_estrada
+    ok &= acude_e(gx, gz) > 1.25
+    ok &= ~((gx > ROCA[0] - 3) & (gx < ROCA[2] + 3) & (gz > ROCA[1] - 3) & (gz < ROCA[3] + 3))
+    ok &= np.hypot(gx - GALPAO_C[0], gz - GALPAO_C[1]) > 12.0
+    for (cx, cz), r0, r1 in ZONAS_PLANAS:
+        ok &= np.hypot(gx - cx, gz - cz) > r0 + 1.0
+    for (cx, cz, rr0) in SEM_MATO:
+        ok &= np.hypot(gx - cx, gz - cz) > rr0
+    return gx[ok], gz[ok]
+
+
+def manchas(gx, gz, semente, escala=0.045, limiar=0.15):
+    """deixa só os pontos dentro de manchas (flores e palha aparecem em grupos, não espalhadas por igual)."""
+    rn = Ruido(semente, 3)
+    v = rn(gx * escala, gz * escala)
+    return v > limiar
+
+
 def plantacoes():
-    """milharal e capim já espalhados (malhas prontas: não dependem de instâncias criadas no jogo)."""
+    """milharal, capim, palha seca, flores e mandacarus já espalhados (malhas prontas)."""
     rr = np.random.RandomState(77)
     pos = []
     x = ROCA[0] + 0.6
@@ -938,23 +1043,43 @@ def plantacoes():
     posicoes = np.stack([P[:, 0], -P[:, 1], H - 0.03, rr.uniform(0, 2 * np.pi, len(P)),
                          rr.uniform(0.85, 1.15, len(P)), rr.uniform(0.8, 1.15, len(P))], axis=1)
     espalhar("Milharal", MOLDES["milho"], posicoes, ["MILHO", "ESPIGA"])
-    # capim: mais denso perto da base, rareando até 130 m (fora da estrada, açude, roça e construções)
-    N = 60000
-    ang = rr.uniform(0, 2 * np.pi, N)
-    r = np.sqrt(rr.uniform(6.0 ** 2, 130.0 ** 2, N))
-    r = np.where(rr.uniform(0, 1, N) < 0.45, np.sqrt(rr.uniform(6.0 ** 2, 45.0 ** 2, N)), r)
-    gx, gz = np.cos(ang) * r, np.sin(ang) * r + 4.0
-    ok = dist_estrada(gx, gz) > 4.8
-    ok &= acude_e(gx, gz) > 1.25
-    ok &= ~((gx > ROCA[0] - 3) & (gx < ROCA[2] + 3) & (gz > ROCA[1] - 3) & (gz < ROCA[3] + 3))
-    ok &= np.hypot(gx - GALPAO_C[0], gz - GALPAO_C[1]) > 12.0
-    for (cx, cz), r0, r1 in ZONAS_PLANAS:
-        ok &= np.hypot(gx - cx, gz - cz) > r0 + 1.0
-    gx, gz = gx[ok][:26000], gz[ok][:26000]
-    n = len(gx)
-    gh = altura(gx, gz)
-    posicoes = np.stack([gx, -gz, gh - 0.04, rr.uniform(0, 2 * np.pi, n), rr.uniform(0.75, 1.45, n), rr.uniform(0.8, 1.5, n)], axis=1)
-    espalhar("Pasto", MOLDES["capim"], posicoes, ["CAPIM"])
+
+    def montar(nome, molde_, gx, gz, esc_xy, esc_z, mats, afunda=0.03, cima=True):
+        n = len(gx)
+        if n == 0:
+            return None
+        gh = altura(gx, gz)
+        posic = np.stack([gx, -gz, gh - afunda, rr.uniform(0, 2 * np.pi, n),
+                          rr.uniform(*esc_xy, n), rr.uniform(*esc_z, n)], axis=1)
+        ob = espalhar(nome, molde_, posic, mats)
+        if cima:
+            normais_para_cima(ob)
+        return ob
+
+    # capim verde: touceiras baixas (35–60 cm) — antes eram enormes e jogavam sombra preta por todo lado
+    gx, gz = pontos_livres(rr, 90000, 6.0, 140.0)
+    montar("Pasto", MOLDES["capim"], gx[:34000], gz[:34000], (0.55, 0.95), (0.55, 0.95), ["CAPIM"])
+    # palha seca (tom de feno) em manchas
+    gx, gz = pontos_livres(rr, 60000, 6.0, 160.0, perto=0.3)
+    m = manchas(gx, gz, 21)
+    montar("Palha", MOLDES["palha"], gx[m][:14000], gz[m][:14000], (0.6, 1.1), (0.5, 0.9), ["PALHA"])
+    # flores do campo: amarelas, brancas e roxas, cada cor nas suas manchas
+    for k, (nome, cor) in enumerate((("FloresAmarelas", "FLOR_AMARELA"), ("FloresBrancas", "FLOR_BRANCA"), ("FloresRoxas", "FLOR_ROXA"))):
+        gx, gz = pontos_livres(rr, 40000, 6.0, 120.0, perto=0.5)
+        m = manchas(gx, gz, 31 + k * 7, escala=0.06, limiar=0.32)
+        montar(nome, MOLDES["flor"], gx[m][:3500], gz[m][:3500], (0.8, 1.25), (0.75, 1.3), ["CAPIM", cor])
+    # mandacarus (cacto do sertão) pelos cantos do pasto — são sólidos (o drone bate)
+    gx, gz = pontos_livres(rr, 4000, 25.0, 320.0, perto=0.0, folga_estrada=7.0)
+    ok = np.ones(len(gx), dtype=bool)
+    escolhidos = []
+    for i in range(len(gx)):
+        if len(escolhidos) >= 45:
+            break
+        if all(math.hypot(gx[i] - a, gz[i] - b) > 14.0 for a, b in escolhidos) and livre(gx[i], gz[i], 3.0):
+            escolhidos.append((gx[i], gz[i]))
+    if escolhidos:
+        E = np.array(escolhidos)
+        montar("Mandacarus", MOLDES["cacto"], E[:, 0], E[:, 1], (0.8, 1.3), (0.7, 1.4), ["CACTO"], afunda=0.1, cima=False)
 
 
 def modelos_soltos():
@@ -1005,6 +1130,52 @@ def modelos_soltos():
     uv_caixa(bm, 0.5)
     MOLDES["capim"] = molde(bm)
     novo_obj("Capim", bm, ["CAPIM"])
+    # palha seca: folhas mais finas, abertas e tombadas
+    bm = bmesh.new()
+    rr = random.Random(9)
+    for i in range(12):
+        a = rr.random() * 2 * math.pi
+        base = (math.cos(a) * rr.uniform(0, 0.08), math.sin(a) * rr.uniform(0, 0.08), 0.0)
+        alt = rr.uniform(0.22, 0.45)
+        inc = rr.uniform(0.2, 0.45)
+        lado = (-math.sin(a), math.cos(a))
+        topo = (base[0] + math.cos(a) * inc, base[1] + math.sin(a) * inc, alt)
+        w = 0.016
+        v = [bm.verts.new((base[0] - lado[0] * w, base[1] - lado[1] * w, 0)), bm.verts.new((base[0] + lado[0] * w, base[1] + lado[1] * w, 0)),
+             bm.verts.new(topo)]
+        bm.faces.new(v)
+    MOLDES["palha"] = molde(bm)
+    bm.free()
+    # flor do campo: talo fino + 5 pétalas em estrela (material 0 = talo, 1 = pétala)
+    bm = bmesh.new()
+    alt = 0.32
+    v = [bm.verts.new((-0.006, 0, 0)), bm.verts.new((0.006, 0, 0)), bm.verts.new((0.004, 0, alt)), bm.verts.new((-0.004, 0, alt))]
+    f = bm.faces.new(v)
+    f.material_index = 0
+    for (dx, dz, w) in ((0.0, 0.12, 0.05), (0.0, 0.2, 0.04)):    # folhinhas
+        v = [bm.verts.new((0, 0, dz)), bm.verts.new((0.09, w * 0.6, dz + 0.04)), bm.verts.new((0.12, 0, dz + 0.07)), bm.verts.new((0.09, -w * 0.6, dz + 0.04))]
+        bm.faces.new(v).material_index = 0
+    centro = bm.verts.new((0, 0, alt + 0.01))
+    for k in range(5):
+        a0 = k * 2 * math.pi / 5
+        p1 = bm.verts.new((math.cos(a0 - 0.32) * 0.03, math.sin(a0 - 0.32) * 0.03, alt + 0.012))
+        p2 = bm.verts.new((math.cos(a0) * 0.065, math.sin(a0) * 0.065, alt + 0.02))
+        p3 = bm.verts.new((math.cos(a0 + 0.32) * 0.03, math.sin(a0 + 0.32) * 0.03, alt + 0.012))
+        bm.faces.new((centro, p1, p2, p3)).material_index = 1
+    MOLDES["flor"] = molde(bm)
+    bm.free()
+    # mandacaru: tronco com 2 a 3 braços que sobem
+    bm = bmesh.new()
+    cilindro(bm, (0, 0, -0.1), 0.17, 0.15, 3.0, lados=10, mi=0)
+    for (ang, h0, comp, alt_b) in ((0.0, 1.1, 0.55, 1.3), (2.6, 1.5, 0.45, 1.0), (4.4, 0.9, 0.4, 0.8)):
+        dx, dy = math.cos(ang), math.sin(ang)
+        segmento(bm, (dx * 0.1, dy * 0.1, h0), (dx * comp, dy * comp, h0 + 0.15), 0.22, mi=0, lados=8)
+        cilindro(bm, (dx * comp, dy * comp, h0 + 0.05), 0.12, 0.11, alt_b, lados=8, mi=0)
+    for k in range(10):                                             # gomos (costelas) no tronco
+        a = k * 2 * math.pi / 10
+        segmento(bm, (math.cos(a) * 0.16, math.sin(a) * 0.16, 0.0), (math.cos(a) * 0.145, math.sin(a) * 0.145, 2.9), 0.03, mi=0, lados=3)
+    MOLDES["cacto"] = molde(bm)
+    bm.free()
     # caixa de entrega (40 x 30 x 30 cm) com fita
     bm = bmesh.new()
     caixa(bm, (0, 0, 0), (0.4, 0.3, 0.3), mi=0)
@@ -1048,7 +1219,6 @@ def fazenda():
     ponta_pier = pier()
     trafo = transformador()
     modelos_soltos()
-    plantacoes()
     # coleta das caixas: na frente do lado aberto do galpão
     g = math.radians(GALPAO_GIRO)
     lx, ly = 0.0, -(7.5 / 2 + 6.0)
@@ -1058,6 +1228,7 @@ def fazenda():
     plataforma("PlataformaColeta", cx, cz, h_coleta)
     h_casa = alt1(*frente_casa)
     plataforma("PlataformaCasa", frente_casa[0], frente_casa[1], h_casa)
+    plantacoes()
     LAYOUT["coleta"] = list(B(cx, cz, h_coleta + 0.13))
     cxb, cyb, _ = B(*CAIXA_C, 0)
     carx, cary, _ = B(*CARRETA_C, 0)

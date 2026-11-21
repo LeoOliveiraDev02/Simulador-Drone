@@ -3,6 +3,9 @@
 #include "Misc/FileHelper.h"
 #include "HAL/IConsoleManager.h"
 
+const int32 FAjustesDrone::MetasFPS[] = { 0, 30, 60, 90, 120, 144, 165, 240 };
+const int32 FAjustesDrone::NumMetas = UE_ARRAY_COUNT(FAjustesDrone::MetasFPS);
+
 FAjustesDrone& FAjustesDrone::Get()
 {
 	static FAjustesDrone Instancia;
@@ -46,6 +49,11 @@ void FAjustesDrone::Carregar()
 		else if (K == TEXT("Painel")) bPainel = B;
 		else if (K == TEXT("AjusteAuto")) bAjusteAuto = B;
 		else if (K == TEXT("EscalaInterface")) EscalaInterface = FMath::Clamp(F, 0.7f, 1.6f);
+		else if (K == TEXT("MetaFPS")) MetaFPS = FMath::Clamp((int32)F, 0, 360);
+		else if (K == TEXT("VelMaxKmh")) VelMaxKmh = FMath::Clamp(F, 25.f, 90.f);
+		else if (K == TEXT("VentoKmh")) VentoKmh = FMath::Clamp(F, 0.f, 40.f);
+		else if (K == TEXT("Rajadas")) bRajadas = B;
+		else if (K == TEXT("VolumeEfeitos")) VolumeEfeitos = FMath::Clamp(F, 0.f, 1.f);
 		else if (K.StartsWith(TEXT("Recorde_")) || K.StartsWith(TEXT("Medalha_")))
 		{
 			const int32 I = FCString::Atoi(*K.RightChop(8));
@@ -79,6 +87,11 @@ void FAjustesDrone::Salvar() const
 	L.Add(FString::Printf(TEXT("Painel=%d"), bPainel ? 1 : 0));
 	L.Add(FString::Printf(TEXT("AjusteAuto=%d"), bAjusteAuto ? 1 : 0));
 	L.Add(FString::Printf(TEXT("EscalaInterface=%.2f"), EscalaInterface));
+	L.Add(FString::Printf(TEXT("MetaFPS=%d"), MetaFPS));
+	L.Add(FString::Printf(TEXT("VelMaxKmh=%.0f"), VelMaxKmh));
+	L.Add(FString::Printf(TEXT("VentoKmh=%.0f"), VentoKmh));
+	L.Add(FString::Printf(TEXT("Rajadas=%d"), bRajadas ? 1 : 0));
+	L.Add(FString::Printf(TEXT("VolumeEfeitos=%.2f"), VolumeEfeitos));
 	for (int32 i = 1; i < NumObjetivos; ++i)
 	{
 		L.Add(FString::Printf(TEXT("Recorde_%d=%.2f"), i, Recordes[i]));
@@ -97,4 +110,7 @@ void FAjustesDrone::AplicarGraficos() const
 	Set(TEXT("r.FidelityFX.FSR.QualityMode"), ModoFSR);
 	Set(TEXT("r.FidelityFX.FI.Enabled"), bGerador ? 1 : 0);
 	Set(TEXT("r.VSync"), bVSync ? 1 : 0);
+	// meta de FPS: com o gerador ligado metade dos quadros é criada pela IA, então a base fica na metade
+	const int32 Base = MetaFPS <= 0 ? 0 : (bGerador ? FMath::Max(20, MetaFPS / 2) : MetaFPS);
+	if (IConsoleVariable* C = IConsoleManager::Get().FindConsoleVariable(TEXT("t.MaxFPS"))) C->Set((float)Base, ECVF_SetByConsole);
 }

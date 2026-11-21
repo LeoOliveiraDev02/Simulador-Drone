@@ -7,6 +7,8 @@
 class ADronePawn;
 class UStaticMeshComponent;
 class UStaticMesh;
+class USoundBase;
+class UMaterialInstanceDynamic;
 
 struct FGrupoVisivel
 {
@@ -28,22 +30,28 @@ enum class EItemMenu : uint8
 	Objetivo,       // JOGABILIDADE
 	ModoVoo,
 	VoltarInicio,
-	MenuPrincipal,
+	Vento,
+	Rajadas,
 	Sensibilidade,  // SENSIBILIDADE
 	Expo,
+	VelMax,
 	ModoFSR,        // VÍDEO
 	Gerador,
 	VSync,
-	Painel,
-	AjusteAuto,
 	Volume,         // ÁUDIO
-	InvFrente,      // CONTROLES
+	Efeitos,
+	Comandos,       // CONTROLES
+	InvFrente,
 	InvSubir,
 	InvGiro,
 	InvLados,
 	EscalaHUD,      // ACESSIBILIDADE
-	Padrao,         // AVANÇADO
-	Sair,           // SAIR DO JOGO
+	Painel,         // AVANÇADO
+	MetaFPS,
+	AjusteAuto,
+	Padrao,
+	MenuPrincipal,  // SAIR
+	Sair,
 	Total
 };
 
@@ -93,6 +101,10 @@ public:
 	float MsGPU = 0.f;
 	float MsJogo = 0.f;
 	bool bMostrarAjuda = false;
+	bool bVerComandos = false;      // lista de comandos aberta por cima do menu
+	int32 Dispositivo = 0;          // último usado: 0 teclado/mouse, 1 controle
+	static FString NomeDispositivo(int32 D);
+	void TocarSom(int32 Qual);      // 0 coleta, 1 foto, 2 blip (aro/entrega), 3 vitória
 	int32 NivelAjuste = 0;   // 0 = máximo; sobe quando precisa aliviar
 
 	bool bMenuAberto = false;
@@ -248,6 +260,11 @@ private:
 	void TickMissoes(float Dt, const FVector& P);
 	void MoverFarolECaixa();
 	TWeakObjectPtr<AActor> Farol;
+	UPROPERTY() TArray<TObjectPtr<USoundBase>> Sons;
+	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> MatAgua;
+	FLinearColor DeslocAgua = FLinearColor(0, 0, 0, 0);
+	float OndasAgua = 0.f;
+	void AtualizarAgua(float Dt);
 	TWeakObjectPtr<AActor> CaixaAtor;
 	TArray<TWeakObjectPtr<AActor>> CaixasEntregues;
 	TArray<TPair<TWeakObjectPtr<AActor>, float>> Giratorios;

@@ -55,6 +55,12 @@ public:
 	FBox Limites = FBox(ForceInit);
 	bool bUsarLimites = false;
 
+	// vento (m/s, no mundo). Direção em graus (0 = sopra para +X). O mapa pode enfraquecer (prédio = abrigado).
+	FVector VentoAtual = FVector::ZeroVector;
+	float DirVento = 35.f;
+	float FatorVentoMapa = 1.f;
+	void AjustarLuz(bool bCampo);   // pós-processo da câmera conforme o mapa (sombras menos pretas)
+
 	void Recomecar(const FTransform& Onde);
 	void MostrarMensagem(const FString& Texto, float Segundos = 2.5f);
 	void TrocarModo();
@@ -95,6 +101,10 @@ private:
 	float TremorFase = 0.f;
 	float UltimoImpacto = 0.f;
 	float UltimaBatida = -10.f;
+	float TempoVento = 0.f;
+	float AlturaSobreChao = 10.f;   // m (medida de tempos em tempos, o vento fica mais fraco rente ao chão)
+	float ProxMedidaChao = 0.f;
+	void AtualizarVento(float Dt);
 
 	// áudio (thread de áudio)
 	std::atomic<float> AudioAcel{ 0.f };

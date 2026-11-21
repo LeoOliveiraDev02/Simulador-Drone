@@ -141,6 +141,48 @@ void ADronePawn::GerarAudio(USoundWaveProcedural* W, int32 Amostras)
 	W->QueueAudio((const uint8*)BufferAudio.GetData(), N * sizeof(int16));
 }
 
+void ADronePawn::AjustarLuz(bool bCampo)
+{
+	// Lumen deixava as sombras quase pretas (capim, dentro da casa, cantos do prédio).
+	// "Skylight leaking" devolve um pouco da luz do céu nas partes fechadas, e a exposição local
+	// levanta as sombras sem estourar o resto.
+	FPostProcessSettings& PP = Camera->PostProcessSettings;
+	PP.bOverride_LumenSkylightLeaking = true;
+	PP.LumenSkylightLeaking = bCampo ? 0.22f : 0.10f;
+	PP.bOverride_LocalExposureShadowContrastScale = true;
+	PP.LocalExposureShadowContrastScale = bCampo ? 0.55f : 0.62f;
+	PP.bOverride_AutoExposureBias = true;
+	PP.AutoExposureBias = bCampo ? 0.1f : -0.15f;
+	FatorVentoMapa = bCampo ? 1.f : 0.25f;   // dentro do prédio o vento chega fraco
+}
+
+void ADronePawn::AtualizarVento(float Dt)
+{
+	const FAjustesDrone& Cfg = FAjustesDrone::Get();
+	TempoVento += Dt;
+	ProxMedidaChao -= Dt;
+	if (ProxMedidaChao <= 0.f)
+	{
+		ProxMedidaChao = 0.15f;
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(VentoChao), false, this);
+		const FVector P = GetActorLocation();
+		AlturaSobreChao = GetWorld()->LineTraceSingleByChannel(Hit, P, P - FVector(0, 0, 2500.f), ECC_Visibility, Q) ? Hit.Distance / 100.f : 25.f;
+	}
+	float Forca = Cfg.VentoKmh / 3.6f * FatorVentoMapa;
+	float Ang = DirVento;
+	if (Cfg.bRajadas && Forca > 0.f)
+	{
+		// rajadas: ruído suave (sobe e desce em alguns segundos) + uma virada leve de direção
+		const float R = FMath::PerlinNoise1D(TempoVento * 0.35f) * 0.9f + FMath::PerlinNoise1D(TempoVento * 1.3f + 17.f) * 0.35f;
+		Forca *= FMath::Max(0.15f, 1.f + R);
+		Ang += FMath::PerlinNoise1D(TempoVento * 0.2f + 5.f) * 25.f;
+	}
+	Forca *= FMath::Lerp(0.35f, 1.f, FMath::Clamp(AlturaSobreChao / 6.f, 0.f, 1.f));   // rente ao chão sopra menos
+	const float A = FMath::DegreesToRadians(Ang);
+	VentoAtual = FVector(FMath::Cos(A), FMath::Sin(A), 0.f) * Forca;
+}
+
 void ADronePawn::MostrarMensagem(const FString& Texto, float Segundos)
 {
 	Mensagem = Texto;
@@ -211,6 +253,31 @@ void ADronePawn::LerControles(float Dt)
 	{
 		TrocarModo();
 	}
+	// vento: + / - (ou setas do D-pad ↑↓), V ou RB muda a direção, G ou LB liga/desliga as rajadas
+	{
+		FAjustesDrone& CfgV = FAjustesDrone::Get();
+		auto Algum = [PC](std::initializer_list<FKey> Ks) { for (const FKey& K : Ks) if (PC->WasInputKeyJustPressed(K)) return true; return false; };
+		int32 DV = 0;
+		if (Algum({ EKeys::Gamepad_DPad_Up, EKeys::Equals, EKeys::Add, EKeys::PageUp })) DV = 1;
+		if (Algum({ EKeys::Gamepad_DPad_Down, EKeys::Hyphen, EKeys::Subtract, EKeys::PageDown })) DV = -1;
+		if (DV != 0)
+		{
+			CfgV.VentoKmh = FMath::Clamp(CfgV.VentoKmh + 5.f * DV, 0.f, 40.f);
+			CfgV.Salvar();
+			MostrarMensagem(CfgV.VentoKmh <= 0.f ? FString(TEXT("VENTO: calmaria")) : FString::Printf(TEXT("VENTO: %.0f km/h"), CfgV.VentoKmh), 1.6f);
+		}
+		if (Algum({ EKeys::Gamepad_RightShoulder, EKeys::V }))
+		{
+			DirVento = FMath::Fmod(DirVento + 45.f, 360.f);
+			MostrarMensagem(TEXT("Direção do vento mudou (veja a seta no canto)"), 1.6f);
+		}
+		if (Algum({ EKeys::Gamepad_LeftShoulder, EKeys::G }))
+		{
+			CfgV.bRajadas = !CfgV.bRajadas;
+			CfgV.Salvar();
+			MostrarMensagem(CfgV.bRajadas ? TEXT("Rajadas de vento LIGADAS") : TEXT("Rajadas de vento desligadas"), 1.6f);
+		}
+	}
 	if (PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Left) || PC->WasInputKeyJustPressed(EKeys::R))
 	{
 		Recomecar(Inicio);
@@ -237,6 +304,7 @@ void ADronePawn::Tick(float DeltaSeconds)
 	}
 
 	LerControles(DeltaSeconds);
+	AtualizarVento(DeltaSeconds);
 
 	if (bCaido)
 	{
@@ -269,7 +337,6 @@ void ADronePawn::PassoFisica(float h)
 	const float Sens = Cfg.Sensibilidade;
 	const FVector Pos = GetActorLocation();
 	const FRotator Rot = Orientacao.Rotator();
-	const float VelM = Velocidade.Size() / 100.f;
 
 	float Comando = 0.f;
 
@@ -283,7 +350,7 @@ void ADronePawn::PassoFisica(float h)
 		float VzAlvo;
 		if (FMath::Abs(InAcel) > 0.02f)
 		{
-			VzAlvo = Expo(InAcel, Cfg.Expo * 0.5f) * 320.f * Sens;
+			VzAlvo = Expo(InAcel, Cfg.Expo * 0.5f) * 450.f * Sens;
 			AlturaAlvo = Pos.Z;
 		}
 		else
@@ -294,10 +361,10 @@ void ADronePawn::PassoFisica(float h)
 
 		const FRotator SoGuinada(0.f, Rot.Yaw, 0.f);
 		const FVector VLocal = SoGuinada.UnrotateVector(Velocidade) / 100.f;
-		const float VMax = 6.5f * Sens;
-		const float AxAlvo = FMath::Clamp((Expo(InArfagem, Cfg.Expo) * VMax - VLocal.X) * 2.4f, -7.f, 7.f);
-		const float AyAlvo = FMath::Clamp((Expo(InRolagem, Cfg.Expo) * VMax - VLocal.Y) * 2.4f, -7.f, 7.f);
-		const float MaxInc = 35.f;
+		const float VMax = Cfg.VelMaxKmh / 3.6f * Sens;
+		const float AxAlvo = FMath::Clamp((Expo(InArfagem, Cfg.Expo) * VMax - VLocal.X) * 2.4f, -10.f, 10.f);
+		const float AyAlvo = FMath::Clamp((Expo(InRolagem, Cfg.Expo) * VMax - VLocal.Y) * 2.4f, -10.f, 10.f);
+		const float MaxInc = 45.f;
 		const float ArfAlvo = FMath::Clamp(-FMath::RadiansToDegrees(FMath::Atan2(AxAlvo, G)), -MaxInc, MaxInc);
 		const float RolAlvo = FMath::Clamp(FMath::RadiansToDegrees(FMath::Atan2(AyAlvo, G)), -MaxInc, MaxInc);
 
@@ -342,8 +409,14 @@ void ADronePawn::PassoFisica(float h)
 	const FVector Cima = Orientacao.GetUpVector();
 	FVector Forca = Cima * Empuxo;
 	Forca += FVector(0, 0, -Massa * G);
+	// arrasto do ar contra a velocidade RELATIVA ao vento (é assim que o vento empurra o drone).
+	// O coeficiente sai da velocidade máxima escolhida: inclinado 40° ele chega nela.
 	const FVector Vms = Velocidade / 100.f;
-	Forca -= Vms * (0.06f + 0.028f * VelM);
+	const FVector VRel = Vms - VentoAtual;
+	const float VAlvo = FMath::Max(5.f, Cfg.VelMaxKmh / 3.6f);
+	const float C1 = 0.03f;
+	const float C2 = FMath::Max(0.002f, (Massa * G * 0.839f / VAlvo - C1) / VAlvo);
+	Forca -= VRel * (C1 + C2 * VRel.Size());
 	if (bCaido) Forca -= Vms * 0.02f;
 
 	Velocidade += Forca / Massa * 100.f * h;

@@ -297,7 +297,13 @@ SLOTS = {
     "OURO": ("cor", (1.0, 0.72, 0.18), 0.22, 1.0, 0.25, 0.5),
     "ESPIGA": ("folha", (0.55, 0.58, 0.22), 0.7, 0.0, 0.0, 0.4),
     "MILHO": ("folha", (0.16, 0.32, 0.06), 0.65, 0.0, 0.0, 0.4),
-    "CAPIM": ("folha", (0.22, 0.30, 0.07), 0.8, 0.0, 0.0, 0.3),
+    "CAPIM": ("folha", (0.27, 0.36, 0.09), 0.8, 0.0, 0.0, 0.3),
+    "PALHA": ("folha", (0.52, 0.43, 0.22), 0.85, 0.0, 0.0, 0.3),
+    "FLOR_AMARELA": ("folha", (0.95, 0.72, 0.06), 0.6, 0.0, 0.0, 0.4),
+    "FLOR_BRANCA": ("folha", (0.88, 0.88, 0.82), 0.6, 0.0, 0.0, 0.4),
+    "FLOR_ROXA": ("folha", (0.50, 0.18, 0.62), 0.6, 0.0, 0.0, 0.4),
+    "CACTO": ("cor", (0.13, 0.27, 0.11), 0.7, 0.0, 0.0, 0.4),
+    "PANO_CHITA": ("cor", (0.78, 0.22, 0.16), 0.85, 0.0, 0.0, 0.4),
 }
 # reserva quando falta a textura: cor lisa parecida
 RESERVA = {"BASE": (0.55, 0.54, 0.52), "PISO": (0.5, 0.48, 0.45), "PAREDE": (0.85, 0.8, 0.7),
@@ -317,16 +323,28 @@ def criar_mestre_folha():
     cor = expr(m, unreal.MaterialExpressionVectorParameter, -800, -200, parameter_name="Cor",
                default_value=unreal.LinearColor(0.2, 0.3, 0.07, 1))
     c3 = rgb(m, cor, "", -600, -200)
-    # variação de cor por posição (cada pé/touceira com um tom)
-    pos = expr(m, unreal.MaterialExpressionObjectPositionWS, -900, 100)
-    msk = expr(m, unreal.MaterialExpressionComponentMask, -750, 100, r=True, g=False, b=False, a=False)
-    ligar(pos, "", msk, "")
-    mul = expr(m, unreal.MaterialExpressionMultiply, -620, 100)
-    ligar(msk, "", mul, "A")
-    ligar(const(m, 0.0137, -750, 180), "", mul, "B")
-    fr = expr(m, unreal.MaterialExpressionFrac, -500, 100)
-    ligar(mul, "", fr, "")
-    var = lerp(m, const(m, 0.8, -500, 180), const(m, 1.2, -500, 240), fr, -380, 120)
+    # variação de cor em manchas pelo mundo (o capim é uma malha só: a posição do objeto não serve)
+    pos = expr(m, unreal.MaterialExpressionWorldPosition, -1100, 100)
+    ondas = []
+    for k, (canal, freq) in enumerate((("r", 0.0021), ("g", 0.0017))):
+        msk = expr(m, unreal.MaterialExpressionComponentMask, -950, 60 + k * 90, r=canal == "r", g=canal == "g", b=False, a=False)
+        ligar(pos, "", msk, "")
+        mul = expr(m, unreal.MaterialExpressionMultiply, -820, 60 + k * 90)
+        ligar(msk, "", mul, "A")
+        ligar(const(m, freq, -950, 120 + k * 90), "", mul, "B")
+        sn = expr(m, unreal.MaterialExpressionSine, -700, 60 + k * 90)
+        ligar(mul, "", sn, "")
+        ondas.append(sn)
+    mm = expr(m, unreal.MaterialExpressionMultiply, -580, 100)
+    ligar(ondas[0], "", mm, "A")
+    ligar(ondas[1], "", mm, "B")
+    fr = expr(m, unreal.MaterialExpressionMultiply, -480, 100)
+    ligar(mm, "", fr, "A")
+    ligar(const(m, 0.5, -580, 180), "", fr, "B")
+    fr2 = expr(m, unreal.MaterialExpressionAdd, -400, 100)
+    ligar(fr, "", fr2, "A")
+    ligar(const(m, 0.5, -480, 180), "", fr2, "B")
+    var = lerp(m, const(m, 0.8, -500, 180), const(m, 1.2, -500, 240), fr2, -320, 120)
     cc = expr(m, unreal.MaterialExpressionMultiply, -350, -200)
     ligar(c3, "", cc, "A")
     ligar(var, "", cc, "B")
@@ -335,6 +353,57 @@ def criar_mestre_folha():
     mel.connect_material_property(rug, "", unreal.MaterialProperty.MP_ROUGHNESS)
     mel.connect_material_property(const(m, 0.35, -500, 380), "", unreal.MaterialProperty.MP_SPECULAR)
     mel.recompile_material(m)
+    return m
+
+
+def criar_agua():
+    """água com duas camadas de ondinhas que andam com o vento (o jogo mexe em "Ondas" e "Desloc")."""
+    tex = importar_textura(CONTEUDO + "/agua_normal.png", PASTA + "/Texturas/agua", "normal")
+    if not tex:
+        return None
+    m = novo_material("M_Agua")
+    pos = expr(m, unreal.MaterialExpressionWorldPosition, -1300, 0)
+    xy = expr(m, unreal.MaterialExpressionComponentMask, -1150, 0, r=True, g=True, b=False, a=False)
+    ligar(pos, "", xy, "")
+    base = expr(m, unreal.MaterialExpressionMultiply, -1020, 0)
+    ligar(xy, "", base, "A")
+    ligar(const(m, 1.0 / 650.0, -1150, 80), "", base, "B")
+    des = expr(m, unreal.MaterialExpressionVectorParameter, -1300, 200, parameter_name="Desloc",
+               default_value=unreal.LinearColor(0, 0, 0, 0))
+    d1 = expr(m, unreal.MaterialExpressionComponentMask, -1150, 200, r=True, g=True, b=False, a=False)
+    ligar(des, "", d1, "")
+    d2 = expr(m, unreal.MaterialExpressionAppendVector, -1150, 300)
+    ligar(des, "B", d2, "A")
+    ligar(des, "A", d2, "B")
+    uv1 = expr(m, unreal.MaterialExpressionAdd, -880, 0)
+    ligar(base, "", uv1, "A")
+    ligar(d1, "", uv1, "B")
+    b2 = expr(m, unreal.MaterialExpressionMultiply, -1020, 120)
+    ligar(base, "", b2, "A")
+    ligar(const(m, 1.73, -1150, 140), "", b2, "B")
+    uv2 = expr(m, unreal.MaterialExpressionAdd, -880, 160)
+    ligar(b2, "", uv2, "A")
+    ligar(d2, "", uv2, "B")
+    amostras = []
+    for k, uv in enumerate((uv1, uv2)):
+        t = expr(m, unreal.MaterialExpressionTextureSample, -700, k * 220, texture=tex,
+                 sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+        ligar(uv, "", t, "UVs")
+        amostras.append(t)
+    soma = expr(m, unreal.MaterialExpressionAdd, -480, 100)
+    ligar(amostras[0], "", soma, "A")
+    ligar(amostras[1], "", soma, "B")
+    ondas = expr(m, unreal.MaterialExpressionScalarParameter, -700, 460, parameter_name="Ondas", default_value=0.15)
+    liso = expr(m, unreal.MaterialExpressionConstant3Vector, -700, 380, constant=unreal.LinearColor(0, 0, 1, 1))
+    nrm = lerp(m, liso, soma, ondas, -320, 200)
+    mel.connect_material_property(nrm, "", unreal.MaterialProperty.MP_NORMAL)
+    cor = expr(m, unreal.MaterialExpressionConstant3Vector, -500, -200, constant=unreal.LinearColor(0.012, 0.04, 0.045, 1))
+    mel.connect_material_property(cor, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    rug = lerp(m, const(m, 0.03, -500, 520), const(m, 0.14, -500, 580), ondas, -320, 520)
+    mel.connect_material_property(rug, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.connect_material_property(const(m, 0.9, -320, 640), "", unreal.MaterialProperty.MP_SPECULAR)
+    mel.recompile_material(m)
+    log("material da água com ondas pronto")
     return m
 
 
@@ -419,6 +488,9 @@ def criar_materiais():
         mel.update_material_instance(mi)
         mis["TERRENO"] = mi
     mis["FAROL"] = criar_farol()
+    agua = criar_agua()
+    if agua:
+        mis["AGUA"] = agua
     log("materiais prontos:", sorted(mis))
     return mis
 
@@ -473,6 +545,10 @@ def carregar_sm(pasta):
     return res
 
 
+# vegetação rasteira já espalhada no Blender (sem colisão; capim e flores sem sombra própria)
+PLANTACOES = ("Milharal", "Pasto", "Palha", "FloresAmarelas", "FloresBrancas", "FloresRoxas")
+SEM_SOMBRA = ("Pasto", "Palha", "FloresAmarelas", "FloresBrancas", "FloresRoxas")
+
 # malhas que o jogo usa em tempo de execução (ficam escondidas no mapa como "modelo")
 MODELOS_JOGO = ("PeMilho", "Capim", "CaixaEntrega", "Ferradura", "Farol")
 
@@ -500,8 +576,10 @@ def importar_malhas(mis):
                 log("  slot sem material:", nome, smat.get_editor_property("material_slot_name"))
         # capim e milho viram milhares de instâncias criadas pelo jogo: malha comum (poucos triângulos), sem Nanite
         nanite(sm, nome not in ("Marcador", "Agua", "Farol", "CaixaEntrega", "Ferradura", "CataVentoRotor", "PeMilho", "Capim"), 0.0)
-        if nome in ("Milharal", "Pasto"):
+        if nome in PLANTACOES:
             nanite(sm, True, folhagem=True)    # plantação já espalhada no Blender: uma malha só, com Nanite
+        elif nome == "Mandacarus":
+            colisao_complexa(sm)
         elif nome not in ("Marcador", "Agua") + MODELOS_JOGO:
             colisao_complexa(sm)
         eal.save_loaded_asset(sm)
@@ -631,8 +709,18 @@ def montar_mapa(layout, malhas, modelos):
         a = eas.spawn_actor_from_object(sm, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
         a.set_actor_label(nome)
         tag(a, nome)
-        if nome in ("Agua", "Milharal", "Pasto"):
+        if nome == "Agua" or nome in PLANTACOES:
             a.set_actor_enable_collision(False)
+        if nome in SEM_SOMBRA:
+            # sombra de milhares de folhinhas deixava o pasto todo pintado de preto; e uma malha gigante
+            # assim atrapalha a luz indireta do Lumen (campo de distância ruim)
+            c = a.get_component_by_class(unreal.StaticMeshComponent)
+            for prop, val in (("cast_shadow", False), ("affect_distance_field_lighting", False),
+                              ("affect_dynamic_indirect_lighting", False)):
+                por(c, prop, val)
+        elif nome == "Milharal":
+            c = a.get_component_by_class(unreal.StaticMeshComponent)
+            por(c, "affect_distance_field_lighting", False)
 
     # árvores, arbustos, pedras e objetos
     n = 0
@@ -761,8 +849,18 @@ def montar_mapa(layout, malhas, modelos):
     sc = sky.get_component_by_class(unreal.SkyLightComponent)
     por(sc, "real_time_capture", True)
     por(sc, "mobility", unreal.ComponentMobility.MOVABLE)
-    por(sc, "intensity", 1.0)
+    por(sc, "intensity", 1.25)
     sky.set_actor_label("LuzDoCeu")
+    # lampiões de dentro da casa (luz quente, sem sombra pesada)
+    for i, lz in enumerate(layout.get("luzes", [])):
+        pl = eas.spawn_actor_from_class(unreal.PointLight, P(lz["x"], lz["y"], lz["z"]), unreal.Rotator(0, 0, 0))
+        plc = pl.get_component_by_class(unreal.PointLightComponent)
+        por(plc, "intensity", float(lz.get("intensidade", 1500.0)))
+        por(plc, "attenuation_radius", float(lz.get("raio", 800.0)))
+        por(plc, "light_color", unreal.Color(255, 196, 130, 255))
+        por(plc, "source_radius", 6.0)
+        por(plc, "mobility", unreal.ComponentMobility.MOVABLE)
+        pl.set_actor_label("LuzCasa_%d" % i)
     fog = eas.spawn_actor_from_class(unreal.ExponentialHeightFog, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
     fc = fog.get_component_by_class(unreal.ExponentialHeightFogComponent)
     por(fc, "fog_density", 0.004)
@@ -788,6 +886,7 @@ def montar_mapa(layout, malhas, modelos):
     ov("lumen_scene_lighting_quality", 1.5)
     ov("lumen_final_gather_quality", 1.5)
     ov("lumen_max_trace_distance", 20000.0)
+    ov("lumen_skylight_leaking", 0.22)
     ov("bloom_intensity", 0.3)
     ov("color_saturation", unreal.Vector4(1.08, 1.06, 1.0, 1.0))
     ov("color_contrast", unreal.Vector4(1.04, 1.04, 1.04, 1.0))

@@ -1,5 +1,7 @@
 """Peças extras do jogo único (roda no editor com -ExecutePythonScript):
   /Game/UI/T_Usina        imagem do mapa 3 (cartão trancado do menu)
+  /Game/UI/T_Fazenda, T_Predio  fotos dos cartões dos mapas 1 e 2
+  /Game/UI/S_Coleta, S_Foto, S_Blip, S_Vitoria  sons curtos
   /Game/Drone/E88_Corpo   drone E88 da abertura (sem as hélices)
   /Game/Drone/E88_Helice  uma hélice (o jogo põe 4 e faz girar)
 Entrada: D:/DronePredio/conteudo_extras/"""
@@ -82,18 +84,41 @@ def main():
     os.makedirs(os.path.dirname(LOG), exist_ok=True)
     open(LOG, "w", encoding="utf-8").write("construir_extras.py\n")
     try:
-        p = importar(ENT + "/usina.png", "/Game/UI")
-        if p:
+        for arq, nome in (("usina.png", "T_Usina"), ("fazenda.png", "T_Fazenda"), ("predio.png", "T_Predio")):
+            if not os.path.isfile(ENT + "/" + arq):
+                log("falta", arq)
+                continue
+            p = importar(ENT + "/" + arq, "/Game/UI")
+            if not p:
+                log("FALHOU imagem", arq)
+                continue
             tex = unreal.load_asset(p[0])
-            if tex.get_name() != "T_Usina":
-                eal.rename_asset(p[0], "/Game/UI/T_Usina")
-                tex = unreal.load_asset("/Game/UI/T_Usina")
+            if tex.get_name() != nome:
+                if eal.does_asset_exist("/Game/UI/" + nome):
+                    eal.delete_asset("/Game/UI/" + nome)
+                eal.rename_asset(p[0].split(".")[0], "/Game/UI/" + nome)
+                tex = unreal.load_asset("/Game/UI/" + nome)
             tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_EDITOR_ICON)
             tex.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
             tex.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_UI)
             tex.set_editor_property("never_stream", True)
             eal.save_loaded_asset(tex)
-            log("imagem da usina:", tex.get_path_name())
+            log("imagem:", tex.get_path_name())
+        # sons curtos do jogo (coleta, foto, entrega/aro, vitória)
+        for arq, nome in (("coleta.wav", "S_Coleta"), ("foto.wav", "S_Foto"), ("blip.wav", "S_Blip"), ("vitoria.wav", "S_Vitoria")):
+            if not os.path.isfile(ENT + "/" + arq):
+                log("falta", arq)
+                continue
+            p = importar(ENT + "/" + arq, "/Game/UI")
+            if not p:
+                log("FALHOU som", arq)
+                continue
+            if p[0].split(".")[0] != "/Game/UI/" + nome:
+                if eal.does_asset_exist("/Game/UI/" + nome):
+                    eal.delete_asset("/Game/UI/" + nome)
+                eal.rename_asset(p[0].split(".")[0], "/Game/UI/" + nome)
+            eal.save_asset("/Game/UI/" + nome)
+            log("som:", nome)
         mestre = material_drone()
         fac = unreal.MaterialInstanceConstantFactoryNew()
         feitos = {}

@@ -30,6 +30,8 @@ private:
 	void Cadeado(FVector2D C, float S, const FLinearColor& Cor);
 	void DesenharObjetivo(APredioGameMode* GM, const class ADronePawn* D, float E);
 	void DesenharResultado(APredioGameMode* GM, float E);
+	void DesenharComandos(APredioGameMode* GM);   // lista de comandos (menu > Controles, ou F1 / Back no voo)
+	void DesenharVento(const class ADronePawn* D, float X, float Y, float E);
 	FSlateFontInfo Fonte(float Px, const TCHAR* Face) const;
 	FVector2D Medir(const FString& S, const FSlateFontInfo& F) const;
 	float T(const FString& S, float X, float Y, float Px, const TCHAR* Face, const FLinearColor& Cor, int32 Alinh = 0, float Espaco = 0.f);
@@ -47,6 +49,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<class UTexture2D> ImgUsina;
+	UPROPERTY()
+	TObjectPtr<class UTexture2D> ImgFazenda;
+	UPROPERTY()
+	TObjectPtr<class UTexture2D> ImgPredio;
 	bool bTentouUsina = false;
 
 	float Esc = 1.f; // escala do menu (pixels por unidade de desenho)

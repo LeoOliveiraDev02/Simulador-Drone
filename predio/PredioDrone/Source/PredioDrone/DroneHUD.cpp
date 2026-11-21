@@ -85,6 +85,7 @@ void ADroneHUD::DrawHUD()
 		const FString Hel = FString::Printf(TEXT("HÉLICES %d/%d"), Restam, ADronePawn::MaxBatidas);
 		Texto(Hel, M, M + 62.f * E, 0.75f * E, Restam >= ADronePawn::MaxBatidas ? Branco : (Restam == 1 ? Vermelho : Amarelo));
 	}
+	DesenharVento(D, W - M, M + 70.f * E, E);
 	Texto(GM->TextoLocal(), W - M, M, 1.0f * E, Branco, false, true);
 	const int32 Min = FMath::FloorToInt(D->TempoVoo / 60.f), Seg = FMath::FloorToInt(D->TempoVoo) % 60;
 	Texto(FString::Printf(TEXT("%02d:%02d"), Min, Seg), W - M, M + 34.f * E, 1.0f * E, Branco, false, true);
@@ -128,37 +129,15 @@ void ADroneHUD::DrawHUD()
 		Texto(L1, X, Y, 0.75f * E, CorFPS);
 		Texto(FString::Printf(TEXT("GPU %.1f ms   jogo %.1f ms"), GM->MsGPU, GM->MsJogo), X, Y + 24.f * E, 0.7f * E, Branco);
 		Texto(bFSR ? FString::Printf(TEXT("AMD FSR 4 (IA): %s"), *APredioGameMode::NomeModoFSR()) : FString(TEXT("FSR desligado (TSR)")), X, Y + 48.f * E, 0.7f * E, bFSR ? Verde : Amarelo);
-		Texto(FString::Printf(TEXT("Gerador de quadros AMD: %s   Ajuste 60 FPS: %s"), bFG ? TEXT("LIGADO") : TEXT("desligado"), FAjustesDrone::Get().bAjusteAuto ? TEXT("auto") : TEXT("manual")), X, Y + 72.f * E, 0.7f * E, bFG ? Verde : Branco);
+		const int32 Meta = FAjustesDrone::Get().MetaFPS;
+		Texto(FString::Printf(TEXT("Gerador de quadros AMD: %s   Meta: %s   Ajuste: %s"), bFG ? TEXT("LIGADO") : TEXT("desligado"),
+			Meta > 0 ? *FString::Printf(TEXT("%d FPS"), Meta) : TEXT("livre"), FAjustesDrone::Get().bAjusteAuto ? TEXT("auto") : TEXT("manual")), X, Y + 72.f * E, 0.7f * E, bFG ? Verde : Branco);
 	}
 
-	// --- ajuda (F1) ---
+	// --- ajuda (F1 / Back): a mesma lista de comandos do menu ---
 	if (GM->bMostrarAjuda)
 	{
-		Caixa(W * 0.18f, H * 0.16f, W * 0.64f, H * 0.68f, FLinearColor(0, 0, 0, 0.72f));
-		const TCHAR* Linhas[] = {
-			TEXT("CONTROLES — mapa do prédio em construção"),
-			TEXT(""),
-			TEXT("Controle (modo 2):  analógico esquerdo ↑↓ sobe/desce (acelerador no ACRO), ←→ gira"),
-			TEXT("                    analógico direito ↑↓ frente/trás, ←→ lados"),
-			TEXT("                    Y troca ESTABILIZADO/ACRO    X volta ao início"),
-			TEXT("                    START abre o MENU e pausa (sensibilidade, inverter eixos, som, AMD)"),
-			TEXT("Teclado:  W/S sobe/desce   A/D gira   setas (ou I J K L) frente/trás/lados"),
-			TEXT("          M modo   R volta ao início   Esc menu   F1 esta ajuda"),
-			TEXT(""),
-			TEXT("AMD:  F2 modo do FSR 4   F3 gerador de quadros   F4 FSR liga/desliga (comparar)"),
-			TEXT("      F5 painel de FPS   F6 ajuste automático para manter 60 FPS de base"),
-			TEXT(""),
-			TEXT("Voe pelos corredores, pelo poço do elevador, pela escada e pelos buracos na laje."),
-			TEXT("Só o andar onde você está é desenhado — o vizinho aparece quando chega perto"),
-			TEXT("do poço, da escada ou de um buraco. Bateu forte = hélice quebra e volta ao início."),
-		};
-
-		float Y = H * 0.19f;
-		for (const TCHAR* L : Linhas)
-		{
-			Texto(L, W * 0.21f, Y, 0.8f * E, Branco);
-			Y += 30.f * E;
-		}
+		DesenharComandos(GM);
 	}
 }
 
@@ -178,23 +157,30 @@ namespace
 		IcBandeira,     // Objetivo
 		IcOlho,         // Modo de voo
 		IcRecarregar,   // Voltar ao início
-		IcCasa,         // Menu principal
+		IcLados,        // Vento
+		IcGiro,         // Rajadas
 		IcMira,         // Sensibilidade
 		IcControle,     // Expo
+		IcMedidor,      // Velocidade máxima
 		IcChip,         // FSR
 		IcQuadro,       // Gerador
 		IcMonitorSync,  // VSync
-		IcMedidor,      // Painel
-		IcEngrenagem,   // Ajuste automático
 		IcDrone,        // Volume
+		IcAltoFalante,  // Efeitos
+		IcControle,     // Lista de comandos
 		IcSetasH,       // Inverter frente/trás
 		IcSetasV,       // Inverter subir/descer
 		IcGiro,         // Inverter giro
 		IcLados,        // Inverter lados
 		IcTexto,        // Tamanho da interface
+		IcMedidor,      // Painel
+		IcQuadro,       // Meta de FPS
+		IcEngrenagem,   // Ajuste automático
 		IcEstrela,      // Restaurar padrões
+		IcCasa,         // Menu principal
 		IcEnergia,      // Sair
 	};
+	static_assert((int32)UE_ARRAY_COUNT(IconeItem) == (int32)EItemMenu::Total, "um ícone por item do menu");
 	const int32 IconeCategoria[] = { IcControle, IcSliders, IcMira, IcMonitor, IcAltoFalante, IcSetasH, IcAcessib, IcChave, IcDocumento };
 
 	// cores escritas em sRGB (0–255, como num editor de imagem) e convertidas para o Canvas
@@ -642,6 +628,18 @@ void ADroneHUD::DesenharMenu(APredioGameMode* GM)
 		T(APredioGameMode::DescricaoCategoria(CatSel), X(L0 + 60), Y(194), 15 * e, TEXT("Italic"), AzulTexto);
 		Linha(Pt(L0, 226), Pt(L1, 226), FMath::Max(1.f, e), Cor255(40, 70, 120, 200));
 	}
+	if (CatSel == ECategoriaMenu::Controles)
+	{
+		// qual comando está sendo usado agora (muda sozinho ao mexer no controle ou no teclado)
+		const FString Nome = APredioGameMode::NomeDispositivo(GM->Dispositivo);
+		const float LN = Medir(Nome, Fonte(17 * e, TEXT("Bold"))).X;
+		const float BX = X(L1) - LN - 64 * e;
+		RetArred(BX, Y(150), LN + 64 * e, 56 * e, 8 * e, Cor255(16, 40, 78, 235), Cor255(12, 30, 60, 235));
+		ContornoArred(BX, Y(150), LN + 64 * e, 56 * e, 8 * e, FMath::Max(1.f, 1.2f * e), Cor255(70, 140, 255, 200));
+		Icone(GM->Dispositivo == 1 ? IcControle : IcTexto, FVector2D(BX + 26 * e, Y(178)), 12 * e, AzulClaro);
+		T(TEXT("USANDO AGORA"), BX + 48 * e, Y(156), 11 * e, TEXT("Bold"), AzulTexto, 0, 2.f * e);
+		T(Nome, BX + 48 * e, Y(174), 17 * e, TEXT("Bold"), Branco);
+	}
 	const TArray<int32> Itens = APredioGameMode::ItensDaCategoria(CatSel);
 	const float Topo = 244.f, RH = 76.f;
 	for (int32 k = 0; k < Itens.Num(); ++k)
@@ -712,6 +710,12 @@ void ADroneHUD::DesenharMenu(APredioGameMode* GM)
 	if (!GM->bFocoItens)
 	{
 		T(TEXT("A / Enter  ou  →  para abrir esta seção"), X((L0 + L1) * 0.5f), Y(Topo + Itens.Num() * RH + 18), 15 * e, TEXT("Italic"), Cor255(120, 150, 200), 1);
+	}
+
+	if (GM->bVerComandos)
+	{
+		DesenharComandos(GM);
+		return;
 	}
 
 	// rodapé com os botões
@@ -1038,7 +1042,16 @@ void ADroneHUD::Ilustracao(int32 Cartao, float X, float Y, float W, float H, boo
 void ADroneHUD::Imagem(UTexture2D* Tex, float X, float Y, float W, float H, const FLinearColor& Cor)
 {
 	if (!Tex || !Tex->GetResource()) return;
-	FCanvasTileItem Tile(FVector2D(X, Y), Tex->GetResource(), FVector2D(W, H), Cor);
+	// preenche o retângulo sem deformar: corta as sobras da imagem (como "cover" no CSS)
+	FVector2D UV0(0.f, 0.f), UV1(1.f, 1.f);
+	const float TW = (float)Tex->GetSizeX(), TH = (float)Tex->GetSizeY();
+	if (TW > 0.f && TH > 0.f && W > 0.f && H > 0.f)
+	{
+		const float AImg = TW / TH, ARet = W / H;
+		if (AImg > ARet) { const float F = ARet / AImg; UV0.X = (1.f - F) * 0.5f; UV1.X = 1.f - UV0.X; }
+		else { const float F = AImg / ARet; UV0.Y = (1.f - F) * 0.5f; UV1.Y = 1.f - UV0.Y; }
+	}
+	FCanvasTileItem Tile(FVector2D(X, Y), Tex->GetResource(), FVector2D(W, H), UV0, UV1, Cor);
 	Tile.BlendMode = SE_BLEND_Translucent;
 	Canvas->DrawItem(Tile);
 }
@@ -1073,6 +1086,8 @@ void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 	{
 		bTentouUsina = true;
 		ImgUsina = LoadObject<UTexture2D>(nullptr, TEXT("/Game/UI/T_Usina.T_Usina"));
+		ImgFazenda = LoadObject<UTexture2D>(nullptr, TEXT("/Game/UI/T_Fazenda.T_Fazenda"));
+		ImgPredio = LoadObject<UTexture2D>(nullptr, TEXT("/Game/UI/T_Predio.T_Predio"));
 	}
 	const int32 NCart = (int32)ECartaoMapa::Total;
 
@@ -1233,9 +1248,11 @@ void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 			ContornoArred(X(cx), Y(cy), CW * e, CH * e, 12 * e, FMath::Max(1.f, (bSel ? 2.6f : 1.1f) * e), bSel ? Cor255(90, 160, 255) : Cor255(40, 64, 104, 200));
 			// figura do mapa (a usina usa a imagem renderizada)
 			const float IX = X(cx + 12), IY = Y(cy + 12), IW = (CW - 24) * e, IHt = 230 * e;
-			if ((ECartaoMapa)c == ECartaoMapa::Usina && ImgUsina)
+			UTexture2D* Foto = (ECartaoMapa)c == ECartaoMapa::Usina ? ImgUsina.Get() : ((ECartaoMapa)c == ECartaoMapa::Campo ? ImgFazenda.Get() : ImgPredio.Get());
+			if (Foto)
 			{
-				Imagem(ImgUsina, IX, IY, IW, IHt, bSel ? FLinearColor(0.85f, 0.85f, 0.85f, 1) : FLinearColor(0.5f, 0.5f, 0.5f, 1));
+				const bool bUs = (ECartaoMapa)c == ECartaoMapa::Usina;
+				Imagem(Foto, IX, IY, IW, IHt, bSel ? FLinearColor(bUs ? 0.85f : 1.f, bUs ? 0.85f : 1.f, bUs ? 0.85f : 1.f, 1) : FLinearColor(0.62f, 0.62f, 0.62f, 1));
 			}
 			else
 			{
@@ -1316,7 +1333,14 @@ void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 		const float A1 = Entrada(0.f);
 		T(FString::Printf(TEXT("MAPA %d"), c + 1), X(40), Y(64), 16 * e, TEXT("Bold"), AzulTexto, 0, 3.f * e);
 		T(APredioGameMode::NomeMapa(c), X(40 - (1.f - A1) * 40.f), Y(84), 52 * e, TEXT("Bold Italic"), Branco);
-		Ilustracao(c, X(40), Y(170), 470 * e, 270 * e, true);
+		if (UTexture2D* Foto = (ECartaoMapa)c == ECartaoMapa::Campo ? ImgFazenda.Get() : ((ECartaoMapa)c == ECartaoMapa::Predio ? ImgPredio.Get() : ImgUsina.Get()))
+		{
+			Imagem(Foto, X(40), Y(170), 470 * e, 270 * e, FLinearColor::White);
+		}
+		else
+		{
+			Ilustracao(c, X(40), Y(170), 470 * e, 270 * e, true);
+		}
 		ContornoArred(X(40), Y(170), 470 * e, 270 * e, 6 * e, FMath::Max(1.f, 1.2f * e), Cor255(60, 110, 200));
 		const float P = GM->ProgressoMapa(c);
 		T(TEXT("PROGRESSO DO MAPA"), X(40), Y(462), 13 * e, TEXT("Bold"), AzulTexto, 0, 2.f * e);
@@ -1384,5 +1408,78 @@ void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 	{
 		Caixa(0, 0, W, H, FLinearColor(0, 0, 0, 0.88f));
 		T(TEXT("CARREGANDO…"), W * 0.5f, H * 0.5f - 20 * e, 34 * e, TEXT("Bold Italic"), Branco, 1, 4.f * e);
+	}
+}
+
+// =====================================================================================
+// LISTA DE COMANDOS — controle e teclado lado a lado (menu > Controles, ou F1 / Back no voo)
+// =====================================================================================
+void ADroneHUD::DesenharComandos(APredioGameMode* GM)
+{
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	const float e = FMath::Min(W * 0.92f / 1280.f, H * 0.94f / 900.f);
+	const float OX = (W - 1180.f * e) * 0.5f, OY = (H - 820.f * e) * 0.5f;
+	auto X = [&](float V) { return OX + V * e; };
+	auto Y = [&](float V) { return OY + V * e; };
+
+	Caixa(0, 0, W, H, Cor255(2, 5, 12, 170));
+	RetArred(X(0), Y(0), 1180 * e, 820 * e, 12 * e, Cor255(7, 13, 25, 250), Cor255(9, 20, 38, 250));
+	ContornoArred(X(0), Y(0), 1180 * e, 820 * e, 12 * e, FMath::Max(1.f, 1.4f * e), Cor255(52, 104, 190, 200));
+	Icone(IcControle, FVector2D(X(48), Y(52)), 18 * e, AzulClaro);
+	T(TEXT("COMANDOS"), X(80), Y(22), 44 * e, TEXT("Bold Italic"), Branco);
+	T(TEXT("Usando agora: ") + APredioGameMode::NomeDispositivo(GM->Dispositivo), X(1150), Y(40), 16 * e, TEXT("Italic"), AzulTexto, 2);
+
+	struct FLinhaCmd { const TCHAR* Acao; const TCHAR* Controle; const TCHAR* Teclado; };
+	const FLinhaCmd Linhas[] = {
+		{ TEXT("Subir / descer"),            TEXT("Analógico esquerdo ↑ ↓"), TEXT("W / S   (ou Espaço / Ctrl)") },
+		{ TEXT("Girar no próprio eixo"),     TEXT("Analógico esquerdo ← →"), TEXT("A / D") },
+		{ TEXT("Frente / trás"),             TEXT("Analógico direito ↑ ↓"),  TEXT("Setas ↑ ↓   (ou I / K)") },
+		{ TEXT("Para os lados"),             TEXT("Analógico direito ← →"),  TEXT("Setas ← →   (ou J / L)") },
+		{ TEXT("Estabilizado / Acro"),       TEXT("Y"),                      TEXT("M") },
+		{ TEXT("Voltar ao início"),          TEXT("X"),                      TEXT("R") },
+		{ TEXT("Vento mais forte / fraco"),  TEXT("D-pad ↑ / ↓"),            TEXT("+ / −   (ou PgUp / PgDn)") },
+		{ TEXT("Mudar a direção do vento"),  TEXT("RB"),                     TEXT("V") },
+		{ TEXT("Rajadas liga / desliga"),    TEXT("LB"),                     TEXT("G") },
+		{ TEXT("Menu e pausa"),              TEXT("Start"),                  TEXT("Esc") },
+		{ TEXT("Esta lista no voo"),         TEXT("Back / Select"),          TEXT("F1") },
+	};
+	const float CA = 40.f, CC = 420.f, CT = 790.f;
+	T(TEXT("AÇÃO"), X(CA), Y(104), 13 * e, TEXT("Bold"), AzulTexto, 0, 3.f * e);
+	T(TEXT("CONTROLE"), X(CC), Y(104), 13 * e, TEXT("Bold"), GM->Dispositivo == 1 ? AzulClaro : AzulTexto, 0, 3.f * e);
+	T(TEXT("TECLADO"), X(CT), Y(104), 13 * e, TEXT("Bold"), GM->Dispositivo == 0 ? AzulClaro : AzulTexto, 0, 3.f * e);
+	Linha(FVector2D(X(30), Y(128)), FVector2D(X(1150), Y(128)), FMath::Max(1.f, e), Cor255(40, 70, 120, 200));
+	float LY = 140.f;
+	for (int32 i = 0; i < (int32)UE_ARRAY_COUNT(Linhas); ++i)
+	{
+		if (i % 2 == 0) RetArred(X(30), Y(LY - 4), 1120 * e, 44 * e, 6 * e, Cor255(13, 23, 39, 200), Cor255(11, 19, 33, 200));
+		T(Linhas[i].Acao, X(CA), Y(LY + 6), 18 * e, TEXT("Regular"), Branco);
+		T(Linhas[i].Controle, X(CC), Y(LY + 6), 18 * e, GM->Dispositivo == 1 ? TEXT("Bold") : TEXT("Regular"), GM->Dispositivo == 1 ? Branco : Cor255(185, 200, 225));
+		T(Linhas[i].Teclado, X(CT), Y(LY + 6), 18 * e, GM->Dispositivo == 0 ? TEXT("Bold") : TEXT("Regular"), GM->Dispositivo == 0 ? Branco : Cor255(185, 200, 225));
+		LY += 46.f;
+	}
+	LY += 10.f;
+	T(TEXT("Missões: para pegar ou soltar a caixa, pare em cima do ponto. Para a foto, mire o alvo de perto e segure."), X(CA), Y(LY), 15 * e, TEXT("Italic"), AzulTexto);
+	T(TEXT("AMD (teclado):  F2 modo do FSR 4   •   F3 gerador de quadros   •   F4 FSR liga/desliga   •   F5 painel de FPS   •   F6 ajuste automático"),
+		X(CA), Y(LY + 28), 15 * e, TEXT("Italic"), AzulTexto);
+	T(GM->bMenuAberto ? TEXT("A / Enter ou B / Esc para fechar") : TEXT("Back / F1 para fechar"), X(590), Y(780), 15 * e, TEXT("Bold"), Cor255(190, 205, 230), 1);
+}
+
+// seta do vento no OSD: aponta para onde o vento SOPRA, girada conforme a direção da câmera
+void ADroneHUD::DesenharVento(const ADronePawn* D, float XD, float Y0, float E)
+{
+	const FVector V = D->VentoAtual;
+	const float Kmh = V.Size2D() * 3.6f;
+	const FLinearColor Cor = Kmh > 28.f ? FLinearColor(1.f, 0.45f, 0.3f, 1.f) : (Kmh > 15.f ? FLinearColor(1.f, 0.85f, 0.3f, 1.f) : FLinearColor(1, 1, 1, 0.95f));
+	const FString Tx = Kmh < 1.f ? FString(TEXT("VENTO calmo")) : FString::Printf(TEXT("VENTO %.0f km/h"), Kmh);
+	Texto(Tx, XD - 46.f * E, Y0, 0.75f * E, Cor, false, true);
+	const FVector2D C(XD - 20.f * E, Y0 + 10.f * E);
+	Arco(C, 16.f * E, FMath::Max(1.f, 1.5f * E), FLinearColor(1, 1, 1, 0.35f));
+	if (Kmh >= 1.f)
+	{
+		// ângulo do vento em relação para onde o drone olha (para cima na tela = para frente)
+		const float Yaw = D->GetActorRotation().Yaw;
+		const float A = FMath::DegreesToRadians(FMath::RadiansToDegrees(FMath::Atan2(V.Y, V.X)) - Yaw);
+		const FVector2D Dir(FMath::Sin(A), -FMath::Cos(A));
+		Seta(C - Dir * 11.f * E, C + Dir * 12.f * E, FMath::Max(1.5f, 2.5f * E), 7.f * E, Cor);
 	}
 }

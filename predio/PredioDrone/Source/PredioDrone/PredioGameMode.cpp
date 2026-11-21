@@ -29,6 +29,8 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Sound/SoundBase.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #if WITH_EDITOR
 #include "ShaderCompiler.h"
 #endif
@@ -122,6 +124,20 @@ void APredioGameMode::BeginPlay()
 	{
 		D->Limites = LimitesVoo;
 		D->bUsarLimites = true;
+		D->AjustarLuz(bEhCampo);
+	}
+	for (const TCHAR* Nome : { TEXT("/Game/UI/S_Coleta.S_Coleta"), TEXT("/Game/UI/S_Foto.S_Foto"), TEXT("/Game/UI/S_Blip.S_Blip"), TEXT("/Game/UI/S_Vitoria.S_Vitoria") })
+	{
+		Sons.Add(LoadObject<USoundBase>(nullptr, Nome));
+	}
+	// água: material com ondas que o vento mexe (parâmetros "Ondas" e "Desloc")
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		if (!It->ActorHasTag(TEXT("Agua"))) continue;
+		if (UStaticMeshComponent* C = It->FindComponentByClass<UStaticMeshComponent>())
+		{
+			if (UMaterialInstanceDynamic* MID = C->CreateDynamicMaterialInstance(0)) MatAgua.Add(MID);
+		}
 	}
 
 	MontarPercurso();
@@ -384,8 +400,57 @@ void APredioGameMode::AtualizarTeclas()
 	{
 		const bool bDown = PC->IsInputKeyDown(K);
 		const bool bAntes = TeclaAntes.FindRef(K);
-		if (bDown && !bAntes) TeclaAgora.Add(K);
+		if (bDown && !bAntes)
+		{
+			TeclaAgora.Add(K);
+			if (!K.IsMouseButton()) Dispositivo = K.IsGamepadKey() ? 1 : 0;
+		}
 		TeclaAntes.Add(K, bDown);
+	}
+	// analógicos mexidos = controle; teclas de voo do teclado = teclado
+	for (const FKey& K : { EKeys::Gamepad_LeftX, EKeys::Gamepad_LeftY, EKeys::Gamepad_RightX, EKeys::Gamepad_RightY })
+	{
+		if (FMath::Abs(PC->GetInputAnalogKeyState(K)) > 0.35f) Dispositivo = 1;
+	}
+	for (const FKey& K : { EKeys::I, EKeys::J, EKeys::K, EKeys::L, EKeys::M, EKeys::R, EKeys::LeftControl })
+	{
+		if (PC->IsInputKeyDown(K)) Dispositivo = 0;
+	}
+}
+
+FString APredioGameMode::NomeDispositivo(int32 D)
+{
+	return D == 1 ? TEXT("CONTROLE (Xbox / PlayStation)") : TEXT("TECLADO E MOUSE");
+}
+
+void APredioGameMode::TocarSom(int32 Qual)
+{
+	if (bTour || !Sons.IsValidIndex(Qual) || !Sons[Qual]) return;
+	const float V = FAjustesDrone::Get().VolumeEfeitos;
+	if (V <= 0.01f) return;
+	UGameplayStatics::PlaySound2D(this, Sons[Qual], V);
+}
+
+void APredioGameMode::AtualizarAgua(float Dt)
+{
+	if (MatAgua.Num() == 0) return;
+	const ADronePawn* D = Drone();
+	const FVector W = D ? D->VentoAtual : FVector::ZeroVector;   // m/s
+	const float F = W.Size2D();
+	// ondas: quase lisa sem vento, crespa com vento forte (11 m/s = 40 km/h)
+	OndasAgua = FMath::FInterpTo(OndasAgua, FMath::Clamp(0.08f + F / 11.f, 0.08f, 1.f), Dt, 1.5f);
+	const FVector2D Dir = F > 0.05f ? FVector2D(W.X, W.Y) / F : FVector2D(1.f, 0.f);
+	// as duas camadas de ondas andam a favor do vento (a segunda mais devagar e um pouco de lado)
+	const float Vel = 0.01f + 0.035f * FMath::Min(F / 11.f, 1.f);
+	DeslocAgua.R += Dir.X * Vel * Dt;
+	DeslocAgua.G += Dir.Y * Vel * Dt;
+	DeslocAgua.B += (Dir.X * 0.8f - Dir.Y * 0.4f) * Vel * 0.6f * Dt;
+	DeslocAgua.A += (Dir.Y * 0.8f + Dir.X * 0.4f) * Vel * 0.6f * Dt;
+	for (UMaterialInstanceDynamic* M : MatAgua)
+	{
+		if (!M) continue;
+		M->SetScalarParameterValue(TEXT("Ondas"), OndasAgua);
+		M->SetVectorParameterValue(TEXT("Desloc"), DeslocAgua);
 	}
 }
 
@@ -408,16 +473,16 @@ ECategoriaMenu APredioGameMode::CategoriaDoItem(int32 I)
 	switch ((EItemMenu)I)
 	{
 	case EItemMenu::Continuar: return ECategoriaMenu::Continuar;
-	case EItemMenu::Objetivo: case EItemMenu::ModoVoo: case EItemMenu::VoltarInicio: case EItemMenu::MenuPrincipal:
+	case EItemMenu::Objetivo: case EItemMenu::ModoVoo: case EItemMenu::VoltarInicio: case EItemMenu::Vento: case EItemMenu::Rajadas:
 		return ECategoriaMenu::Jogabilidade;
-	case EItemMenu::Sensibilidade: case EItemMenu::Expo: return ECategoriaMenu::Sensibilidade;
+	case EItemMenu::Sensibilidade: case EItemMenu::Expo: case EItemMenu::VelMax: return ECategoriaMenu::Sensibilidade;
 	case EItemMenu::ModoFSR: case EItemMenu::Gerador: case EItemMenu::VSync:
 		return ECategoriaMenu::Video;
-	case EItemMenu::Volume: return ECategoriaMenu::Audio;
-	case EItemMenu::InvFrente: case EItemMenu::InvSubir: case EItemMenu::InvGiro: case EItemMenu::InvLados:
+	case EItemMenu::Volume: case EItemMenu::Efeitos: return ECategoriaMenu::Audio;
+	case EItemMenu::Comandos: case EItemMenu::InvFrente: case EItemMenu::InvSubir: case EItemMenu::InvGiro: case EItemMenu::InvLados:
 		return ECategoriaMenu::Controles;
 	case EItemMenu::EscalaHUD: return ECategoriaMenu::Acessibilidade;
-	case EItemMenu::Painel: case EItemMenu::AjusteAuto: case EItemMenu::Padrao: return ECategoriaMenu::Avancado;
+	case EItemMenu::Painel: case EItemMenu::MetaFPS: case EItemMenu::AjusteAuto: case EItemMenu::Padrao: return ECategoriaMenu::Avancado;
 	default: return ECategoriaMenu::Sair;
 	}
 }
@@ -446,14 +511,14 @@ FString APredioGameMode::DescricaoCategoria(ECategoriaMenu C)
 	switch (C)
 	{
 	case ECategoriaMenu::Continuar: return TEXT("Volta para o voo");
-	case ECategoriaMenu::Jogabilidade: return TEXT("Objetivo, modo de voo e volta ao início");
-	case ECategoriaMenu::Sensibilidade: return TEXT("Quanto o drone responde aos comandos");
+	case ECategoriaMenu::Jogabilidade: return TEXT("Objetivo, modo de voo, volta ao início e vento");
+	case ECategoriaMenu::Sensibilidade: return TEXT("Quanto o drone responde aos comandos e a velocidade máxima");
 	case ECategoriaMenu::Video: return TEXT("AMD FSR 4, gerador de quadros e V-Sync");
-	case ECategoriaMenu::Audio: return TEXT("Som do motor do drone");
-	case ECategoriaMenu::Controles: return TEXT("Inverter os eixos dos comandos");
+	case ECategoriaMenu::Audio: return TEXT("Som do motor e dos efeitos");
+	case ECategoriaMenu::Controles: return TEXT("Lista de comandos e inverter os eixos");
 	case ECategoriaMenu::Acessibilidade: return TEXT("Tamanho do painel de voo na tela");
-	case ECategoriaMenu::Avancado: return TEXT("Painel de desempenho, ajuste automático e padrões");
-	default: return TEXT("Fecha o simulador (as configurações ficam salvas)");
+	case ECategoriaMenu::Avancado: return TEXT("Painel de desempenho, meta de FPS, ajuste automático e padrões");
+	default: return TEXT("Voltar ao menu principal ou fechar o simulador (as configurações ficam salvas)");
 	}
 }
 
@@ -482,6 +547,7 @@ FString APredioGameMode::NomeCategoria(ECategoriaMenu C)
 	case ECategoriaMenu::Controles: return TEXT("CONTROLES");
 	case ECategoriaMenu::Acessibilidade: return TEXT("ACESSIBILIDADE");
 	case ECategoriaMenu::Avancado: return TEXT("AVANÇADO");
+	case ECategoriaMenu::Sair: return TEXT("SAIR");
 	default: return TEXT("SAIR DO JOGO");
 	}
 }
@@ -494,14 +560,20 @@ FString APredioGameMode::NomeItem(int32 I) const
 	case EItemMenu::Objetivo:      return TEXT("Objetivo");
 	case EItemMenu::ModoVoo:       return TEXT("Modo de voo");
 	case EItemMenu::VoltarInicio:  return TEXT("Voltar ao início");
-	case EItemMenu::MenuPrincipal: return TEXT("Menu principal");
+	case EItemMenu::MenuPrincipal: return TEXT("Voltar ao menu principal");
+	case EItemMenu::Vento:         return TEXT("Força do vento");
+	case EItemMenu::Rajadas:       return TEXT("Rajadas de vento");
+	case EItemMenu::VelMax:        return TEXT("Velocidade máxima");
+	case EItemMenu::Efeitos:       return TEXT("Volume dos efeitos");
+	case EItemMenu::Comandos:      return TEXT("Ver lista de comandos");
+	case EItemMenu::MetaFPS:       return TEXT("Meta de FPS");
 	case EItemMenu::Sensibilidade: return TEXT("Sensibilidade dos analógicos");
 	case EItemMenu::Expo:          return TEXT("Suavidade no centro (expo)");
 	case EItemMenu::ModoFSR:       return TEXT("AMD FSR 4 (IA)");
 	case EItemMenu::Gerador:       return TEXT("Gerador de quadros AMD");
 	case EItemMenu::VSync:         return TEXT("VSync");
 	case EItemMenu::Painel:        return TEXT("Painel de FPS");
-	case EItemMenu::AjusteAuto:    return TEXT("Ajuste automático (60 FPS)");
+	case EItemMenu::AjusteAuto:    return TEXT("Ajuste automático da qualidade");
 	case EItemMenu::Volume:        return TEXT("Volume do drone");
 	case EItemMenu::InvFrente:     return TEXT("Inverter frente / trás");
 	case EItemMenu::InvSubir:      return TEXT("Inverter subir / descer");
@@ -522,14 +594,20 @@ FString APredioGameMode::DescricaoItem(int32 I) const
 	case EItemMenu::Objetivo:      return DescricaoObjetivo(Objetivo);
 	case EItemMenu::ModoVoo:       return TEXT("Estabilizado nivela sozinho; Acro é manual");
 	case EItemMenu::VoltarInicio:  return TEXT("Recoloca o drone no ponto de partida (o desafio recomeça)");
-	case EItemMenu::MenuPrincipal: return TEXT("Escolher outro mapa");
+	case EItemMenu::MenuPrincipal: return TEXT("Sai do mapa e volta para a escolha de mapas e desafios");
+	case EItemMenu::Vento:         return TEXT("Também no voo: + / −  ou  D-pad ↑ ↓   (V ou RB muda a direção)");
+	case EItemMenu::Rajadas:       return TEXT("O vento sobe e desce de força e vira um pouco (G ou LB no voo)");
+	case EItemMenu::VelMax:        return TEXT("Até onde o drone acelera no modo estabilizado");
+	case EItemMenu::Efeitos:       return TEXT("Sons de pegar itens, tirar foto, passar no aro e vitória");
+	case EItemMenu::Comandos:      return TEXT("Teclado e controle: voo, vento, câmera e atalhos");
+	case EItemMenu::MetaFPS:       return TEXT("Trava o FPS nesse valor (com o gerador, metade vem da IA)");
 	case EItemMenu::Sensibilidade: return TEXT("Velocidade e giro máximos dos analógicos");
 	case EItemMenu::Expo:          return TEXT("Deixa o centro do analógico mais suave");
 	case EItemMenu::ModoFSR:       return TEXT("Upscaling por IA da AMD (Qualidade = mais nítido)");
 	case EItemMenu::Gerador:       return TEXT("Cria quadros intermediários com IA (quase dobra o FPS)");
 	case EItemMenu::VSync:         return TEXT("Sincroniza com o monitor (evita rasgos na imagem)");
 	case EItemMenu::Painel:        return TEXT("Mostra FPS, GPU e o modo do FSR na tela");
-	case EItemMenu::AjusteAuto:    return TEXT("Alivia o FSR sozinho se o FPS de base cair de 60");
+	case EItemMenu::AjusteAuto:    return TEXT("Alivia o FSR sozinho se não estiver alcançando a meta de FPS");
 	case EItemMenu::Volume:        return TEXT("Volume do som dos motores e das batidas");
 	case EItemMenu::InvFrente:     return TEXT("Inverte o analógico direito para frente e para trás");
 	case EItemMenu::InvSubir:      return TEXT("Inverte o acelerador (subir e descer)");
@@ -546,10 +624,10 @@ ETipoValor APredioGameMode::TipoItem(int32 I) const
 {
 	switch ((EItemMenu)I)
 	{
-	case EItemMenu::Gerador: case EItemMenu::VSync: case EItemMenu::Painel: case EItemMenu::AjusteAuto:
+	case EItemMenu::Gerador: case EItemMenu::VSync: case EItemMenu::Painel: case EItemMenu::AjusteAuto: case EItemMenu::Rajadas:
 		return ETipoValor::Chave;
 	case EItemMenu::Continuar: return ETipoValor::Nenhum;
-	case EItemMenu::VoltarInicio: case EItemMenu::MenuPrincipal: case EItemMenu::Padrao: case EItemMenu::Sair:
+	case EItemMenu::VoltarInicio: case EItemMenu::MenuPrincipal: case EItemMenu::Padrao: case EItemMenu::Sair: case EItemMenu::Comandos:
 		return ETipoValor::Acao;
 	default: return ETipoValor::Texto;
 	}
@@ -564,6 +642,7 @@ bool APredioGameMode::ChaveLigada(int32 I) const
 	case EItemMenu::VSync: return C.bVSync;
 	case EItemMenu::Painel: return C.bPainel;
 	case EItemMenu::AjusteAuto: return C.bAjusteAuto;
+	case EItemMenu::Rajadas: return C.bRajadas;
 	default: return false;
 	}
 }
@@ -591,7 +670,12 @@ FString APredioGameMode::ValorItem(int32 I) const
 	case EItemMenu::InvGiro:       return SN(C.bInvGuinada);
 	case EItemMenu::InvLados:      return SN(C.bInvRolagem);
 	case EItemMenu::EscalaHUD:     return FString::Printf(TEXT("%d%%"), FMath::RoundToInt(C.EscalaInterface * 100.f));
-	case EItemMenu::VoltarInicio: case EItemMenu::MenuPrincipal: case EItemMenu::Padrao: case EItemMenu::Sair: return TEXT("—");
+	case EItemMenu::Vento:         return C.VentoKmh <= 0.f ? FString(TEXT("Calmaria")) : FString::Printf(TEXT("%.0f km/h"), C.VentoKmh);
+	case EItemMenu::Rajadas:       return LD(C.bRajadas);
+	case EItemMenu::VelMax:        return FString::Printf(TEXT("%.0f km/h"), C.VelMaxKmh);
+	case EItemMenu::Efeitos:       return FString::Printf(TEXT("%d%%"), FMath::RoundToInt(C.VolumeEfeitos * 100.f));
+	case EItemMenu::MetaFPS:       return C.MetaFPS <= 0 ? FString(TEXT("Livre")) : FString::Printf(TEXT("%d FPS"), C.MetaFPS);
+	case EItemMenu::VoltarInicio: case EItemMenu::MenuPrincipal: case EItemMenu::Padrao: case EItemMenu::Sair: case EItemMenu::Comandos: return TEXT("—");
 	default: return FString();
 	}
 }
@@ -695,6 +779,31 @@ void APredioGameMode::MudarItem(int32 Dir, bool bConfirmar)
 	case EItemMenu::Expo:
 		C.Expo = Ciclo(C.Expo, 0.05f * Passo, 0.f, 0.80f);
 		break;
+	case EItemMenu::Vento:
+		C.VentoKmh = Ciclo(C.VentoKmh, 5.f * Passo, 0.f, 40.f);
+		break;
+	case EItemMenu::Rajadas: C.bRajadas = !C.bRajadas; break;
+	case EItemMenu::VelMax:
+		C.VelMaxKmh = Ciclo(C.VelMaxKmh, 5.f * Passo, 25.f, 90.f);
+		break;
+	case EItemMenu::Efeitos:
+		C.VolumeEfeitos = Ciclo(C.VolumeEfeitos, 0.05f * Passo, 0.f, 1.f);
+		if (Dir != 0) TocarSom(0);
+		break;
+	case EItemMenu::Comandos:
+		if (bConfirmar) { bVerComandos = true; MenuMudouEm = FPlatformTime::Seconds(); }
+		return;
+	case EItemMenu::MetaFPS:
+	{
+		int32 Idx = 0;
+		for (int32 k = 0; k < FAjustesDrone::NumMetas; ++k) if (FAjustesDrone::MetasFPS[k] == C.MetaFPS) Idx = k;
+		Idx = (Idx + Passo + FAjustesDrone::NumMetas) % FAjustesDrone::NumMetas;
+		C.MetaFPS = FAjustesDrone::MetasFPS[Idx];
+		C.AplicarGraficos();
+		NivelAjuste = 0;
+		AplicarNivelAjuste();
+		break;
+	}
 	case EItemMenu::InvFrente: C.bInvArfagem = !C.bInvArfagem; break;
 	case EItemMenu::InvSubir:  C.bInvAcelerador = !C.bInvAcelerador; break;
 	case EItemMenu::InvGiro:   C.bInvGuinada = !C.bInvGuinada; break;
@@ -782,6 +891,18 @@ void APredioGameMode::TickMenu(float Dt)
 
 	const int32 NC = (int32)ECategoriaMenu::Total;
 	const ECategoriaMenu Cat = (ECategoriaMenu)FMath::Clamp(CategoriaSel, 0, NC - 1);
+
+	// lista de comandos aberta: qualquer botão de confirmar/voltar (ou clique) fecha só ela
+	if (bVerComandos)
+	{
+		if (bPodeFechar && Apertou({ EKeys::Escape, EKeys::Gamepad_FaceButton_Right, EKeys::BackSpace, EKeys::Enter,
+			EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom, EKeys::Gamepad_Special_Right, EKeys::LeftMouseButton, EKeys::RightMouseButton }))
+		{
+			bVerComandos = false;
+			MenuMudouEm = FPlatformTime::Seconds();
+		}
+		return;
+	}
 
 	// Start fecha de qualquer lugar; Esc / B / Backspace voltam uma tela (das opções para as seções, das seções fecha)
 	if (bPodeFechar && Apertou({ EKeys::Gamepad_Special_Right }))
@@ -969,7 +1090,7 @@ void APredioGameMode::TeclasAtalho()
 		NivelAjuste = 0;
 		AplicarNivelAjuste();
 		C.Salvar();
-		D->MostrarMensagem(C.bAjusteAuto ? TEXT("Ajuste automático para 60 FPS LIGADO") : TEXT("Ajuste automático desligado"));
+		D->MostrarMensagem(C.bAjusteAuto ? TEXT("Ajuste automático da qualidade LIGADO") : TEXT("Ajuste automático desligado"));
 	}
 }
 
@@ -993,9 +1114,12 @@ void APredioGameMode::AplicarNivelAjuste()
 
 void APredioGameMode::AjusteAutomatico(float Dt)
 {
-	if (!FAjustesDrone::Get().bAjusteAuto || bTour || bMenuAberto) return;
-	if (FPSBase < 57.f) { AcumBaixo += Dt; AcumAlto = 0.f; }
-	else if (FPSBase > 88.f) { AcumAlto += Dt; AcumBaixo = 0.f; }
+	const FAjustesDrone& CfgA = FAjustesDrone::Get();
+	if (!CfgA.bAjusteAuto || bTour || bMenuAberto) return;
+	// base que precisa ser alcançada: a meta (metade dela com o gerador de quadros); "livre" = 60 de base
+	const float Alvo = CfgA.MetaFPS <= 0 ? 60.f : (GeradorLigado() ? CfgA.MetaFPS * 0.5f : (float)CfgA.MetaFPS);
+	if (FPSBase < Alvo * 0.95f) { AcumBaixo += Dt; AcumAlto = 0.f; }
+	else if (FPSBase > Alvo * 1.45f || (CfgA.MetaFPS > 0 && FPSBase >= Alvo * 0.98f && NivelAjuste > 0 && FPSBase > Alvo * 1.25f)) { AcumAlto += Dt; AcumBaixo = 0.f; }
 	else { AcumBaixo = FMath::Max(0.f, AcumBaixo - Dt); AcumAlto = FMath::Max(0.f, AcumAlto - Dt); }
 
 	if (AcumBaixo > 4.f && NivelAjuste < 4)
@@ -1055,6 +1179,7 @@ void APredioGameMode::Tick(float DeltaSeconds)
 			if (AActor* F = Ferraduras[i].Get()) F->AddActorWorldRotation(FRotator(0.f, 90.f * DeltaSeconds, 0.f));
 		}
 		MoverFarolECaixa();
+		AtualizarAgua(DeltaSeconds);
 	}
 	Flash = FMath::Max(0.f, Flash - DtReal * 2.5f);
 	if (bMenuPrincipal && bFotoMenu) TickFotosMenu(DtReal);
@@ -1437,6 +1562,7 @@ void APredioGameMode::ConcluirDesafio(bool bSucesso)
 {
 	Estado = bSucesso ? EEstadoDesafio::Concluido : EEstadoDesafio::Falhou;
 	TempoNoResultado = 0.f;
+	if (bSucesso) TocarSom(3);
 	Medalha = 0;
 	bNovoRecorde = false;
 	if (bSucesso)
@@ -1540,6 +1666,7 @@ void APredioGameMode::TickObjetivo(float Dt)
 			if (FVector::Dist(X, C) < RaioAro)
 			{
 				++ProximoAro;
+				TocarSom(2);
 				TempoDesdeAro = 0.f;
 				BonusUltimoAro = 0.f;
 				if (Objetivo == EObjetivo::ArosRelogio && Aros.IsValidIndex(ProximoAro))
@@ -2107,6 +2234,7 @@ void APredioGameMode::TickMissoes(float Dt, const FVector& P)
 			if (!bComCaixa)
 			{
 				bComCaixa = true;
+				TocarSom(2);
 				D->MostrarMensagem(FString::Printf(TEXT("Caixa presa! Leve para: %s"), NomesEntrega.IsValidIndex(EntregaAtual) ? *NomesEntrega[EntregaAtual] : TEXT("o destino")), 3.f);
 			}
 			else
@@ -2118,6 +2246,7 @@ void APredioGameMode::TickMissoes(float Dt, const FVector& P)
 					CaixasEntregues.Add(Deixada);
 				}
 				++EntregaAtual;
+				TocarSom(0);
 				if (EntregaAtual >= PontosEntrega.Num())
 				{
 					ConcluirDesafio(true);
@@ -2182,6 +2311,7 @@ void APredioGameMode::TickMissoes(float Dt, const FVector& P)
 			if (TempoMira >= TempoParaFoto)
 			{
 				FotoFeita[FotoMirando] = true;
+				TocarSom(1);
 				Flash = 1.f;
 				D->MostrarMensagem(FString::Printf(TEXT("Foto: %s (%d de %d)"), *NomesFoto[FotoMirando], Progresso(), PontosFoto.Num()), 2.5f);
 				FotoMirando = INDEX_NONE;
@@ -2205,6 +2335,7 @@ void APredioGameMode::TickMissoes(float Dt, const FVector& P)
 			if (Dist < 170.f)
 			{
 				FerraduraPega[i] = true;
+				TocarSom(0);
 				F->SetActorHiddenInGame(true);
 				D->MostrarMensagem(FString::Printf(TEXT("Ferradura! %d de %d"), Progresso(), Ferraduras.Num()), 2.5f);
 				if (Progresso() >= Ferraduras.Num())

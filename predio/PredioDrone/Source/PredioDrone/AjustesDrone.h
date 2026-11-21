@@ -19,6 +19,13 @@ struct FAjustesDrone
 	bool bPainel = true;
 	bool bAjusteAuto = true;
 	float EscalaInterface = 1.0f; // tamanho do OSD (acessibilidade)
+	int32 MetaFPS = 0;            // 0 = livre; senão o FPS que o jogo tenta alcançar (e não passa)
+	float VelMaxKmh = 50.f;       // velocidade máxima no modo estabilizado (25 .. 90 km/h)
+	float VentoKmh = 10.f;        // força do vento (0 .. 40 km/h)
+	bool bRajadas = true;         // vento com rajadas
+	float VolumeEfeitos = 0.8f;   // sons de coleta, foto, vitória
+	static const int32 MetasFPS[];
+	static const int32 NumMetas;
 	// recordes (segundos; 0 = ainda não tem) e melhor medalha (0 nenhuma, 1 bronze, 2 prata, 3 ouro)
 	// de cada objetivo, na ordem do EObjetivo (Livre, Topo, ArosOrdem, ArosRelogio, Entregas, Pulverizar, Fotos, Ferraduras)
 	static constexpr int32 NumObjetivos = 8;
