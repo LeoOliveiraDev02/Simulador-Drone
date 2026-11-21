@@ -277,7 +277,51 @@ def textura_do_gltf(mat, tipo):
     return None
 
 
-def arvore_com_vento(arvore, mestre):
+def adicionar_vento_no_mestre(m):
+    """põe o balanço/tremor da árvore (WPO) num material mestre já existente (cópia do mestre do glTF)."""
+    por(m, "max_world_position_offset_displacement", 120.0)
+    p = parametros_vento(m, -2600, 300)
+    wp = posicao_mundo(m, -2600, 750)
+    op = expr(m, unreal.MaterialExpressionObjectPositionWS, -2600, 860)
+    tempo = expr(m, unreal.MaterialExpressionTime, -2600, 960)
+    folha = expr(m, unreal.MaterialExpressionScalarParameter, -2600, 1040, parameter_name="Folha", default_value=0.0)
+    alt = expr(m, unreal.MaterialExpressionScalarParameter, -2600, 1120, parameter_name="AlturaArvore", default_value=1100.0)
+    c = custom(m, -2000, 500, CODIGO_ARVORE, ["P", "O", "T", "F", "R", "DIR", "FOLHA", "ALT"])
+    for fonte, entrada in ((wp, "P"), (op, "O"), (tempo, "T"), (p["VentoForca"], "F"), (p["VentoRajada"], "R"),
+                           (p["VentoDir"], "DIR"), (folha, "FOLHA"), (alt, "ALT")):
+        ligar(fonte, "", c, entrada)
+    mel.connect_material_property(c, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+    mel.recompile_material(m)
+    eal.save_loaded_asset(m)
+
+
+COPIAS = {}
+
+
+def copia_com_vento(mat):
+    """cópia de um material/instância do glTF (e da cadeia de pais dele) com o vento no mestre.
+    As instâncias copiadas mantêm todas as texturas e ajustes; só o mestre ganha o balanço."""
+    caminho = mat.get_path_name()
+    if caminho in COPIAS:
+        return COPIAS[caminho]
+    destino = PASTA + "/ArvoreVento/" + mat.get_name() + "_Vento"
+    if eal.does_asset_exist(destino):
+        eal.delete_asset(destino)
+    nova = eal.duplicate_asset(caminho.split(".")[0], destino)
+    if isinstance(mat, unreal.Material):
+        adicionar_vento_no_mestre(nova)
+        log("   mestre com vento:", caminho, "->", destino)
+    else:
+        pai = mat.get_editor_property("parent")
+        if pai:
+            nova.set_editor_property("parent", copia_com_vento(pai))
+        mel.update_material_instance(nova)
+        eal.save_loaded_asset(nova)
+    COPIAS[caminho] = nova
+    return nova
+
+
+def arvore_com_vento(arvore, mestre_nao_usado=None):
     """cópia da árvore da fazenda com materiais que balançam (a da fazenda não muda)."""
     destino = PASTA + "/ArvoreVento/ArvoreVento"
     if eal.does_directory_exist(PASTA + "/ArvoreVento"):
@@ -289,23 +333,16 @@ def arvore_com_vento(arvore, mestre):
     for i, sm in enumerate(copia.get_editor_property("static_materials")):
         original = sm.get_editor_property("material_interface")
         nome = str(sm.get_editor_property("material_slot_name"))
-        try:
-            log("   texturas do slot", nome, [str(n) for n in mel.get_texture_parameter_names(original)])
-        except Exception:
-            pass
-        novo = mi("MI_ArvoreVento_%d" % i, mestre)
-        achou = []
-        for tipo, par in (("cor", "Cor"), ("normal", "Normal"), ("mr", "MR")):
-            t = textura_do_gltf(original, tipo)
-            if t:
-                mel.set_material_instance_texture_parameter_value(novo, par, t)
-                achou.append(par)
+        if not original:
+            continue
+        novo = copia_com_vento(original)
         e_folha = "leaf" in nome.lower() or "leaves" in nome.lower()
-        mel.set_material_instance_scalar_parameter_value(novo, "Folha", 1.0 if e_folha else 0.0)
-        mel.update_material_instance(novo)
-        eal.save_loaded_asset(novo)
+        if isinstance(novo, unreal.MaterialInstanceConstant):
+            mel.set_material_instance_scalar_parameter_value(novo, "Folha", 1.0 if e_folha else 0.0)
+            mel.update_material_instance(novo)
+            eal.save_loaded_asset(novo)
         copia.set_material(i, novo)
-        log("   slot", i, nome, "->", "folha (treme)" if e_folha else "tronco/galho (balança)", "texturas:", achou)
+        log("   slot", i, nome, "->", "folha (treme)" if e_folha else "tronco/galho (balança)")
     eal.save_loaded_asset(copia)
     return copia
 
@@ -373,6 +410,23 @@ def luz_e_ceu():
     ppv.set_actor_label("PosProcesso")
 
 
+def material_do_terreno_da_fazenda():
+    """o mesmo material que está no terreno da fazenda (pega direto da malha de lá)."""
+    if eal.does_directory_exist("/Game/Campo/Malhas/Terreno"):
+        for c in eal.list_assets("/Game/Campo/Malhas/Terreno", recursive=True, include_folder=False):
+            a = eal.load_asset(c)
+            if isinstance(a, unreal.StaticMesh):
+                mats = a.get_editor_property("static_materials")
+                if mats:
+                    m = mats[0].get_editor_property("material_interface")
+                    log("material do terreno:", m.get_path_name() if m else None)
+                    return m
+    for p in ("/Game/Campo/Materiais/M_Terreno", "/Game/Campo/Materiais/MI_TERRENO"):
+        if eal.does_asset_exist(p):
+            return unreal.load_asset(p)
+    return None
+
+
 def nanite(sm, folhagem=True):
     ns = sm.get_editor_property("nanite_settings")
     ns.set_editor_property("enabled", True)
@@ -398,8 +452,8 @@ def main():
 
         # materiais
         m_capim = mestre_capim()
-        m_arvore = mestre_arvore()
-        mis = {"TERRENO": unreal.load_asset("/Game/Campo/Materiais/MI_TERRENO")}
+        m_arvore = None   # a árvore com vento usa uma cópia do mestre do glTF (ver copia_com_vento)
+        mis = {"TERRENO": material_do_terreno_da_fazenda()}
         for slot, c in CORES_FOLHA.items():
             i = mi("MI_V_" + slot, m_capim)
             mel.set_material_instance_vector_parameter_value(i, "Cor", unreal.LinearColor(c[0], c[1], c[2], 1))
