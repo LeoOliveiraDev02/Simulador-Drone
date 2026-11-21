@@ -179,13 +179,30 @@ def main():
         log("chão Dry Soil:", dry.get_path_name() if dry else "FALTA ADICIONAR")
         log("chão Arid Soil:", arid.get_path_name() if arid else "FALTA ADICIONAR")
 
-        # chão grande em volta (o da fazenda) e os três canteiros de 14 x 14 m, 2 cm acima
-        caixa((0, 0, 0), (220, 220, 1), chao_atual, "ChaoVolta")
-        canteiros = (("ATUAL (FAZENDA HOJE)", chao_atual, -16), ("DRY SOIL (MEGASCANS)", dry, 0), ("ARID SOIL (MEGASCANS)", arid, 16))
-        for nome, mat, x in canteiros:
-            caixa((x, 10, 0.02), (14, 14, 0.2), mat or neutro, "Canteiro_" + chave(nome)[:12])
-            placa(nome if mat else nome + "\nFALTA ADICIONAR", (x, 2.6, 0.9), yaw=90.0, tamanho=55.0,
-                  cor=(255, 255, 255) if mat else (255, 190, 60))
+        # o chão em volta é o próprio terreno da fazenda (plano num raio de 14 m do centro):
+        # assim o "ATUAL" é exatamente o chão de hoje, com o capim de lado
+        terreno = None
+        if eal.does_directory_exist("/Game/Campo/Malhas/Terreno"):
+            for c in eal.list_assets("/Game/Campo/Malhas/Terreno", recursive=True, include_folder=False):
+                a = eal.load_asset(c)
+                if isinstance(a, unreal.StaticMesh):
+                    terreno = a
+                    break
+        if terreno:
+            t = eas.spawn_actor_from_object(terreno, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+            t.set_actor_label("TerrenoFazenda")
+            tag(t, "Terreno")
+        else:
+            caixa((0, 0, 0), (220, 220, 1), chao_atual, "ChaoVolta")
+        log("chão em volta:", terreno.get_path_name() if terreno else "caixa com o material do terreno")
+        # canteiros de 7 x 7 m: o ATUAL fica sem canteiro (é o chão em volta, marcado só pela placa)
+        canteiros = (("ATUAL (FAZENDA HOJE)", None, -8.5), ("DRY SOIL (MEGASCANS)", dry, 0.0), ("ARID SOIL (MEGASCANS)", arid, 8.5))
+        for i, (nome, mat, x) in enumerate(canteiros):
+            if i > 0:
+                caixa((x, 7, 0.03), (7, 7, 0.2), mat or neutro, "Canteiro_" + chave(nome)[:12])
+            falta = i > 0 and not mat
+            placa(nome + ("\nFALTA ADICIONAR" if falta else ""), (x, 3.2, 0.9), yaw=-90.0, tamanho=42.0,
+                  cor=(255, 190, 60) if falta else (255, 255, 255))
 
         # árvores: a atual e a nova (Megaplants), lado a lado, a 30 m dos canteiros
         arvore_atual = None
@@ -204,27 +221,27 @@ def main():
         log("árvore atual:", arvore_atual.get_path_name() if arvore_atual else "não achada")
         log("árvore nova:", nova.get_path_name() if nova else "FALTA ADICIONAR")
         if arvore_atual:
-            a = eas.spawn_actor_from_object(arvore_atual, unreal.Vector(-1400, 4000, 0), unreal.Rotator(0, 0, 0))
+            a = eas.spawn_actor_from_object(arvore_atual, unreal.Vector(-900, 1700, -5), unreal.Rotator(0, 0, 0))
             a.set_actor_scale3d(unreal.Vector(2.9, 2.9, 2.9))
             a.set_actor_label("ArvoreAtual")
-        placa("ÁRVORE ATUAL", (-14, 31, 1.2), yaw=90.0, tamanho=70.0)
+        placa("ÁRVORE ATUAL", (-9, 12.5, 1.2), yaw=-90.0, tamanho=45.0)
         if nova:
-            a = eas.spawn_actor_from_object(nova, unreal.Vector(1400, 4000, 0), unreal.Rotator(0, 0, 0))
+            a = eas.spawn_actor_from_object(nova, unreal.Vector(900, 1700, -5), unreal.Rotator(0, 0, 0))
             a.set_actor_label("ArvoreNova")
-            placa("ÁRVORE NOVA (MEGAPLANTS)", (14, 31, 1.2), yaw=90.0, tamanho=70.0)
+            placa("ÁRVORE NOVA (MEGAPLANTS)", (9, 12.5, 1.2), yaw=-90.0, tamanho=45.0)
         else:
-            caixa((14, 40, 0.3), (2, 2, 0.3), neutro, "LugarArvoreNova")
-            placa("ÁRVORE NOVA (MEGAPLANTS)\nFALTA ADICIONAR", (14, 31, 1.2), yaw=90.0, tamanho=70.0, cor=(255, 190, 60))
+            caixa((9, 17, 0.3), (1.5, 1.5, 0.3), neutro, "LugarArvoreNova")
+            placa("ÁRVORE NOVA (MEGAPLANTS)\nFALTA ADICIONAR", (9, 12.5, 1.2), yaw=-90.0, tamanho=45.0, cor=(255, 190, 60))
 
         # drone começa de frente para os canteiros
-        ps = eas.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(0, -600, 120), unreal.Rotator(0, 0, 90))
+        ps = eas.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(0, -300, 60), unreal.Rotator(0, 0, 90))
         ps.set_actor_label("InicioDrone")
 
         # pontos do voo de teste (fotos): perto de cada canteiro e de cada árvore
-        vistas = [(-16, 1.0, 1.2, 90), (0, 1.0, 1.2, 90), (16, 1.0, 1.2, 90),    # chão de perto
-                  (-16, 6.0, 0.6, 90), (0, 6.0, 0.6, 90), (16, 6.0, 0.6, 90),    # rente ao chão
-                  (-14, 22, 3.0, 90), (14, 22, 3.0, 90),                         # árvores de frente
-                  (0, 18, 9.0, 90)]                                              # as duas de cima
+        vistas = [(-8.5, 2.0, 1.3, 90), (0, 2.0, 1.3, 90), (8.5, 2.0, 1.3, 90),   # chão de perto
+                  (-8.5, 5.0, 0.5, 90), (0, 5.0, 0.5, 90), (8.5, 5.0, 0.5, 90),   # rente ao chão
+                  (-9, 8.0, 3.0, 90), (9, 8.0, 3.0, 90),                          # árvores de frente
+                  (0, 4.0, 8.0, 90)]                                              # as duas de cima
         for i, (x, y, z, yaw) in enumerate(vistas):
             e = eas.spawn_actor_from_class(unreal.TargetPoint, unreal.Vector(x * 100, y * 100, z * 100), unreal.Rotator(0, 0, yaw))
             e.set_actor_label("Vista_%02d" % i)
