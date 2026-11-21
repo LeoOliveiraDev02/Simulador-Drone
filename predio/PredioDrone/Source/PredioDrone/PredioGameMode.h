@@ -135,6 +135,7 @@ public:
 
 	// ---------------------------------------------------------------- mapa e objetivo
 	bool bEhCampo = false;
+	bool bEhVitrine = false;      // mapa de testes de assets novos (conta como fazenda para luz e limites)
 	EObjetivo Objetivo = EObjetivo::Livre;
 	EEstadoDesafio Estado = EEstadoDesafio::Pronto;
 	float TempoDesafio = 0.f;      // cronômetro (s), só corre com o jogo despausado

@@ -91,11 +91,13 @@ void APredioGameMode::BeginPlay()
 
 	// -mapa=Campo na linha de comando (testes): o jogo sempre abre no prédio; daqui pula para a fazenda
 	FString MapaCmd;
-	if (!GetWorld()->GetMapName().Contains(TEXT("Campo")) && FParse::Value(FCommandLine::Get(), TEXT("mapa="), MapaCmd)
-		&& MapaCmd.Equals(TEXT("Campo"), ESearchCase::IgnoreCase) && !UGameplayStatics::HasOption(OptionsString, TEXT("jogo")))
+	if (FParse::Value(FCommandLine::Get(), TEXT("mapa="), MapaCmd) && !UGameplayStatics::HasOption(OptionsString, TEXT("jogo"))
+		&& (MapaCmd.Equals(TEXT("Campo"), ESearchCase::IgnoreCase) || MapaCmd.Equals(TEXT("Vitrine"), ESearchCase::IgnoreCase))
+		&& !GetWorld()->GetMapName().Contains(MapaCmd))
 	{
 		bTrocandoMapa = true;
-		UGameplayStatics::OpenLevel(this, FName(TEXT("/Game/Mapas/Campo")), true, TEXT("jogo"));
+		const FString Destino = MapaCmd.Equals(TEXT("Vitrine"), ESearchCase::IgnoreCase) ? TEXT("/Game/Mapas/Vitrine") : TEXT("/Game/Mapas/Campo");
+		UGameplayStatics::OpenLevel(this, FName(*Destino), true, TEXT("jogo"));
 		return;
 	}
 
@@ -116,7 +118,8 @@ void APredioGameMode::BeginPlay()
 	// as fachadas ficam em x = 0,15 / 23,85 e y = 0,15 / 15,85 m (blocos de 14 cm); o centro do drone
 	// para 45 cm para dentro delas, em todos os andares (no 2º as paredes são baixas e no 3º/cobertura
 	// não há parede — o limite segura do mesmo jeito). Teto: 15,9 m (a tela vai até 16,6 m).
-	bEhCampo = GetWorld()->GetMapName().Contains(TEXT("Campo"));
+	bEhVitrine = GetWorld()->GetMapName().Contains(TEXT("Vitrine"));
+	bEhCampo = bEhVitrine || GetWorld()->GetMapName().Contains(TEXT("Campo"));
 	LimitesVoo = bEhCampo
 		? FBox(FVector(-48000.f, -48000.f, -5000.f), FVector(48000.f, 48000.f, 9000.f)) // fazenda: 480 m para cada lado, 90 m de teto
 		: FBox(FVector(45.f, -1555.f, -500.f), FVector(2355.f, -45.f, 1590.f));
@@ -181,7 +184,7 @@ void APredioGameMode::BeginPlay()
 	bCampoExiste = FPackageName::DoesPackageExist(TEXT("/Game/Mapas/Campo"));
 	const bool bJogo = UGameplayStatics::HasOption(OptionsString, TEXT("jogo"));
 	const FString OpModo = UGameplayStatics::ParseOption(OptionsString, TEXT("modo"));
-	EObjetivo Inicial = bEhCampo ? EObjetivo::ArosOrdem : EObjetivo::Livre;
+	EObjetivo Inicial = (bEhCampo && !bEhVitrine) ? EObjetivo::ArosOrdem : EObjetivo::Livre;
 	if (!OpModo.IsEmpty())
 	{
 		Inicial = (EObjetivo)FMath::Clamp(FCString::Atoi(*OpModo), 0, (int32)EObjetivo::ArosRelogio);
@@ -1352,6 +1355,7 @@ TArray<EObjetivo> APredioGameMode::ObjetivosDoCartao(ECartaoMapa C)
 
 TArray<EObjetivo> APredioGameMode::ObjetivosDoMapa() const
 {
+	if (bEhVitrine) return { EObjetivo::Livre };
 	return ObjetivosDoCartao(bEhCampo ? ECartaoMapa::Campo : ECartaoMapa::Predio);
 }
 
@@ -1411,7 +1415,7 @@ FString APredioGameMode::NomeMedalha(int32 M)
 
 FString APredioGameMode::TextoLocal() const
 {
-	return bEhCampo ? FString(TEXT("FAZENDA")) : TextoAndar(AndarAtual);
+	return bEhVitrine ? FString(TEXT("VITRINE")) : (bEhCampo ? FString(TEXT("FAZENDA")) : TextoAndar(AndarAtual));
 }
 
 float APredioGameMode::AlturaTopo() const
