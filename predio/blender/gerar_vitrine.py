@@ -166,7 +166,7 @@ def main():
 
     for ob in list(bpy.context.scene.objects):
         G["exportar"](ob)
-    info = {"canteiros": canteiros, "lago": lago, "milho": milho, "arvores": arvores, "inicio": [0.0, -2.0]}
+    info = {"canteiros": canteiros, "lago": lago, "milho": milho, "arvores": arvores, "inicio": [0.0, -2.0], "arvore_blender": [17.0, 24.0]}
     with open(os.path.join(SAIDA, "vitrine.json"), "w", encoding="utf-8") as f:
         json.dump(info, f, ensure_ascii=False, indent=1)
     print("vitrine pronta em", SAIDA)

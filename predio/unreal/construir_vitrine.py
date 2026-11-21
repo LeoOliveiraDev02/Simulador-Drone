@@ -347,6 +347,114 @@ def arvore_com_vento(arvore, mestre_nao_usado=None):
     return copia
 
 
+CODIGO_AAA = r"""
+float3 lp = P - O;
+float3 piv = float3(PV.x, -PV.y, PZ.x) * 100.0;
+float nivel = PZ.y;
+float flex = VC.r;
+float fase = VC.g * 6.2832;
+float folha = VC.b;
+float faseF = VC.a * 6.2832;
+float2 d = normalize(DIR.xy + float2(1e-4, 0.0));
+float3 eixo = normalize(float3(-d.y, d.x, 0.0));
+float vento = F * (0.6 + 0.6 * R);
+float ht = saturate(lp.z / max(ALT, 100.0));
+float3 o = float3(d, 0.0) * vento * (0.85 + 0.15 * sin(T * 0.7 + O.x * 0.01)) * 45.0 * ht * ht;
+if (nivel > 0.5)
+{
+    float ang = (vento * (0.12 + 0.05 * nivel) + 0.07 * F * sin(T * (1.5 + 0.4 * nivel) + fase) + 0.02 * sin(T * 3.1 + fase * 2.0)) * flex;
+    float3 r = lp - piv;
+    float c = cos(ang);
+    float s = sin(ang);
+    float3 rr = r * c + cross(eixo, r) * s + eixo * dot(eixo, r) * (1.0 - c);
+    o += rr - r;
+}
+o += folha * (0.8 + 4.5 * vento) * float3(sin(T * 10.0 + faseF), cos(T * 8.7 + faseF * 1.3), 0.6 * sin(T * 12.3 + faseF * 0.7));
+return o;
+"""
+
+
+def mestre_aaa():
+    """árvore do Blender: tronco dobra pela altura, cada galho gira em volta do pivô dele (UV1/UV2), folhas tremem."""
+    m = novo_material("M_ArvoreAAA")
+    m.set_editor_property("two_sided", True)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    por(m, "opacity_mask_clip_value", 0.45)
+    por(m, "max_world_position_offset_displacement", 150.0)
+    branco = unreal.load_asset("/Engine/EngineResources/WhiteSquareTexture")
+    normal_padrao = unreal.load_asset("/Engine/EngineMaterials/DefaultNormal")
+    tc = expr(m, unreal.MaterialExpressionTextureSampleParameter2D, -900, -400, parameter_name="Cor", texture=branco)
+    mel.connect_material_property(tc, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(tc, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
+    tn = expr(m, unreal.MaterialExpressionTextureSampleParameter2D, -900, -150, parameter_name="Normal", texture=normal_padrao,
+              sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+    mel.connect_material_property(tn, "RGB", unreal.MaterialProperty.MP_NORMAL)
+    rug = expr(m, unreal.MaterialExpressionScalarParameter, -900, 80, parameter_name="Rugosidade", default_value=0.8)
+    mel.connect_material_property(rug, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    p = parametros_vento(m, -1600, 300)
+    wp = posicao_mundo(m, -1600, 750)
+    op = expr(m, unreal.MaterialExpressionObjectPositionWS, -1600, 860)
+    tempo = expr(m, unreal.MaterialExpressionTime, -1600, 960)
+    vc = expr(m, unreal.MaterialExpressionVertexColor, -1600, 1040)
+    pv = expr(m, unreal.MaterialExpressionTextureCoordinate, -1600, 1160, coordinate_index=1)
+    pz = expr(m, unreal.MaterialExpressionTextureCoordinate, -1600, 1240, coordinate_index=2)
+    alt = expr(m, unreal.MaterialExpressionScalarParameter, -1600, 1320, parameter_name="AlturaArvore", default_value=850.0)
+    c = custom(m, -900, 500, CODIGO_AAA, ["P", "O", "T", "F", "R", "DIR", "VC", "PV", "PZ", "ALT"])
+    for fonte, entrada in ((wp, "P"), (op, "O"), (tempo, "T"), (p["VentoForca"], "F"), (p["VentoRajada"], "R"),
+                           (p["VentoDir"], "DIR"), (vc, "VC"), (pv, "PV"), (pz, "PZ"), (alt, "ALT")):
+        ligar(fonte, "", c, entrada)
+    mel.connect_material_property(c, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+    mel.recompile_material(m)
+    eal.save_loaded_asset(m)
+    return m
+
+
+def arvore_blender(arvore_fazenda):
+    """importa a árvore feita no Blender e põe os materiais AAA (casca da árvore da fazenda, folhas geradas)."""
+    if not os.path.isfile(ENT + "/ArvoreBlender.fbx"):
+        log("sem ArvoreBlender.fbx")
+        return None
+    if eal.does_directory_exist(PASTA + "/ArvoreBlender"):
+        eal.delete_directory(PASTA + "/ArvoreBlender")
+    caminhos = importar(ENT + "/ArvoreBlender.fbx", PASTA + "/ArvoreBlender")
+    sms = [a for a in (unreal.load_asset(c) for c in caminhos) if isinstance(a, unreal.StaticMesh)]
+    if not sms:
+        log("FALHOU ArvoreBlender", caminhos)
+        return None
+    sm = sms[0]
+    folhas = None
+    p = importar(ENT + "/folhas_arvore.png", PASTA + "/ArvoreBlender")
+    if p:
+        folhas = unreal.load_asset(p[0])
+    mestre = mestre_aaa()
+    casca_cor = casca_nrm = None
+    if arvore_fazenda:
+        mats = arvore_fazenda.get_editor_property("static_materials")
+        if mats:
+            orig = mats[0].get_editor_property("material_interface")
+            casca_cor = textura_do_gltf(orig, "cor")
+            casca_nrm = textura_do_gltf(orig, "normal")
+    for i, smat in enumerate(sm.get_editor_property("static_materials")):
+        slot = str(smat.get_editor_property("material_slot_name")).upper()
+        novo = mi("MI_ArvoreAAA_" + ("Folhas" if "FOLHA" in slot else "Casca"), mestre)
+        if "FOLHA" in slot:
+            if folhas:
+                mel.set_material_instance_texture_parameter_value(novo, "Cor", folhas)
+            mel.set_material_instance_scalar_parameter_value(novo, "Rugosidade", 0.6)
+        else:
+            if casca_cor:
+                mel.set_material_instance_texture_parameter_value(novo, "Cor", casca_cor)
+            if casca_nrm:
+                mel.set_material_instance_texture_parameter_value(novo, "Normal", casca_nrm)
+        mel.update_material_instance(novo)
+        eal.save_loaded_asset(novo)
+        sm.set_material(i, novo)
+        log("   árvore Blender slot", slot, "->", novo.get_name())
+    nanite(sm, folhagem=True)
+    eal.save_loaded_asset(sm)
+    return sm
+
+
 # ----------------------------------------------------------------------------- peças do mapa
 CUBO = "/Engine/BasicShapes/Cube.Cube"
 PLANO = "/Engine/BasicShapes/Plane.Plane"
@@ -470,6 +578,8 @@ def main():
             if not arq.lower().endswith(".fbx"):
                 continue
             nome = arq[:-4]
+            if nome == "ArvoreBlender":
+                continue    # tem material próprio (vento AAA), montada mais abaixo
             caminhos = importar(ENT + "/" + arq, PASTA + "/Malhas/" + nome)
             sms = [unreal.load_asset(c) for c in caminhos]
             sms = [a for a in sms if isinstance(a, unreal.StaticMesh)]
@@ -557,6 +667,15 @@ def main():
                 a.set_actor_label("ArvoreComVento")
                 tag(a, "Vento")
                 placa("ÁRVORE ATUAL COM VENTO", vx, vy - 3.5, 1.2, 45.0, (140, 220, 255))
+        # árvore feita no Blender com vento AAA (galhos giram em volta do pivô, folhas tremem)
+        ab = arvore_blender(arvore_atual)
+        if ab:
+            bx, by = info.get("arvore_blender", [17.0, 24.0])
+            a = eas.spawn_actor_from_object(ab, U(bx, by, -0.1), unreal.Rotator(0, 0, 0))
+            a.set_actor_label("ArvoreBlender")
+            tag(a, "Vento")
+            placa("ÁRVORE DO BLENDER (VENTO AAA)", bx, by - 4.0, 1.2, 45.0, (150, 255, 170))
+
         nova = (achar(assets, ["maple"], ("StaticMesh", "SkeletalMesh", "Blueprint"))
                 or achar(assets, ["acer"], ("StaticMesh", "SkeletalMesh", "Blueprint"))
                 or achar(assets, ["megaplant"], ("StaticMesh", "SkeletalMesh", "Blueprint")))
@@ -576,7 +695,7 @@ def main():
 
         # voo de teste: capim de perto, rente ao chão, canteiros, lago, milho, árvores
         vistas = [(0, 1.5, 1.2), (-6, 2.0, 0.5), (0, 4.5, 1.2), (-12, -1.5, 1.5), (-10, 16.5, 1.6),
-                  (-9, 11.0, 3.0), (0, 13.0, 3.5), (0, 15.0, 6.0), (6, 9.0, 0.7)]
+                  (-9, 11.0, 3.0), (0, 13.0, 3.5), (0, 15.0, 6.0), (6, 9.0, 0.7), (15, 15.0, 3.5), (17, 19.0, 6.0)]
         for i, (x, y, z) in enumerate(vistas):
             e = eas.spawn_actor_from_class(unreal.TargetPoint, U(x, y, z), unreal.Rotator(0, 0, -90))
             e.set_actor_label("Vista_%02d" % i)
