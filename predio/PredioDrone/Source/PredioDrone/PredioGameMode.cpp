@@ -151,6 +151,7 @@ void APredioGameMode::BeginPlay()
 
 	bTour = FParse::Param(FCommandLine::Get(), TEXT("tour"));
 	bFotoMenu = FParse::Param(FCommandLine::Get(), TEXT("fotomenu"));
+	bTestePouso = FParse::Param(FCommandLine::Get(), TEXT("testepouso"));
 	if (!FParse::Value(FCommandLine::Get(), TEXT("pastatestes="), PastaTestes))
 	{
 		PastaTestes = FPaths::ProjectSavedDir() / TEXT("Testes");
@@ -187,7 +188,7 @@ void APredioGameMode::BeginPlay()
 		if (!ObjetivosDoMapa().Contains(Inicial)) Inicial = ObjetivosDoMapa()[0];
 	}
 	if (ADronePawn* D = Drone()) UltimosReinicios = D->Reinicios;
-	if (!bTour && !bJogo && !bEhCampo)
+	if (!bTour && !bJogo && !bEhCampo && !bTestePouso)
 	{
 		EntrarMenuPrincipal();
 	}
@@ -1152,6 +1153,11 @@ void APredioGameMode::Tick(float DeltaSeconds)
 	if (bTour)
 	{
 		TickTour(DeltaSeconds);
+		return;
+	}
+	if (bTestePouso)
+	{
+		TickTestePouso(DtReal);
 		return;
 	}
 	if (bMenuAberto)
@@ -2519,4 +2525,46 @@ void APredioGameMode::EspalharGrama()
 	H->MarkRenderStateDirty();
 	DiagCampo += FString::Printf(TEXT("capim: %d touceiras (malha %s, %d instâncias no componente)\n"), Ts.Num(), *Malha->GetName(), H->GetInstanceCount());
 	UE_LOG(LogPredio, Log, TEXT("Campo: %d touceiras de capim"), Ts.Num());
+}
+
+// ------------------------------------------------------------------ teste de chão, decolagem e pouso (-testepouso)
+
+void APredioGameMode::TickTestePouso(float Dt)
+{
+	ADronePawn* D = Drone();
+	if (!D) return;
+	TesteT += Dt;
+	const FVector P = D->GetActorLocation();
+	// chão logo abaixo (para ver se o drone afunda nele)
+	float Chao = -1e9f;
+	{
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(TesteChao), true, D);
+		if (GetWorld()->LineTraceSingleByChannel(Hit, P + FVector(0, 0, 20.f), P - FVector(0, 0, 3000.f), ECC_Visibility, Q)) Chao = Hit.ImpactPoint.Z;
+	}
+	const float Folga = P.Z - Chao;   // cm do centro do drone até o chão (raio do corpo = 11)
+	if (TesteT > 0.5f) TesteMenorFolga = FMath::Min(TesteMenorFolga, Folga);
+	TesteLog -= Dt;
+	if (TesteLog <= 0.f)
+	{
+		TesteLog = 0.25f;
+		TesteLinhas.Add(FString::Printf(TEXT("t %5.2f  z %8.1f  chão %8.1f  folga %6.1f  vz %6.1f  motores %d  decolando %d  pousando %d"),
+			TesteT, P.Z, Chao, Folga, D->Velocidade.Z, D->bMotores ? 1 : 0, D->bDecolando ? 1 : 0, D->bPousando ? 1 : 0));
+	}
+	auto Foto = [this](const TCHAR* Nome) { FScreenshotRequest::RequestScreenshot(PastaTestes / Nome, true, false); };
+	if (TesteFase == 0 && TesteT > 2.5f) { Foto(TEXT("pouso_1_parado_no_chao.png")); TesteFase = 1; }
+	else if (TesteFase == 1 && TesteT > 3.5f) { D->AlternarDecolagem(); TesteLinhas.Add(TEXT("--- apertou DECOLAR")); TesteFase = 2; }
+	else if (TesteFase == 2 && TesteT > 8.0f) { Foto(TEXT("pouso_2_no_ar.png")); TesteFase = 3; }
+	else if (TesteFase == 3 && TesteT > 9.0f) { D->AlternarDecolagem(); TesteLinhas.Add(TEXT("--- apertou POUSAR")); TesteFase = 4; }
+	else if (TesteFase == 4 && TesteT > 15.0f) { Foto(TEXT("pouso_3_pousou.png")); TesteFase = 5; }
+	else if (TesteFase == 5 && TesteT > 16.0f)
+	{
+		TesteLinhas.Add(FString::Printf(TEXT("RESULTADO: menor folga até o chão %.1f cm (abaixo de ~8 = afundou)  motores no fim %d  batidas %d"),
+			TesteMenorFolga, D->bMotores ? 1 : 0, D->Batidas));
+		IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+		PF.CreateDirectoryTree(*PastaTestes);
+		FFileHelper::SaveStringArrayToFile(TesteLinhas, *(PastaTestes / TEXT("teste_pouso.txt")));
+		TesteFase = 6;
+		UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
+	}
 }

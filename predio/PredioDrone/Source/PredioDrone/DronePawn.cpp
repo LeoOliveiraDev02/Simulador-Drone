@@ -142,6 +142,25 @@ void ADronePawn::GerarAudio(USoundWaveProcedural* W, int32 Amostras)
 	W->QueueAudio((const uint8*)BufferAudio.GetData(), N * sizeof(int16));
 }
 
+void ADronePawn::AlternarDecolagem()
+{
+	if (bCaido) return;
+	if (!bMotores || bPousando)
+	{
+		bMotores = true;
+		bPousando = false;
+		bDecolando = true;
+		AlturaAlvo = GetActorLocation().Z + 150.f;
+		MostrarMensagem(TEXT("Decolando…"), 1.5f);
+	}
+	else
+	{
+		bPousando = true;
+		bDecolando = false;
+		MostrarMensagem(TEXT("Pousando… (mexa o acelerador para cancelar)"), 2.f);
+	}
+}
+
 bool ADronePawn::PertoDoChao(float Folga, float* Dist) const
 {
 	FHitResult Hit;
@@ -159,13 +178,17 @@ bool ADronePawn::PertoDoChao(float Folga, float* Dist) const
 void ADronePawn::ColocarNoChao()
 {
 	// apoia o drone no chão logo abaixo (sem cair de 50 cm e contar uma "batida")
-	FHitResult Hit;
+	// varre de cima para baixo e pega o primeiro piso de verdade (ignora algo em que a varredura já começa dentro)
+	TArray<FHitResult> Hits;
 	FCollisionQueryParams Q(SCENE_QUERY_STAT(ColocarChao), false, this);
 	const FVector P = GetActorLocation();
-	if (GetWorld()->SweepSingleByChannel(Hit, P + FVector(0, 0, 30.f), P - FVector(0, 0, 400.f), FQuat::Identity, ECC_Visibility,
-		FCollisionShape::MakeSphere(RaioCorpo), Q))
+	GetWorld()->SweepMultiByChannel(Hits, P + FVector(0, 0, 40.f), P - FVector(0, 0, 400.f), FQuat::Identity, ECC_Pawn,
+		FCollisionShape::MakeSphere(RaioCorpo), Q);
+	for (const FHitResult& H : Hits)
 	{
-		SetActorLocation(Hit.Location + FVector(0, 0, 0.5f), false, nullptr, ETeleportType::TeleportPhysics);
+		if (H.bStartPenetrating || !H.bBlockingHit || H.ImpactNormal.Z < 0.6f) continue;
+		SetActorLocation(H.Location + FVector(0, 0, 1.0f), false, nullptr, ETeleportType::TeleportPhysics);
+		break;
 	}
 	Velocidade = FVector::ZeroVector;
 }
@@ -281,22 +304,9 @@ void ADronePawn::LerControles(float Dt)
 	InRolagem = FMath::Clamp(R, -1.f, 1.f);
 
 	// A / Espaço: no chão decola sozinho até ~1,5 m; no ar pousa sozinho devagar
-	if (!bCaido && (PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Bottom) || PC->WasInputKeyJustPressed(EKeys::SpaceBar)))
+	if (PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Bottom) || PC->WasInputKeyJustPressed(EKeys::SpaceBar))
 	{
-		if (!bMotores || bPousando)
-		{
-			bMotores = true;
-			bPousando = false;
-			bDecolando = true;
-			AlturaAlvo = GetActorLocation().Z + 150.f;
-			MostrarMensagem(TEXT("Decolando…"), 1.5f);
-		}
-		else
-		{
-			bPousando = true;
-			bDecolando = false;
-			MostrarMensagem(TEXT("Pousando… (mexa o acelerador para cancelar)"), 2.f);
-		}
+		AlternarDecolagem();
 	}
 	// motores desligados: subir o acelerador liga e decola na mão
 	if (!bMotores && !bCaido && InAcel > 0.35f)
@@ -386,6 +396,23 @@ void ADronePawn::Tick(float DeltaSeconds)
 	{
 		PassoFisica(PassoFixo);
 		Acumulador -= PassoFixo;
+	}
+
+	// rede de segurança: se o centro do drone ficou abaixo da superfície do chão, sobe de volta para cima dela
+	{
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(AntiAfundar), true, this);
+		const FVector P = GetActorLocation();
+		if (GetWorld()->LineTraceSingleByChannel(Hit, P + FVector(0, 0, RaioCorpo), P - FVector(0, 0, RaioCorpo), ECC_Pawn, Q)
+			&& Hit.ImpactNormal.Z > 0.6f && !Hit.bStartPenetrating)
+		{
+			const float ZOk = Hit.ImpactPoint.Z + RaioCorpo + 0.5f;
+			if (P.Z < ZOk - 0.5f)
+			{
+				SetActorLocation(FVector(P.X, P.Y, ZOk), false, nullptr, ETeleportType::TeleportPhysics);
+				if (Velocidade.Z < 0.f) Velocidade.Z = 0.f;
+			}
+		}
 	}
 
 	// no chão com o acelerador todo para baixo (ou terminando o pouso automático): desliga os motores

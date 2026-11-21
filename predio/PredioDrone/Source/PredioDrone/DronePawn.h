@@ -64,6 +64,7 @@ public:
 	float FatorVentoMapa = 1.f;
 	void AjustarLuz(bool bCampo);   // pós-processo da câmera conforme o mapa (sombras menos pretas)
 
+	void AlternarDecolagem();       // A / Espaço: decola sozinho (no chão) ou pousa sozinho (no ar)
 	void Recomecar(const FTransform& Onde);
 	void MostrarMensagem(const FString& Texto, float Segundos = 2.5f);
 	void TrocarModo();

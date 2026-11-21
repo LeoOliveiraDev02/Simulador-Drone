@@ -274,6 +274,14 @@ private:
 	void DestruirDroneTitulo();
 	void SairDoMenuPrincipal();
 	void TickFotosMenu(float Dt);
+	// teste automático de chão / decolagem / pouso (-testepouso)
+	bool bTestePouso = false;
+	float TesteT = 0.f;
+	float TesteLog = 0.f;
+	int32 TesteFase = 0;
+	float TesteMenorFolga = 1e9f;
+	TArray<FString> TesteLinhas;
+	void TickTestePouso(float Dt);
 	TWeakObjectPtr<AActor> DroneTitulo;
 	TArray<TWeakObjectPtr<UStaticMeshComponent>> HelicesTitulo;
 	float AnguloHelices = 0.f;
