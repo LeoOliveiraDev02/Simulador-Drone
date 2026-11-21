@@ -24,10 +24,12 @@ def log(*a):
         f.write(msg + "\n")
 
 
-def importar(arq, destino):
+def importar(arq, destino, nome=None):
     t = unreal.AssetImportTask()
     t.set_editor_property("filename", arq)
     t.set_editor_property("destination_path", destino)
+    if nome:
+        t.set_editor_property("destination_name", nome)
     t.set_editor_property("automated", True)
     t.set_editor_property("replace_existing", True)
     t.set_editor_property("save", False)
@@ -63,6 +65,7 @@ def material_drone():
     mel.connect_material_expressions(bri, "", mul, "B")
     mel.connect_material_property(mul, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     mel.recompile_material(m)
+    eal.save_loaded_asset(m)
     return m
 
 
@@ -88,16 +91,20 @@ def main():
             if not os.path.isfile(ENT + "/" + arq):
                 log("falta", arq)
                 continue
-            p = importar(ENT + "/" + arq, "/Game/UI")
+            # importa direto com o nome final (substitui a imagem antiga no lugar)
+            velho = "/Game/UI/" + arq[:-4]
+            if eal.does_asset_exist(velho):
+                eal.delete_asset(velho)           # sobra (redirecionador) de rodadas antigas
+            p = importar(ENT + "/" + arq, "/Game/UI", nome)
             if not p:
                 log("FALHOU imagem", arq)
                 continue
-            tex = unreal.load_asset(p[0])
-            if tex.get_name() != nome:
-                if eal.does_asset_exist("/Game/UI/" + nome):
-                    eal.delete_asset("/Game/UI/" + nome)
-                eal.rename_asset(p[0].split(".")[0], "/Game/UI/" + nome)
-                tex = unreal.load_asset("/Game/UI/" + nome)
+            tex = unreal.load_asset("/Game/UI/" + nome)
+            try:
+                tex.set_editor_property("power_of_two_mode", unreal.TexturePowerOfTwoSetting.NONE)
+            except Exception:
+                pass
+            log("  tamanho", tex.blueprint_get_size_x(), "x", tex.blueprint_get_size_y())
             tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_EDITOR_ICON)
             tex.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
             tex.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_UI)
@@ -109,14 +116,13 @@ def main():
             if not os.path.isfile(ENT + "/" + arq):
                 log("falta", arq)
                 continue
-            p = importar(ENT + "/" + arq, "/Game/UI")
+            velho = "/Game/UI/" + arq[:-4]
+            if eal.does_asset_exist(velho):
+                eal.delete_asset(velho)
+            p = importar(ENT + "/" + arq, "/Game/UI", nome)
             if not p:
                 log("FALHOU som", arq)
                 continue
-            if p[0].split(".")[0] != "/Game/UI/" + nome:
-                if eal.does_asset_exist("/Game/UI/" + nome):
-                    eal.delete_asset("/Game/UI/" + nome)
-                eal.rename_asset(p[0].split(".")[0], "/Game/UI/" + nome)
             eal.save_asset("/Game/UI/" + nome)
             log("som:", nome)
         mestre = material_drone()
@@ -139,13 +145,18 @@ def main():
                     if chave in slot:
                         k = chave or "padrao"
                         if k not in feitos:
-                            mi = at.create_asset("MI_E88_" + k.replace(" ", "_"), "/Game/Drone", unreal.MaterialInstanceConstant, fac)
+                            caminho_mi = "/Game/Drone/MI_E88_" + k.replace(" ", "_")
+                            if eal.does_asset_exist(caminho_mi):
+                                mi = unreal.load_asset(caminho_mi)      # já existe (rodada anterior): reaproveita
+                            else:
+                                mi = at.create_asset("MI_E88_" + k.replace(" ", "_"), "/Game/Drone", unreal.MaterialInstanceConstant, fac)
                             mi.set_editor_property("parent", mestre)
                             mel.set_material_instance_vector_parameter_value(mi, "Cor", unreal.LinearColor(*cor, 1))
                             mel.set_material_instance_scalar_parameter_value(mi, "Rugosidade", rug)
                             mel.set_material_instance_scalar_parameter_value(mi, "Metal", met)
                             mel.set_material_instance_scalar_parameter_value(mi, "Brilho", bri)
                             mel.update_material_instance(mi)
+                            eal.save_loaded_asset(mi)
                             feitos[k] = mi
                         sm.set_material(i, feitos[k])
                         log("  slot", slot, "->", k)

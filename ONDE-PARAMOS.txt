@@ -1,6 +1,23 @@
 ﻿SIMULADOR DE DRONE — ONDE PARAMOS
 =================================
 
+>>> 20/11/2026 À NOITE — FEEDBACK DA GRAVAÇÃO DO LEONARDO (tudo feito, jogo empacotado) <<<
+  [x] Sombras: Lumen com "skylight leaking" (0,22 fazenda / 0,10 prédio) + exposição local; capim e flores sem
+      sombra própria e com a normal para cima; luz do céu 1,25. Casa sede agora tem porta/janelas abertas,
+      parede interna, mesa, bancos, cama, rede e 2 lampiões (luzes do layout "luzes").
+  [x] Vegetação: capim baixo (34 mil touceiras), palha seca em manchas, flores amarelas/brancas/roxas,
+      45 mandacarus (sólidos). Tudo assado no Blender (malhas fixas), sem instâncias no jogo.
+  [x] Drone mais rápido: "Velocidade máxima" (Sensibilidade) 25–90 km/h, padrão 50; arrasto calculado dela.
+  [x] Vento de verdade: força 0–40 km/h (+/− ou D-pad ↑↓), direção (V ou RB), rajadas (G ou LB), seta no OSD,
+      no menu Jogabilidade também. Água com ondas que andam com o vento (M_Agua, parâmetros Ondas/Desloc).
+  [x] Menu: Meta de FPS (Livre/30/60/90/120/144/165/240, trava o FPS; com gerador a base fica na metade),
+      ajuste automático segue a meta; Controles mostra "USANDO AGORA" (teclado/controle) e "Ver lista de
+      comandos" (também F1/Back no voo); seção SAIR tem "Voltar ao menu principal" e "Sair do jogo";
+      volume dos efeitos; sons ao pegar ferradura, entregar, foto, aro e vitória.
+  [x] Fotos de verdade nos cartões dos mapas 1 e 2 (T_Fazenda/T_Predio, 1024x1024).
+  [ ] Rádio USB (EdgeTX) ainda não é lido no Unreal (precisa do plugin RawInput) — pendente.
+  [ ] ESPERANDO ORDENS: Leonardo tem ideias novas para o mapa 1.
+
 >>> 18/11/2026 À TARDE (17:30–19:30) — JOGO ÚNICO NO AR + FAZENDA NOVA <<<
   [x] Jogo único empacotado; atalho "Simulador de Drone" na área de trabalho (o antigo foi para C:\drone\_antigos\atalhos).
   [x] Abertura: E88 de verdade voando pelo prédio com a câmera atrás (/Game/Drone, construir_extras.py),
