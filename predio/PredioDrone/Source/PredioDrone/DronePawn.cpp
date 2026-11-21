@@ -78,10 +78,11 @@ void ADronePawn::BeginPlay()
 {
 	Super::BeginPlay();
 	Orientacao = GetActorQuat();
-	AlturaAlvo = GetActorLocation().Z;
 	Inicio = GetActorTransform();
+	ColocarNoChao();
+	AlturaAlvo = GetActorLocation().Z;
 	Modo = FAjustesDrone::Get().bComecarAcro ? EModoVoo::Acro : EModoVoo::Estabilizado;
-	MostrarMensagem(TEXT("Analógico esquerdo para cima (ou W) decola  •  Start / Esc abre o menu"), 6.f);
+	MostrarMensagem(TEXT("Motores desligados  •  A (ou Espaço) decola sozinho, ou suba o acelerador  •  Start / Esc abre o menu"), 7.f);
 
 	BufferAudio.SetNumZeroed(4096);
 	Onda = NewObject<USoundWaveProcedural>(this);
@@ -141,6 +142,34 @@ void ADronePawn::GerarAudio(USoundWaveProcedural* W, int32 Amostras)
 	W->QueueAudio((const uint8*)BufferAudio.GetData(), N * sizeof(int16));
 }
 
+bool ADronePawn::PertoDoChao(float Folga, float* Dist) const
+{
+	FHitResult Hit;
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(PertoChao), false, this);
+	const FVector P = GetActorLocation();
+	if (!GetWorld()->SweepSingleByChannel(Hit, P, P - FVector(0, 0, Folga + 2.f), FQuat::Identity, ECC_Visibility,
+		FCollisionShape::MakeSphere(RaioCorpo * 0.9f), Q))
+	{
+		return false;
+	}
+	if (Dist) *Dist = Hit.Distance;
+	return Hit.ImpactNormal.Z > 0.6f;
+}
+
+void ADronePawn::ColocarNoChao()
+{
+	// apoia o drone no chão logo abaixo (sem cair de 50 cm e contar uma "batida")
+	FHitResult Hit;
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(ColocarChao), false, this);
+	const FVector P = GetActorLocation();
+	if (GetWorld()->SweepSingleByChannel(Hit, P + FVector(0, 0, 30.f), P - FVector(0, 0, 400.f), FQuat::Identity, ECC_Visibility,
+		FCollisionShape::MakeSphere(RaioCorpo), Q))
+	{
+		SetActorLocation(Hit.Location + FVector(0, 0, 0.5f), false, nullptr, ETeleportType::TeleportPhysics);
+	}
+	Velocidade = FVector::ZeroVector;
+}
+
 void ADronePawn::AjustarLuz(bool bCampo)
 {
 	// Lumen deixava as sombras quase pretas (capim, dentro da casa, cantos do prédio).
@@ -148,7 +177,7 @@ void ADronePawn::AjustarLuz(bool bCampo)
 	// levanta as sombras sem estourar o resto.
 	FPostProcessSettings& PP = Camera->PostProcessSettings;
 	PP.bOverride_LumenSkylightLeaking = true;
-	PP.LumenSkylightLeaking = bCampo ? 0.22f : 0.10f;
+	PP.LumenSkylightLeaking = bCampo ? 0.30f : 0.10f;
 	PP.bOverride_LocalExposureShadowContrastScale = true;
 	PP.LocalExposureShadowContrastScale = bCampo ? 0.55f : 0.62f;
 	PP.bOverride_AutoExposureBias = true;
@@ -214,10 +243,12 @@ void ADronePawn::Recomecar(const FTransform& Onde)
 	TaxaCorpo = FVector::ZeroVector;
 	Acelerador = 0.f;
 	for (float& M : Motores) M = 0.f;
-	AlturaAlvo = Onde.GetLocation().Z;
 	bCaido = false;
 	TempoCaido = 0.f;
 	Batidas = 0;
+	bMotores = bDecolando = bPousando = false;
+	ColocarNoChao();
+	AlturaAlvo = GetActorLocation().Z;
 	++Reinicios;
 }
 
@@ -239,7 +270,7 @@ void ADronePawn::LerControles(float Dt)
 
 	// teclado (não inverte)
 	auto Tecla = [PC](const FKey& K) { return PC->IsInputKeyDown(K) ? 1.f : 0.f; };
-	A += Tecla(EKeys::W) - Tecla(EKeys::S) + Tecla(EKeys::SpaceBar) - Tecla(EKeys::LeftControl);
+	A += Tecla(EKeys::W) - Tecla(EKeys::S) - Tecla(EKeys::LeftControl);
 	G1 += Tecla(EKeys::D) - Tecla(EKeys::A);
 	P += Tecla(EKeys::Up) - Tecla(EKeys::Down) + Tecla(EKeys::I) - Tecla(EKeys::K);
 	R += Tecla(EKeys::Right) - Tecla(EKeys::Left) + Tecla(EKeys::L) - Tecla(EKeys::J);
@@ -248,6 +279,36 @@ void ADronePawn::LerControles(float Dt)
 	InGuinada = FMath::Clamp(G1, -1.f, 1.f);
 	InArfagem = FMath::Clamp(P, -1.f, 1.f);
 	InRolagem = FMath::Clamp(R, -1.f, 1.f);
+
+	// A / Espaço: no chão decola sozinho até ~1,5 m; no ar pousa sozinho devagar
+	if (!bCaido && (PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Bottom) || PC->WasInputKeyJustPressed(EKeys::SpaceBar)))
+	{
+		if (!bMotores || bPousando)
+		{
+			bMotores = true;
+			bPousando = false;
+			bDecolando = true;
+			AlturaAlvo = GetActorLocation().Z + 150.f;
+			MostrarMensagem(TEXT("Decolando…"), 1.5f);
+		}
+		else
+		{
+			bPousando = true;
+			bDecolando = false;
+			MostrarMensagem(TEXT("Pousando… (mexa o acelerador para cancelar)"), 2.f);
+		}
+	}
+	// motores desligados: subir o acelerador liga e decola na mão
+	if (!bMotores && !bCaido && InAcel > 0.35f)
+	{
+		bMotores = true;
+		AlturaAlvo = GetActorLocation().Z;
+	}
+	// mexeu no acelerador: cancela o automático
+	if ((bDecolando || bPousando) && FMath::Abs(InAcel) > 0.25f)
+	{
+		bDecolando = bPousando = false;
+	}
 
 	if (PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Top) || PC->WasInputKeyJustPressed(EKeys::M))
 	{
@@ -327,6 +388,20 @@ void ADronePawn::Tick(float DeltaSeconds)
 		Acumulador -= PassoFixo;
 	}
 
+	// no chão com o acelerador todo para baixo (ou terminando o pouso automático): desliga os motores
+	if (bMotores && !bCaido)
+	{
+		const bool bChao = PertoDoChao(4.f) && FMath::Abs(Velocidade.Z) < 40.f;
+		if (bChao && (bPousando || InAcel < -0.5f)) TempoParadoNoChao += DeltaSeconds;
+		else TempoParadoNoChao = 0.f;
+		if (TempoParadoNoChao > (bPousando ? 0.35f : 1.0f))
+		{
+			bMotores = bPousando = bDecolando = false;
+			TempoParadoNoChao = 0.f;
+			MostrarMensagem(TEXT("Pousou — motores desligados"), 2.f);
+		}
+	}
+
 	Bateria = FMath::Max(3.30f, Bateria - DeltaSeconds * (0.0004f + 0.0022f * Acelerador));
 	AtualizarCamera(DeltaSeconds);
 }
@@ -340,15 +415,31 @@ void ADronePawn::PassoFisica(float h)
 
 	float Comando = 0.f;
 
-	if (bCaido)
+	if (bCaido || !bMotores)
 	{
 		Comando = 0.f;
 		TaxaCorpo *= 0.995f;
+		if (!bCaido)
+		{
+			// parado no chão: fica nivelado
+			const float K = FMath::Min(1.f, h / 0.15f);
+			Orientacao = FRotator(FMath::Lerp(Rot.Pitch, 0.f, K), Rot.Yaw, FMath::Lerp(Rot.Roll, 0.f, K)).Quaternion();
+		}
 	}
-	else if (Modo == EModoVoo::Estabilizado)
+	else if (Modo == EModoVoo::Estabilizado || bDecolando || bPousando)
 	{
 		float VzAlvo;
-		if (FMath::Abs(InAcel) > 0.02f)
+		if (bPousando)
+		{
+			VzAlvo = -80.f;            // desce a 0,8 m/s
+			AlturaAlvo = Pos.Z;
+		}
+		else if (bDecolando)
+		{
+			VzAlvo = FMath::Clamp((AlturaAlvo - Pos.Z) * 2.2f, -150.f, 150.f);
+			if (FMath::Abs(AlturaAlvo - Pos.Z) < 12.f) bDecolando = false;
+		}
+		else if (FMath::Abs(InAcel) > 0.02f)
 		{
 			VzAlvo = Expo(InAcel, Cfg.Expo * 0.5f) * 450.f * Sens;
 			AlturaAlvo = Pos.Z;
@@ -391,8 +482,7 @@ void ADronePawn::PassoFisica(float h)
 
 	for (int32 i = 0; i < 4; ++i)
 	{
-		const float Var = (i % 2 == 0 ? 1.f : -1.f) * 0.004f * FMath::Sin(TremorFase * (1.3f + i * 0.21f));
-		Motores[i] += (FMath::Clamp(Comando + Var, 0.f, 1.f) - Motores[i]) * FMath::Min(1.f, h / 0.035f);
+		Motores[i] += (FMath::Clamp(Comando, 0.f, 1.f) - Motores[i]) * FMath::Min(1.f, h / 0.035f);
 	}
 	Acelerador = (Motores[0] + Motores[1] + Motores[2] + Motores[3]) * 0.25f;
 	TremorFase += h * 60.f;
@@ -466,8 +556,17 @@ void ADronePawn::MoverComColisao(float h)
 		if (Vn < 0.f)
 		{
 			const float Impacto = -Vn;
-			Velocidade -= (1.f + 0.25f) * Vn * N;
-			Velocidade *= 0.82f;
+			if (N.Z > 0.7f && Impacto < 150.f)
+			{
+				// encostou no chão de leve (pousando ou parado): não quica, só para de descer
+				Velocidade -= Vn * N;
+				Velocidade *= bMotores ? 0.9f : 0.6f;
+			}
+			else
+			{
+				Velocidade -= (1.f + 0.25f) * Vn * N;
+				Velocidade *= 0.82f;
+			}
 			const float Agora = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 			// cada batida conta (encostar de leve não); na 3ª o drone quebra.
 			// Batida muito forte (> 5,2 m/s contra a parede) quebra na hora.
@@ -503,10 +602,6 @@ void ADronePawn::AtualizarCamera(float Dt)
 {
 	Camera->PostProcessSettings.MotionBlurAmount = bModoTour ? 0.f : 0.12f; // volta ao normal ao sair do menu principal
 	const float Inclinacao = (Modo == EModoVoo::Acro) ? 22.f : 6.f;
-	const float Amp = (bModoTour || bCongelado) ? 0.f : (0.04f + 0.10f * Acelerador);
-	const FRotator Tremor(
-		Amp * FMath::Sin(TremorFase * 2.1f),
-		Amp * 0.6f * FMath::Sin(TremorFase * 1.7f + 1.f),
-		Amp * 0.8f * FMath::Sin(TremorFase * 2.9f + 2.f));
-	Camera->SetRelativeRotation(FRotator(Inclinacao, 0.f, 0.f) + Tremor);
+	// sem tremor artificial: com o gerador de quadros ele virava uma tremedeira na tela
+	Camera->SetRelativeRotation(FRotator(Inclinacao, 0.f, 0.f));
 }

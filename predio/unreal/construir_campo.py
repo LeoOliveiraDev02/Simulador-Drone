@@ -545,6 +545,9 @@ def carregar_sm(pasta):
     return res
 
 
+# arquivos que ficaram na pasta mas saíram do mapa (Leonardo pediu para tirar os mandacarus)
+IGNORAR = ("Mandacarus",)
+
 # vegetação rasteira já espalhada no Blender (sem colisão; capim e flores sem sombra própria)
 PLANTACOES = ("Milharal", "Pasto", "Palha", "FloresAmarelas", "FloresBrancas", "FloresRoxas")
 SEM_SOMBRA = ("Pasto", "Palha", "FloresAmarelas", "FloresBrancas", "FloresRoxas")
@@ -561,6 +564,9 @@ def importar_malhas(mis):
         if not arq.lower().endswith(".fbx"):
             continue
         nome = arq[:-4]
+        if nome in IGNORAR:
+            log("ignorado (tirado do mapa):", nome)
+            continue
         caminhos = importar(CONTEUDO + "/" + arq, PASTA + "/Malhas/" + nome)
         sms = [unreal.load_asset(p) for p in caminhos]
         sms = [a for a in sms if isinstance(a, unreal.StaticMesh)]
@@ -837,6 +843,7 @@ def montar_mapa(layout, malhas, modelos):
     por(lc, "temperature", 5600.0)
     por(lc, "atmosphere_sun_light", True)
     por(lc, "light_source_angle", 0.6)
+    por(lc, "shadow_amount", 0.85)          # sombra do sol um pouco menos preta (de longe ficava intensa demais)
     por(lc, "mobility", unreal.ComponentMobility.MOVABLE)
     sol.set_actor_label("Sol")
     eas.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0)).set_actor_label("Ceu")
@@ -863,7 +870,8 @@ def montar_mapa(layout, malhas, modelos):
         pl.set_actor_label("LuzCasa_%d" % i)
     fog = eas.spawn_actor_from_class(unreal.ExponentialHeightFog, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
     fc = fog.get_component_by_class(unreal.ExponentialHeightFogComponent)
-    por(fc, "fog_density", 0.004)
+    por(fc, "fog_density", 0.007)
+    por(fc, "start_distance", 3000.0)       # perto continua limpo; de longe a névoa clareia as sombras
     por(fc, "fog_height_falloff", 0.06)
     por(fc, "fog_inscattering_luminance", unreal.LinearColor(0.55, 0.65, 0.8, 1.0))
     por(fc, ["enable_volumetric_fog", "volumetric_fog"], False)

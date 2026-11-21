@@ -102,6 +102,16 @@ void ADroneHUD::DrawHUD()
 	Caixa(W * 0.5f + 4.f * E, H * 0.5f - 1.f * E, 10.f * E, 2.f * E, Mira);
 	Caixa(W * 0.5f - 1.f * E, H * 0.5f + 4.f * E, 2.f * E, 8.f * E, Mira);
 
+	if (!D->bMotores && !D->bCaido)
+	{
+		Texto(TEXT("MOTORES DESLIGADOS"), W * 0.5f, H - M - 92.f * E, 0.95f * E, Amarelo, true);
+		Texto(TEXT("A (ou Espaço) decola sozinho  •  ou suba o acelerador"), W * 0.5f, H - M - 64.f * E, 0.75f * E, Branco, true);
+	}
+	else if (D->bPousando)
+	{
+		Texto(TEXT("POUSANDO…"), W * 0.5f, H - M - 78.f * E, 0.9f * E, Amarelo, true);
+	}
+
 	// objetivo (cronômetro, aros, resultado)
 	DesenharObjetivo(GM, D, E);
 
@@ -1431,7 +1441,8 @@ void ADroneHUD::DesenharComandos(APredioGameMode* GM)
 
 	struct FLinhaCmd { const TCHAR* Acao; const TCHAR* Controle; const TCHAR* Teclado; };
 	const FLinhaCmd Linhas[] = {
-		{ TEXT("Subir / descer"),            TEXT("Analógico esquerdo ↑ ↓"), TEXT("W / S   (ou Espaço / Ctrl)") },
+		{ TEXT("Decolar / pousar sozinho"),  TEXT("A"),                      TEXT("Espaço") },
+		{ TEXT("Subir / descer"),            TEXT("Analógico esquerdo ↑ ↓"), TEXT("W / S   (Ctrl também desce)") },
 		{ TEXT("Girar no próprio eixo"),     TEXT("Analógico esquerdo ← →"), TEXT("A / D") },
 		{ TEXT("Frente / trás"),             TEXT("Analógico direito ↑ ↓"),  TEXT("Setas ↑ ↓   (ou I / K)") },
 		{ TEXT("Para os lados"),             TEXT("Analógico direito ← →"),  TEXT("Setas ← →   (ou J / L)") },
@@ -1448,14 +1459,14 @@ void ADroneHUD::DesenharComandos(APredioGameMode* GM)
 	T(TEXT("CONTROLE"), X(CC), Y(104), 13 * e, TEXT("Bold"), GM->Dispositivo == 1 ? AzulClaro : AzulTexto, 0, 3.f * e);
 	T(TEXT("TECLADO"), X(CT), Y(104), 13 * e, TEXT("Bold"), GM->Dispositivo == 0 ? AzulClaro : AzulTexto, 0, 3.f * e);
 	Linha(FVector2D(X(30), Y(128)), FVector2D(X(1150), Y(128)), FMath::Max(1.f, e), Cor255(40, 70, 120, 200));
-	float LY = 140.f;
+	float LY = 136.f;
 	for (int32 i = 0; i < (int32)UE_ARRAY_COUNT(Linhas); ++i)
 	{
 		if (i % 2 == 0) RetArred(X(30), Y(LY - 4), 1120 * e, 44 * e, 6 * e, Cor255(13, 23, 39, 200), Cor255(11, 19, 33, 200));
 		T(Linhas[i].Acao, X(CA), Y(LY + 6), 18 * e, TEXT("Regular"), Branco);
 		T(Linhas[i].Controle, X(CC), Y(LY + 6), 18 * e, GM->Dispositivo == 1 ? TEXT("Bold") : TEXT("Regular"), GM->Dispositivo == 1 ? Branco : Cor255(185, 200, 225));
 		T(Linhas[i].Teclado, X(CT), Y(LY + 6), 18 * e, GM->Dispositivo == 0 ? TEXT("Bold") : TEXT("Regular"), GM->Dispositivo == 0 ? Branco : Cor255(185, 200, 225));
-		LY += 46.f;
+		LY += 44.f;
 	}
 	LY += 10.f;
 	T(TEXT("Missões: para pegar ou soltar a caixa, pare em cima do ponto. Para a foto, mire o alvo de perto e segure."), X(CA), Y(LY), 15 * e, TEXT("Italic"), AzulTexto);

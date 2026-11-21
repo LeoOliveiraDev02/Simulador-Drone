@@ -41,6 +41,9 @@ public:
 	float TempoVoo = 0.f;
 	float Acelerador = 0.f;
 	bool bCaido = false;
+	bool bMotores = false;        // começa parado no chão, motores desligados
+	bool bDecolando = false;      // decolagem automática (A / Espaço) até ~1,5 m
+	bool bPousando = false;       // pouso automático (A / Espaço com ele no ar)
 	int32 Batidas = 0;            // batidas desde o último início (3 = quebra)
 	int32 Reinicios = 0;          // quantas vezes voltou ao início (o desafio recomeça junto)
 	static constexpr int32 MaxBatidas = 3;
@@ -105,6 +108,9 @@ private:
 	float AlturaSobreChao = 10.f;   // m (medida de tempos em tempos, o vento fica mais fraco rente ao chão)
 	float ProxMedidaChao = 0.f;
 	void AtualizarVento(float Dt);
+	void ColocarNoChao();
+	bool PertoDoChao(float Folga, float* Dist = nullptr) const;
+	float TempoParadoNoChao = 0.f;
 
 	// áudio (thread de áudio)
 	std::atomic<float> AudioAcel{ 0.f };

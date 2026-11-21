@@ -1068,7 +1068,9 @@ def plantacoes():
         gx, gz = pontos_livres(rr, 40000, 6.0, 120.0, perto=0.5)
         m = manchas(gx, gz, 31 + k * 7, escala=0.06, limiar=0.32)
         montar(nome, MOLDES["flor"], gx[m][:3500], gz[m][:3500], (0.8, 1.25), (0.75, 1.3), ["CAPIM", cor])
-    # mandacarus (cacto do sertão) pelos cantos do pasto — são sólidos (o drone bate)
+    # mandacarus: tirados a pedido do Leonardo (20/11). Para voltar, troque False por True.
+    if not False:
+        return
     gx, gz = pontos_livres(rr, 4000, 25.0, 320.0, perto=0.0, folga_estrada=7.0)
     ok = np.ones(len(gx), dtype=bool)
     escolhidos = []
