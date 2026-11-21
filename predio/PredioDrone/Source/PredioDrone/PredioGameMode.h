@@ -263,6 +263,8 @@ private:
 	TWeakObjectPtr<AActor> Farol;
 	UPROPERTY() TArray<TObjectPtr<USoundBase>> Sons;
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> MatAgua;
+	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> MatVento;   // capim, milho, flores, árvores (tag "Vento")
+	void AtualizarVentoVegetacao();
 	FLinearColor DeslocAgua = FLinearColor(0, 0, 0, 0);
 	float OndasAgua = 0.f;
 	void AtualizarAgua(float Dt);

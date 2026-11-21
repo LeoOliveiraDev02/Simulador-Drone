@@ -133,6 +133,18 @@ void APredioGameMode::BeginPlay()
 	{
 		Sons.Add(LoadObject<USoundBase>(nullptr, Nome));
 	}
+	// vegetação com vento (tag "Vento"): cada material vira dinâmico e recebe o vento todo quadro
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		if (!It->ActorHasTag(TEXT("Vento"))) continue;
+		if (UStaticMeshComponent* C = It->FindComponentByClass<UStaticMeshComponent>())
+		{
+			for (int32 i = 0; i < C->GetNumMaterials(); ++i)
+			{
+				if (UMaterialInstanceDynamic* MID = C->CreateDynamicMaterialInstance(i)) MatVento.Add(MID);
+			}
+		}
+	}
 	// água: material com ondas que o vento mexe (parâmetros "Ondas" e "Desloc")
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
@@ -433,6 +445,27 @@ void APredioGameMode::TocarSom(int32 Qual)
 	const float V = FAjustesDrone::Get().VolumeEfeitos;
 	if (V <= 0.01f) return;
 	UGameplayStatics::PlaySound2D(this, Sons[Qual], V);
+}
+
+void APredioGameMode::AtualizarVentoVegetacao()
+{
+	if (MatVento.Num() == 0) return;
+	const ADronePawn* D = Drone();
+	if (!D) return;
+	const FVector W = D->VentoAtual;   // m/s
+	const float F = FMath::Clamp(W.Size2D() / 11.f, 0.f, 1.3f);      // 1 = 40 km/h
+	const FVector2D Dir = W.Size2D() > 0.05f ? FVector2D(W.X, W.Y).GetSafeNormal() : FVector2D(1.f, 0.f);
+	const FVector P = D->GetActorLocation();
+	const float Helices = D->bMotores ? FMath::Clamp(D->Acelerador * 1.4f, 0.f, 1.f) : 0.f;
+	for (UMaterialInstanceDynamic* M : MatVento)
+	{
+		if (!M) continue;
+		M->SetScalarParameterValue(TEXT("VentoForca"), F);
+		M->SetScalarParameterValue(TEXT("VentoRajada"), D->VentoRajada);
+		M->SetVectorParameterValue(TEXT("VentoDir"), FLinearColor(Dir.X, Dir.Y, 0.f, 0.f));
+		M->SetVectorParameterValue(TEXT("DronePos"), FLinearColor(P.X, P.Y, P.Z, 0.f));
+		M->SetScalarParameterValue(TEXT("DroneForca"), Helices);
+	}
 }
 
 void APredioGameMode::AtualizarAgua(float Dt)
@@ -1156,6 +1189,8 @@ void APredioGameMode::Tick(float DeltaSeconds)
 	if (bTour)
 	{
 		TickTour(DeltaSeconds);
+		AtualizarVentoVegetacao();
+		if (bEhCampo) AtualizarAgua(DeltaSeconds);
 		return;
 	}
 	if (bTestePouso)
@@ -1190,6 +1225,7 @@ void APredioGameMode::Tick(float DeltaSeconds)
 		MoverFarolECaixa();
 		AtualizarAgua(DeltaSeconds);
 	}
+	AtualizarVentoVegetacao();
 	Flash = FMath::Max(0.f, Flash - DtReal * 2.5f);
 	if (bMenuPrincipal && bFotoMenu) TickFotosMenu(DtReal);
 	AjusteAutomatico(DeltaSeconds);

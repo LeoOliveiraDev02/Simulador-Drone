@@ -9,6 +9,8 @@
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "CollisionQueryParams.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 namespace
 {
@@ -79,6 +81,11 @@ void ADronePawn::BeginPlay()
 	Super::BeginPlay();
 	Orientacao = GetActorQuat();
 	Inicio = GetActorTransform();
+	{
+		// teste: -vento=N (km/h) só nesta sessão
+		float VentoCmd = -1.f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("vento="), VentoCmd) && VentoCmd >= 0.f) FAjustesDrone::Get().VentoKmh = FMath::Min(VentoCmd, 40.f);
+	}
 	ColocarNoChao();
 	AlturaAlvo = GetActorLocation().Z;
 	Modo = FAjustesDrone::Get().bComecarAcro ? EModoVoo::Acro : EModoVoo::Estabilizado;
@@ -229,6 +236,11 @@ void ADronePawn::AtualizarVento(float Dt)
 		const float R = FMath::PerlinNoise1D(TempoVento * 0.35f) * 0.9f + FMath::PerlinNoise1D(TempoVento * 1.3f + 17.f) * 0.35f;
 		Forca *= FMath::Max(0.15f, 1.f + R);
 		Ang += FMath::PerlinNoise1D(TempoVento * 0.2f + 5.f) * 25.f;
+		VentoRajada = FMath::Clamp(0.5f + R * 0.6f, 0.f, 1.f);
+	}
+	else
+	{
+		VentoRajada = 0.5f;
 	}
 	Forca *= FMath::Lerp(0.35f, 1.f, FMath::Clamp(AlturaSobreChao / 6.f, 0.f, 1.f));   // rente ao chão sopra menos
 	const float A = FMath::DegreesToRadians(Ang);
@@ -366,6 +378,7 @@ void ADronePawn::Tick(float DeltaSeconds)
 
 	if (bModoTour)
 	{
+		AtualizarVento(DeltaSeconds);   // no voo de teste o vento continua (o capim aparece balançando nas fotos)
 		AtualizarCamera(DeltaSeconds);
 		return;
 	}

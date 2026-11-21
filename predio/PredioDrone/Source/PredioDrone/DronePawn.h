@@ -62,6 +62,7 @@ public:
 	FVector VentoAtual = FVector::ZeroVector;
 	float DirVento = 35.f;
 	float FatorVentoMapa = 1.f;
+	float VentoRajada = 0.5f;     // 0..1 (o capim e as árvores usam para balançar mais nas rajadas)
 	void AjustarLuz(bool bCampo);   // pós-processo da câmera conforme o mapa (sombras menos pretas)
 
 	void AlternarDecolagem();       // A / Espaço: decola sozinho (no chão) ou pousa sozinho (no ar)

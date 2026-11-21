@@ -29,6 +29,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0ATALHO_JOGO.ps1"
 echo === teste: voo pela vitrine (fotos do chao e das arvores)
 if not exist "D:\DronePredio\testes\vitrine" mkdir "D:\DronePredio\testes\vitrine"
 del /q "D:\DronePredio\testes\vitrine\*.*" >nul 2>&1
-start "" /wait "%EXE%" -mapa=Vitrine -NotInstalled -tour -pastatestes=D:/DronePredio/testes/vitrine -windowed -resx=1920 -resy=1080
+start "" /wait "%EXE%" -mapa=Vitrine -NotInstalled -tour -vento=35 -pastatestes=D:/DronePredio/testes/vitrine -windowed -resx=1920 -resy=1080
 type "D:\DronePredio\testes\vitrine\tour_resultado.txt"
 echo TUDO OK

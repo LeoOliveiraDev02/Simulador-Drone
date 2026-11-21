@@ -1,15 +1,19 @@
-"""Vitrine de testes (roda no editor com -ExecutePythonScript): um mapa pequeno para ver assets novos
-um de cada vez antes de levar para a fazenda.
+"""Vitrine / laboratório (roda no editor com -ExecutePythonScript): mapa pequeno para testar coisas novas
+uma de cada vez antes de levar para a fazenda.
 
-  /Game/Mapas/Vitrine
-    - três canteiros de chão lado a lado: ATUAL (o chão da fazenda hoje) | DRY SOIL | ARID SOIL (Megascans)
-    - duas árvores: ATUAL (a da fazenda hoje) | NOVA (Quixel Megaplants, quando estiver no projeto)
-    - mesmo céu, sol e pós-processo da fazenda; o drone começa na frente dos canteiros
-    - pontos Rota_N para o voo de teste tirar fotos de perto
+  /Game/Mapas/Vitrine  (300 x 300 m)
+    - chão próprio (TerrenoVitrine, mesmo material da fazenda), capim, palha, flores e um canteiro de milho
+      que BALANÇAM COM O VENTO (material com deslocamento de vértices; o jogo manda força, rajada, direção
+      e a posição do drone — o vento das hélices deita o capim em volta)
+    - árvores: ATUAL parada | ATUAL COM VENTO (galhos balançam, folhas tremem) | NOVA (Megaplants, quando houver)
+    - canteiros de chão Megascans (Dry Soil, Arid Soil) e um laguinho com as ondas do vento
+    - pontos Rota_N para o voo de teste tirar fotos
 
-Os assets do Fab são achados sozinhos pelo nome (onde quer que o Fab tenha colocado no projeto).
-Enquanto não estiverem no projeto, o canteiro/árvore aparece com uma placa "FALTA ADICIONAR".
+Entradas: D:/DronePredio/conteudo_vitrine/ (gerar_vitrine.py) e os materiais da fazenda (/Game/Campo/Materiais).
+Os assets do Fab são achados sozinhos pelo nome; enquanto não estiverem no projeto aparece "FALTA ADICIONAR".
+Atores com a tag "Vento" recebem do jogo os parâmetros VentoForca, VentoRajada, VentoDir, DronePos, DroneForca.
 """
+import json
 import os
 import re
 import time
@@ -18,10 +22,14 @@ import traceback
 import unreal
 
 RAIZ = os.environ.get("PREDIO_RAIZ", "D:/DronePredio").replace("\\", "/")
+ENT = RAIZ + "/conteudo_vitrine"
 LOG = RAIZ + "/logs/construir_vitrine_progresso.txt"
 MAPA = "/Game/Mapas/Vitrine"
+PASTA = "/Game/Vitrine"
 eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 eal = unreal.EditorAssetLibrary
+mel = unreal.MaterialEditingLibrary
+at = unreal.AssetToolsHelpers.get_asset_tools()
 T0 = time.time()
 
 
@@ -53,19 +61,29 @@ def chave(s):
     return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
-# ----------------------------------------------------------------------------- procurar assets do Fab
-NOSSAS = ("/Game/Campo", "/Game/Predio", "/Game/UI", "/Game/Drone", "/Game/Mapas", "/Game/Developers", "/Game/Collections")
+def U(x, y, z=0.0):
+    """metros do Blender (x leste, y para frente) -> centímetros do Unreal (o eixo Y do Unreal é o -y do Blender)."""
+    return unreal.Vector(x * 100.0, -y * 100.0, z * 100.0)
+
+
+def importar(arquivo, destino):
+    t = unreal.AssetImportTask()
+    t.set_editor_property("filename", arquivo)
+    t.set_editor_property("destination_path", destino)
+    t.set_editor_property("automated", True)
+    t.set_editor_property("replace_existing", True)
+    t.set_editor_property("save", False)
+    at.import_asset_tasks([t])
+    return list(t.get_editor_property("imported_object_paths") or [])
+
+
+# ----------------------------------------------------------------------------- assets do Fab
+NOSSAS = ("/Game/Campo", "/Game/Predio", "/Game/UI", "/Game/Drone", "/Game/Mapas", "/Game/Vitrine", "/Game/Developers", "/Game/Collections")
 
 
 def todos_assets():
     ar = unreal.AssetRegistryHelpers.get_asset_registry()
-    res = []
-    for d in ar.get_assets_by_path("/Game", recursive=True):
-        caminho = str(d.package_name)
-        if caminho.startswith(NOSSAS):
-            continue
-        res.append(d)
-    return res
+    return [d for d in ar.get_assets_by_path("/Game", recursive=True) if not str(d.package_name).startswith(NOSSAS)]
 
 
 def classe(d):
@@ -76,16 +94,220 @@ def classe(d):
 
 
 def achar(assets, palavras, classes):
-    """primeiro asset cujo nome (sem _ e maiúsculas) contém todas as palavras e é de uma das classes."""
-    melhores = []
-    for d in assets:
-        nome = chave(str(d.asset_name) + " " + str(d.package_path))
-        if all(p in nome for p in palavras) and classe(d) in classes:
-            melhores.append(d)
+    melhores = [d for d in assets if all(p in chave(str(d.asset_name) + " " + str(d.package_path)) for p in palavras) and classe(d) in classes]
     if not melhores:
         return None
     melhores.sort(key=lambda d: len(str(d.package_name)))
     return unreal.load_asset(str(melhores[0].package_name))
+
+
+# ----------------------------------------------------------------------------- materiais com vento
+def novo_material(nome):
+    caminho = PASTA + "/Materiais/" + nome
+    if eal.does_asset_exist(caminho):
+        eal.delete_asset(caminho)
+    return at.create_asset(nome, PASTA + "/Materiais", unreal.Material, unreal.MaterialFactoryNew())
+
+
+def expr(m, classe_, x, y, **props):
+    e = mel.create_material_expression(m, classe_, x, y)
+    for k, v in props.items():
+        e.set_editor_property(k, v)
+    return e
+
+
+def ligar(a, sa, b, sb):
+    mel.connect_material_expressions(a, sa, b, sb)
+
+
+def custom(m, x, y, codigo, entradas):
+    c = expr(m, unreal.MaterialExpressionCustom, x, y)
+    c.set_editor_property("code", codigo)
+    c.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    c.set_editor_property("description", "Vento")
+    lista = []
+    for nome in entradas:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", nome)
+        lista.append(ci)
+    c.set_editor_property("inputs", lista)
+    return c
+
+
+def parametros_vento(m, x0, y0):
+    """os parâmetros que o jogo atualiza todo quadro (iguais em todos os materiais com vento)."""
+    p = {}
+    for i, (nome, padrao) in enumerate((("VentoForca", 0.3), ("VentoRajada", 0.5), ("DroneForca", 0.0))):
+        p[nome] = expr(m, unreal.MaterialExpressionScalarParameter, x0, y0 + i * 70, parameter_name=nome, default_value=padrao)
+    p["VentoDir"] = expr(m, unreal.MaterialExpressionVectorParameter, x0, y0 + 230, parameter_name="VentoDir",
+                         default_value=unreal.LinearColor(1, 0, 0, 0))
+    p["DronePos"] = expr(m, unreal.MaterialExpressionVectorParameter, x0, y0 + 330, parameter_name="DronePos",
+                         default_value=unreal.LinearColor(0, 0, -100000, 0))
+    return p
+
+
+def posicao_mundo(m, x, y):
+    wp = expr(m, unreal.MaterialExpressionWorldPosition, x, y)
+    try:
+        wp.set_editor_property("world_position_shader_offset", unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
+    except Exception:
+        pass
+    return wp
+
+
+CODIGO_CAPIM = r"""
+float h = saturate(VC.r);
+float alt = VC.g * 3.0;
+float2 d = normalize(DIR.xy + float2(1e-4, 0.0));
+float onda = 0.5 + 0.5 * sin(dot(P.xy, d) / 700.0 - T * 2.2);
+float amt = F * (0.65 + 0.35 * R) * (0.55 + 0.45 * onda) * (10.0 + 22.0 * alt) * h * h;
+float fl = sin(T * 7.0 + P.x * 0.031 + P.y * 0.047) * (0.6 + 2.5 * F) * h;
+float3 o = float3(d * amt, -0.35 * amt * h);
+o.xy += float2(-d.y, d.x) * fl;
+float2 v = P.xy - DP.xy;
+float dist = length(v);
+float hd = max(0.0, DP.z - P.z);
+float forca = DF * saturate(1.0 - dist / 320.0) * saturate(1.0 - hd / 450.0);
+o.xy += (dist > 1.0 ? v / dist : float2(0.0, 0.0)) * 30.0 * forca * h * h;
+o.z -= 8.0 * forca * h;
+return o;
+"""
+
+CODIGO_ARVORE = r"""
+float hr = saturate((P.z - O.z) / max(ALT, 100.0));
+float fase = (O.x + O.y) * 0.013;
+float2 d = normalize(DIR.xy + float2(1e-4, 0.0));
+float balanco = F * (0.7 + 0.5 * R) * (0.8 + 0.2 * sin(T * 1.3 + fase)) * 60.0 * hr * hr;
+float lado = sin(T * 0.9 + fase * 1.7) * F * 12.0 * hr * hr;
+float3 o = float3(d * balanco + float2(-d.y, d.x) * lado, -0.15 * balanco * hr);
+float tremor = FOLHA * (1.5 + 7.0 * F * (0.6 + 0.6 * R)) * hr;
+o += tremor * float3(sin(T * 9.0 + dot(P, float3(0.071, 0.053, 0.037))), cos(T * 8.0 + dot(P, float3(0.049, 0.067, 0.029))), 0.5 * sin(T * 11.0 + P.z * 0.05));
+return o;
+"""
+
+
+def mestre_capim():
+    """folha de capim/milho/flor: cor lisa + balanço pelo vento (cor do vértice R = altura na planta)."""
+    m = novo_material("M_FolhaVento")
+    m.set_editor_property("two_sided", True)
+    por(m, "max_world_position_offset_displacement", 80.0)
+    cor = expr(m, unreal.MaterialExpressionVectorParameter, -900, -300, parameter_name="Cor", default_value=unreal.LinearColor(0.27, 0.36, 0.09, 1))
+    mk = expr(m, unreal.MaterialExpressionComponentMask, -700, -300, r=True, g=True, b=True, a=False)
+    ligar(cor, "", mk, "")
+    mel.connect_material_property(mk, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    rug = expr(m, unreal.MaterialExpressionScalarParameter, -900, -180, parameter_name="Rugosidade", default_value=0.75)
+    mel.connect_material_property(rug, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    p = parametros_vento(m, -1300, 0)
+    wp = posicao_mundo(m, -1300, 450)
+    vc = expr(m, unreal.MaterialExpressionVertexColor, -1300, 560)
+    tempo = expr(m, unreal.MaterialExpressionTime, -1300, 680)
+    c = custom(m, -700, 200, CODIGO_CAPIM, ["P", "VC", "T", "F", "R", "DIR", "DP", "DF"])
+    for fonte, entrada in ((wp, "P"), (vc, "VC"), (tempo, "T"), (p["VentoForca"], "F"), (p["VentoRajada"], "R"),
+                           (p["VentoDir"], "DIR"), (p["DronePos"], "DP"), (p["DroneForca"], "DF")):
+        ligar(fonte, "", c, entrada)
+    mel.connect_material_property(c, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+    mel.recompile_material(m)
+    eal.save_loaded_asset(m)
+    return m
+
+
+def mestre_arvore():
+    """árvore com vento: texturas do glTF (cor+alfa, normal, metal/rugosidade) + balanço da copa e tremor das folhas."""
+    m = novo_material("M_ArvoreVento")
+    m.set_editor_property("two_sided", True)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    por(m, "opacity_mask_clip_value", 0.4)
+    por(m, "max_world_position_offset_displacement", 120.0)
+    branco = unreal.load_asset("/Engine/EngineResources/WhiteSquareTexture")
+    normal_padrao = unreal.load_asset("/Engine/EngineMaterials/DefaultNormal")
+    tc = expr(m, unreal.MaterialExpressionTextureSampleParameter2D, -900, -400, parameter_name="Cor", texture=branco)
+    mel.connect_material_property(tc, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(tc, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
+    tn = expr(m, unreal.MaterialExpressionTextureSampleParameter2D, -900, -150, parameter_name="Normal", texture=normal_padrao,
+              sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+    mel.connect_material_property(tn, "RGB", unreal.MaterialProperty.MP_NORMAL)
+    tm = expr(m, unreal.MaterialExpressionTextureSampleParameter2D, -900, 100, parameter_name="MR", texture=branco,
+              sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
+    mel.connect_material_property(tm, "G", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.connect_material_property(tm, "B", unreal.MaterialProperty.MP_METALLIC)
+    p = parametros_vento(m, -1500, 300)
+    wp = posicao_mundo(m, -1500, 750)
+    op = expr(m, unreal.MaterialExpressionObjectPositionWS, -1500, 860)
+    tempo = expr(m, unreal.MaterialExpressionTime, -1500, 960)
+    folha = expr(m, unreal.MaterialExpressionScalarParameter, -1500, 1040, parameter_name="Folha", default_value=0.0)
+    alt = expr(m, unreal.MaterialExpressionScalarParameter, -1500, 1120, parameter_name="AlturaArvore", default_value=1100.0)
+    c = custom(m, -800, 500, CODIGO_ARVORE, ["P", "O", "T", "F", "R", "DIR", "FOLHA", "ALT"])
+    for fonte, entrada in ((wp, "P"), (op, "O"), (tempo, "T"), (p["VentoForca"], "F"), (p["VentoRajada"], "R"),
+                           (p["VentoDir"], "DIR"), (folha, "FOLHA"), (alt, "ALT")):
+        ligar(fonte, "", c, entrada)
+    mel.connect_material_property(c, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+    mel.recompile_material(m)
+    eal.save_loaded_asset(m)
+    return m
+
+
+CORES_FOLHA = {"CAPIM": (0.27, 0.36, 0.09), "PALHA": (0.52, 0.43, 0.22), "FLOR_AMARELA": (0.95, 0.72, 0.06),
+               "MILHO": (0.16, 0.32, 0.06), "ESPIGA": (0.55, 0.58, 0.22)}
+
+
+def mi(nome, pai):
+    caminho = PASTA + "/Materiais/" + nome
+    if eal.does_asset_exist(caminho):
+        eal.delete_asset(caminho)
+    i = at.create_asset(nome, PASTA + "/Materiais", unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+    i.set_editor_property("parent", pai)
+    return i
+
+
+def textura_do_gltf(mat, tipo):
+    """acha a textura de um material do glTF pelo nome do parâmetro (cor, normal ou metal/rugosidade)."""
+    try:
+        nomes = [str(n) for n in mel.get_texture_parameter_names(mat)]
+    except Exception:
+        nomes = []
+    chaves = {"cor": ("basecolor", "base_color", "diffuse", "albedo"), "normal": ("normal",), "mr": ("metallicroughness", "roughness", "orm")}[tipo]
+    for n in nomes:
+        if any(k in n.lower().replace(" ", "") for k in chaves):
+            try:
+                t = mel.get_material_instance_texture_parameter_value(mat, n)
+                if t:
+                    return t
+            except Exception:
+                pass
+    return None
+
+
+def arvore_com_vento(arvore, mestre):
+    """cópia da árvore da fazenda com materiais que balançam (a da fazenda não muda)."""
+    destino = PASTA + "/ArvoreVento/ArvoreVento"
+    if eal.does_directory_exist(PASTA + "/ArvoreVento"):
+        eal.delete_directory(PASTA + "/ArvoreVento")
+    copia = eal.duplicate_asset(arvore.get_path_name().split(".")[0], destino)
+    if not copia:
+        log("FALHOU copiar a árvore")
+        return None
+    for i, sm in enumerate(copia.get_editor_property("static_materials")):
+        original = sm.get_editor_property("material_interface")
+        nome = str(sm.get_editor_property("material_slot_name"))
+        try:
+            log("   texturas do slot", nome, [str(n) for n in mel.get_texture_parameter_names(original)])
+        except Exception:
+            pass
+        novo = mi("MI_ArvoreVento_%d" % i, mestre)
+        achou = []
+        for tipo, par in (("cor", "Cor"), ("normal", "Normal"), ("mr", "MR")):
+            t = textura_do_gltf(original, tipo)
+            if t:
+                mel.set_material_instance_texture_parameter_value(novo, par, t)
+                achou.append(par)
+        e_folha = "leaf" in nome.lower() or "leaves" in nome.lower()
+        mel.set_material_instance_scalar_parameter_value(novo, "Folha", 1.0 if e_folha else 0.0)
+        mel.update_material_instance(novo)
+        eal.save_loaded_asset(novo)
+        copia.set_material(i, novo)
+        log("   slot", i, nome, "->", "folha (treme)" if e_folha else "tronco/galho (balança)", "texturas:", achou)
+    eal.save_loaded_asset(copia)
+    return copia
 
 
 # ----------------------------------------------------------------------------- peças do mapa
@@ -93,10 +315,9 @@ CUBO = "/Engine/BasicShapes/Cube.Cube"
 PLANO = "/Engine/BasicShapes/Plane.Plane"
 
 
-def caixa(pos, tam, material=None, nome="Caixa"):
-    """caixa (tam em metros) com o topo em pos.z."""
+def caixa(x, y, z_topo, tam, material=None, nome="Caixa"):
     sm = unreal.load_asset(CUBO)
-    a = eas.spawn_actor_from_object(sm, unreal.Vector(pos[0] * 100, pos[1] * 100, pos[2] * 100 - tam[2] * 50), unreal.Rotator(0, 0, 0))
+    a = eas.spawn_actor_from_object(sm, U(x, y, z_topo - tam[2] / 2), unreal.Rotator(0, 0, 0))
     a.set_actor_scale3d(unreal.Vector(tam[0], tam[1], tam[2]))
     if material:
         a.get_component_by_class(unreal.StaticMeshComponent).set_material(0, material)
@@ -104,8 +325,9 @@ def caixa(pos, tam, material=None, nome="Caixa"):
     return a
 
 
-def placa(texto, pos, yaw=0.0, tamanho=60.0, cor=(255, 255, 255)):
-    t = eas.spawn_actor_from_class(unreal.TextRenderActor, unreal.Vector(pos[0] * 100, pos[1] * 100, pos[2] * 100), unreal.Rotator(0, 0, yaw))
+def placa(texto, x, y, z, tamanho=45.0, cor=(255, 255, 255)):
+    # virada para o drone (que olha para frente = -Y do Unreal): a frente do texto aponta para +Y
+    t = eas.spawn_actor_from_class(unreal.TextRenderActor, U(x, y, z), unreal.Rotator(0, 0, 90))
     c = t.get_component_by_class(unreal.TextRenderComponent)
     c.set_editor_property("text", texto)
     por(c, "world_size", tamanho)
@@ -116,16 +338,11 @@ def placa(texto, pos, yaw=0.0, tamanho=60.0, cor=(255, 255, 255)):
 
 
 def luz_e_ceu():
-    """o mesmo dia de céu aberto da fazenda (sol, atmosfera, nuvens, luz do céu, névoa leve, pós-processo)."""
     sol = eas.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 5000), unreal.Rotator(roll=0, pitch=-46, yaw=-145))
     lc = sol.get_component_by_class(unreal.DirectionalLightComponent)
-    por(lc, "intensity", 10.0)
-    por(lc, "use_temperature", True)
-    por(lc, "temperature", 5600.0)
-    por(lc, "atmosphere_sun_light", True)
-    por(lc, "light_source_angle", 0.6)
-    por(lc, "shadow_amount", 0.85)
-    por(lc, "mobility", unreal.ComponentMobility.MOVABLE)
+    for p_, v in (("intensity", 10.0), ("use_temperature", True), ("temperature", 5600.0), ("atmosphere_sun_light", True),
+                  ("light_source_angle", 0.6), ("shadow_amount", 0.85), ("mobility", unreal.ComponentMobility.MOVABLE)):
+        por(lc, p_, v)
     sol.set_actor_label("Sol")
     eas.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0)).set_actor_label("Ceu")
     try:
@@ -134,15 +351,13 @@ def luz_e_ceu():
         log("sem nuvens:", e)
     sky = eas.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0, 0, 1000), unreal.Rotator(0, 0, 0))
     sc = sky.get_component_by_class(unreal.SkyLightComponent)
-    por(sc, "real_time_capture", True)
-    por(sc, "mobility", unreal.ComponentMobility.MOVABLE)
-    por(sc, "intensity", 1.25)
+    for p_, v in (("real_time_capture", True), ("mobility", unreal.ComponentMobility.MOVABLE), ("intensity", 1.25)):
+        por(sc, p_, v)
     sky.set_actor_label("LuzDoCeu")
     fog = eas.spawn_actor_from_class(unreal.ExponentialHeightFog, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
     fc = fog.get_component_by_class(unreal.ExponentialHeightFogComponent)
-    por(fc, "fog_density", 0.007)
-    por(fc, "start_distance", 3000.0)
-    por(fc, "fog_height_falloff", 0.06)
+    for p_, v in (("fog_density", 0.007), ("start_distance", 3000.0), ("fog_height_falloff", 0.06)):
+        por(fc, p_, v)
     fog.set_actor_label("Neblina")
     ppv = eas.spawn_actor_from_class(unreal.PostProcessVolume, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
     ppv.set_editor_property("unbound", True)
@@ -158,92 +373,158 @@ def luz_e_ceu():
     ppv.set_actor_label("PosProcesso")
 
 
+def nanite(sm, folhagem=True):
+    ns = sm.get_editor_property("nanite_settings")
+    ns.set_editor_property("enabled", True)
+    if folhagem:
+        try:
+            ns.set_editor_property("preserve_area", True)
+        except Exception:
+            pass
+    sm.set_editor_property("nanite_settings", ns)
+
+
 def main():
     os.makedirs(os.path.dirname(LOG), exist_ok=True)
     open(LOG, "w", encoding="utf-8").write("construir_vitrine.py\n")
     try:
+        with open(ENT + "/vitrine.json", encoding="utf-8") as f:
+            info = json.load(f)
         assets = todos_assets()
-        log("assets fora das nossas pastas (do Fab):", len(assets))
-        for d in assets[:400]:
-            if classe(d) in ("MaterialInstanceConstant", "StaticMesh", "SkeletalMesh", "Blueprint", "Material"):
+        log("assets do Fab no projeto:", len(assets))
+        for d in assets[:300]:
+            if classe(d) in ("MaterialInstanceConstant", "StaticMesh", "SkeletalMesh", "Blueprint"):
                 log("   ", classe(d), d.package_name)
 
-        mundo = unreal.EditorLoadingAndSavingUtils.new_blank_map(False)
-        log("mapa em branco:", mundo)
-        luz_e_ceu()
+        # materiais
+        m_capim = mestre_capim()
+        m_arvore = mestre_arvore()
+        mis = {"TERRENO": unreal.load_asset("/Game/Campo/Materiais/MI_TERRENO")}
+        for slot, c in CORES_FOLHA.items():
+            i = mi("MI_V_" + slot, m_capim)
+            mel.set_material_instance_vector_parameter_value(i, "Cor", unreal.LinearColor(c[0], c[1], c[2], 1))
+            mel.update_material_instance(i)
+            eal.save_loaded_asset(i)
+            mis[slot] = i
+        log("materiais com vento prontos")
 
-        chao_atual = unreal.load_asset("/Game/Campo/Materiais/MI_TERRENO") or unreal.load_asset("/Game/Campo/Materiais/MI_PISO")
+        # malhas da vitrine
+        if eal.does_directory_exist(PASTA + "/Malhas"):
+            eal.delete_directory(PASTA + "/Malhas")
+        malhas = {}
+        for arq in sorted(os.listdir(ENT)):
+            if not arq.lower().endswith(".fbx"):
+                continue
+            nome = arq[:-4]
+            caminhos = importar(ENT + "/" + arq, PASTA + "/Malhas/" + nome)
+            sms = [unreal.load_asset(c) for c in caminhos]
+            sms = [a for a in sms if isinstance(a, unreal.StaticMesh)]
+            if not sms:
+                log("FALHOU", arq, caminhos)
+                continue
+            sm = sms[0]
+            for i, smat in enumerate(sm.get_editor_property("static_materials")):
+                slot = str(smat.get_editor_property("material_slot_name")).upper()
+                alvo = mis.get(slot) or next((v for k, v in sorted(mis.items(), key=lambda kv: -len(kv[0])) if slot.startswith(k)), None)
+                if alvo:
+                    sm.set_material(i, alvo)
+                else:
+                    log("  slot sem material:", nome, slot)
+            nanite(sm, folhagem=nome != "TerrenoVitrine")
+            if nome == "TerrenoVitrine":
+                try:
+                    bs = sm.get_editor_property("body_setup")
+                    bs.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+                except Exception as e:
+                    log("colisão do terreno:", e)
+            eal.save_loaded_asset(sm)
+            malhas[nome] = sm
+            log("malha", nome)
+
+        mundo = unreal.EditorLoadingAndSavingUtils.new_blank_map(False)
+        luz_e_ceu()
+        for nome, sm in malhas.items():
+            a = eas.spawn_actor_from_object(sm, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+            a.set_actor_label(nome)
+            if nome == "TerrenoVitrine":
+                tag(a, "Terreno")
+            else:
+                tag(a, "Vento")
+                a.set_actor_enable_collision(False)
+                c = a.get_component_by_class(unreal.StaticMeshComponent)
+                if nome != "MilhoVitrine":
+                    por(c, "cast_shadow", False)
+                por(c, "affect_distance_field_lighting", False)
+
+        # canteiros Megascans
         neutro = unreal.load_asset("/Game/Campo/Materiais/MI_BASE")
         dry = achar(assets, ["drysoil"], ("MaterialInstanceConstant",))
         arid = achar(assets, ["aridsoil"], ("MaterialInstanceConstant",))
-        log("chão Dry Soil:", dry.get_path_name() if dry else "FALTA ADICIONAR")
-        log("chão Arid Soil:", arid.get_path_name() if arid else "FALTA ADICIONAR")
+        log("Dry Soil:", dry.get_path_name() if dry else "FALTA ADICIONAR", "| Arid Soil:", arid.get_path_name() if arid else "FALTA ADICIONAR")
+        nomes = ("DRY SOIL (MEGASCANS)", "ARID SOIL (MEGASCANS)")
+        for (cx, cy, lx, ly), mat, nome in zip(info["canteiros"], (dry, arid), nomes):
+            caixa(cx, cy, 0.03, (lx, ly, 0.2), mat or neutro, "Canteiro_" + chave(nome)[:10])
+            placa(nome + ("" if mat else "\nFALTA ADICIONAR"), cx, cy - ly / 2 - 0.6, 0.9, 40.0, (255, 255, 255) if mat else (255, 190, 60))
 
-        # o chão em volta é o próprio terreno da fazenda (plano num raio de 14 m do centro):
-        # assim o "ATUAL" é exatamente o chão de hoje, com o capim de lado
-        terreno = None
-        if eal.does_directory_exist("/Game/Campo/Malhas/Terreno"):
-            for c in eal.list_assets("/Game/Campo/Malhas/Terreno", recursive=True, include_folder=False):
-                a = eal.load_asset(c)
-                if isinstance(a, unreal.StaticMesh):
-                    terreno = a
-                    break
-        if terreno:
-            t = eas.spawn_actor_from_object(terreno, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
-            t.set_actor_label("TerrenoFazenda")
-            tag(t, "Terreno")
-        else:
-            caixa((0, 0, 0), (220, 220, 1), chao_atual, "ChaoVolta")
-        log("chão em volta:", terreno.get_path_name() if terreno else "caixa com o material do terreno")
-        # canteiros de 7 x 7 m: o ATUAL fica sem canteiro (é o chão em volta, marcado só pela placa)
-        canteiros = (("ATUAL (FAZENDA HOJE)", None, -8.5), ("DRY SOIL (MEGASCANS)", dry, 0.0), ("ARID SOIL (MEGASCANS)", arid, 8.5))
-        for i, (nome, mat, x) in enumerate(canteiros):
-            if i > 0:
-                caixa((x, 7, 0.03), (7, 7, 0.2), mat or neutro, "Canteiro_" + chave(nome)[:12])
-            falta = i > 0 and not mat
-            placa(nome + ("\nFALTA ADICIONAR" if falta else ""), (x, 3.2, 0.9), yaw=-90.0, tamanho=42.0,
-                  cor=(255, 190, 60) if falta else (255, 255, 255))
+        # laguinho (ondas com o vento — o jogo procura a tag "Agua")
+        agua = unreal.load_asset("/Game/Campo/Materiais/M_Agua")
+        lx, ly, ll, lf = info["lago"]
+        a = eas.spawn_actor_from_object(unreal.load_asset(PLANO), U(lx, ly, 0.04), unreal.Rotator(0, 0, 0))
+        a.set_actor_scale3d(unreal.Vector(ll, lf, 1))
+        if agua:
+            a.get_component_by_class(unreal.StaticMeshComponent).set_material(0, agua)
+        a.set_actor_enable_collision(False)
+        a.set_actor_label("Laguinho")
+        tag(a, "Agua")
+        placa("LAGO (ONDAS DO VENTO)", lx, ly - lf / 2 - 0.6, 0.9, 40.0)
+        mx, my, ml, mf = info["milho"]
+        placa("MILHO (VENTO)", mx, my - mf / 2 - 0.6, 0.9, 40.0)
 
-        # árvores: a atual e a nova (Megaplants), lado a lado, a 30 m dos canteiros
+        # árvores: atual parada | atual com vento | nova (Megaplants)
         arvore_atual = None
-        for p in ("/Game/Campo/Modelos/island_tree_01", "/Game/Campo/Modelos/island_tree_02"):
-            if eal.does_directory_exist(p):
-                for c in eal.list_assets(p, recursive=True, include_folder=False):
-                    a = eal.load_asset(c)
-                    if isinstance(a, unreal.StaticMesh):
-                        arvore_atual = a
-                        break
-            if arvore_atual:
-                break
+        if eal.does_directory_exist("/Game/Campo/Modelos/island_tree_01"):
+            for c in eal.list_assets("/Game/Campo/Modelos/island_tree_01", recursive=True, include_folder=False):
+                obj = eal.load_asset(c)
+                if isinstance(obj, unreal.StaticMesh):
+                    arvore_atual = obj
+                    break
+        ax, ay = info["arvores"]["atual"]
+        vx, vy = info["arvores"]["vento"]
+        nx, ny = info["arvores"]["nova"]
+        if arvore_atual:
+            a = eas.spawn_actor_from_object(arvore_atual, U(ax, ay, -0.05), unreal.Rotator(0, 0, 0))
+            a.set_actor_scale3d(unreal.Vector(2.9, 2.9, 2.9))
+            a.set_actor_label("ArvoreParada")
+            placa("ÁRVORE ATUAL (PARADA)", ax, ay - 3.5, 1.2)
+            av = arvore_com_vento(arvore_atual, m_arvore)
+            if av:
+                a = eas.spawn_actor_from_object(av, U(vx, vy, -0.05), unreal.Rotator(0, 0, 37))
+                a.set_actor_scale3d(unreal.Vector(2.9, 2.9, 2.9))
+                a.set_actor_label("ArvoreComVento")
+                tag(a, "Vento")
+                placa("ÁRVORE ATUAL COM VENTO", vx, vy - 3.5, 1.2, 45.0, (140, 220, 255))
         nova = (achar(assets, ["maple"], ("StaticMesh", "SkeletalMesh", "Blueprint"))
                 or achar(assets, ["acer"], ("StaticMesh", "SkeletalMesh", "Blueprint"))
                 or achar(assets, ["megaplant"], ("StaticMesh", "SkeletalMesh", "Blueprint")))
-        log("árvore atual:", arvore_atual.get_path_name() if arvore_atual else "não achada")
         log("árvore nova:", nova.get_path_name() if nova else "FALTA ADICIONAR")
-        if arvore_atual:
-            a = eas.spawn_actor_from_object(arvore_atual, unreal.Vector(-900, 1700, -5), unreal.Rotator(0, 0, 0))
-            a.set_actor_scale3d(unreal.Vector(2.9, 2.9, 2.9))
-            a.set_actor_label("ArvoreAtual")
-        placa("ÁRVORE ATUAL", (-9, 12.5, 1.2), yaw=-90.0, tamanho=45.0)
         if nova:
-            a = eas.spawn_actor_from_object(nova, unreal.Vector(900, 1700, -5), unreal.Rotator(0, 0, 0))
+            a = eas.spawn_actor_from_object(nova, U(nx, ny, -0.05), unreal.Rotator(0, 0, 0))
             a.set_actor_label("ArvoreNova")
-            placa("ÁRVORE NOVA (MEGAPLANTS)", (9, 12.5, 1.2), yaw=-90.0, tamanho=45.0)
+            placa("ÁRVORE NOVA (MEGAPLANTS)", nx, ny - 3.5, 1.2)
         else:
-            caixa((9, 17, 0.3), (1.5, 1.5, 0.3), neutro, "LugarArvoreNova")
-            placa("ÁRVORE NOVA (MEGAPLANTS)\nFALTA ADICIONAR", (9, 12.5, 1.2), yaw=-90.0, tamanho=45.0, cor=(255, 190, 60))
+            caixa(nx, ny, 0.3, (1.5, 1.5, 0.3), neutro, "LugarArvoreNova")
+            placa("ÁRVORE NOVA (MEGAPLANTS)\nFALTA ADICIONAR", nx, ny - 3.5, 1.2, 45.0, (255, 190, 60))
 
-        # drone começa de frente para os canteiros
-        ps = eas.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(0, -300, 60), unreal.Rotator(0, 0, 90))
+        # drone começa de frente para tudo (olhando para +y do Blender = -Y do Unreal)
+        ix, iy = info["inicio"]
+        ps = eas.spawn_actor_from_class(unreal.PlayerStart, U(ix, iy, 0.6), unreal.Rotator(0, 0, -90))
         ps.set_actor_label("InicioDrone")
 
-        # pontos do voo de teste (fotos): perto de cada canteiro e de cada árvore
-        vistas = [(-8.5, 2.0, 1.3, 90), (0, 2.0, 1.3, 90), (8.5, 2.0, 1.3, 90),   # chão de perto
-                  (-8.5, 5.0, 0.5, 90), (0, 5.0, 0.5, 90), (8.5, 5.0, 0.5, 90),   # rente ao chão
-                  (-9, 8.0, 3.0, 90), (9, 8.0, 3.0, 90),                          # árvores de frente
-                  (0, 4.0, 8.0, 90)]                                              # as duas de cima
-        for i, (x, y, z, yaw) in enumerate(vistas):
-            e = eas.spawn_actor_from_class(unreal.TargetPoint, unreal.Vector(x * 100, y * 100, z * 100), unreal.Rotator(0, 0, yaw))
+        # voo de teste: capim de perto, rente ao chão, canteiros, lago, milho, árvores
+        vistas = [(0, 1.5, 1.2), (-6, 2.0, 0.5), (0, 4.5, 1.2), (-12, -1.5, 1.5), (-10, 16.5, 1.6),
+                  (-9, 11.0, 3.0), (0, 13.0, 3.5), (0, 15.0, 6.0), (6, 9.0, 0.7)]
+        for i, (x, y, z) in enumerate(vistas):
+            e = eas.spawn_actor_from_class(unreal.TargetPoint, U(x, y, z), unreal.Rotator(0, 0, -90))
             e.set_actor_label("Vista_%02d" % i)
             tag(e, "Rota_%d" % i)
 
