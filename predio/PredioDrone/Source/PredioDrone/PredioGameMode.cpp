@@ -1456,8 +1456,8 @@ FString APredioGameMode::DescricaoObjetivo(EObjetivo O, int32 Cartao)
 	{
 		switch (O)
 		{
-		case EObjetivo::Entregas: return TEXT("Pegue a caixa no pátio e leve ao vagão, à ponte rolante, ao alto-forno, à esteira, aos silos e à chaminé");
-		case EObjetivo::Fotos: return TEXT("Mire de perto: chaminé rachada, gancho, conversor, válvula, bica, regenerador e locomotiva");
+		case EObjetivo::Entregas: return TEXT("Do pátio ao vagão, à ponte rolante, ao alto-forno, à esteira, aos silos e à chaminé");
+		case EObjetivo::Fotos: return TEXT("7 alvos: chaminé rachada, gancho, conversor, válvula, bica, regenerador, locomotiva");
 		case EObjetivo::Ferraduras: return TEXT("12 engrenagens escondidas pela usina — algumas dentro das máquinas");
 		case EObjetivo::ArosOrdem: return TEXT("Por dentro do galpão, por baixo das pontes rolantes, em volta do alto-forno");
 		default: break;

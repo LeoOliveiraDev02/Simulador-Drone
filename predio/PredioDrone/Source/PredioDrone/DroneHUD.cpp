@@ -1205,7 +1205,7 @@ void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 		{
 			float Soma = 0.f;
 			for (int32 c = 0; c < NCart; ++c) Soma += GM->ProgressoMapa(c);
-			const float P = Soma / 2.f; // só os mapas liberados contam
+			const float P = Soma / (float)NCart; // os três mapas liberados
 			const float PX = W - 330 * e, PY = H * 0.06f + 26 * e;
 			T(TEXT("PROGRESSO GERAL"), PX, PY, 14 * e, TEXT("Bold"), AzulTexto, 0, 2.5f * e);
 			T(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(P * 100.f)), W - 40 * e, PY - 6 * e, 30 * e, TEXT("Bold Italic"), Branco, 2);
@@ -1219,7 +1219,7 @@ void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 	else if (GM->TelaMP == ETelaMP::Mapas)
 	{
 		T(TEXT("ESCOLHA O MAPA"), X(40), Y(66), 54 * e, TEXT("Bold Italic"), Branco);
-		T(TEXT("Mapas 1 e 2 liberados  •  o mapa 3 está em construção"), X(44), Y(130), 16 * e, TEXT("Italic"), AzulTexto, 0, 1.5f * e);
+		T(TEXT("Três mapas liberados  •  ganhe medalhas em todos os desafios"), X(44), Y(130), 16 * e, TEXT("Italic"), AzulTexto, 0, 1.5f * e);
 
 		// cantinho do progresso (em cima, à direita)
 		{
