@@ -412,14 +412,28 @@ void APredioGameMode::AtualizarAndares(bool bForcar)
 			Par.Value.bVisivel = bVer;
 			for (const TWeakObjectPtr<AActor>& A : Par.Value.Atores)
 			{
-				if (!A.IsValid()) continue;
-				A->SetActorHiddenInGame(!bVer);
-				TArray<ULightComponent*> Luzes;
-				A->GetComponents(Luzes);
-				for (ULightComponent* L : Luzes) L->SetVisibility(bVer);
+				if (A.IsValid()) FilaVisibilidade.Add(TPair<TWeakObjectPtr<AActor>, bool>(A, bVer));
 			}
 		}
 	}
+	// aplica aos poucos (no máximo ~1,2 ms por quadro): mostrar/esconder um andar inteiro de uma vez
+	// recriava centenas de objetos no mesmo quadro e dava um tranco na troca de andar.
+	// O andar vizinho já é pedido antes de precisar (margem de altura e 1,5 s), então não aparece buraco.
+	const double Inicio = FPlatformTime::Seconds();
+	int32 Feitos = 0;
+	while (Feitos < FilaVisibilidade.Num())
+	{
+		const TPair<TWeakObjectPtr<AActor>, bool>& Item = FilaVisibilidade[Feitos++];
+		if (AActor* A = Item.Key.Get())
+		{
+			A->SetActorHiddenInGame(!Item.Value);
+			TArray<ULightComponent*> Luzes;
+			A->GetComponents(Luzes);
+			for (ULightComponent* L : Luzes) L->SetVisibility(Item.Value);
+		}
+		if (!bForcar && FPlatformTime::Seconds() - Inicio > 0.0012) break;
+	}
+	FilaVisibilidade.RemoveAt(0, Feitos, EAllowShrinking::No);
 }
 
 
@@ -1296,6 +1310,8 @@ void APredioGameMode::TickTour(float Dt)
 		return;
 	}
 	TourFrames.Add(FApp::GetDeltaTime() * 1000.f);
+	TourAndarQ.Add(AndarAtual);
+	TourDesdePausa.Add(QuadrosDesdePausa++);
 
 	const int32 N = TourPontos.Num();
 	const int32 I = FMath::Clamp(FMath::FloorToInt(TourS), 0, N - 2);
@@ -1326,6 +1342,7 @@ void APredioGameMode::TickTour(float Dt)
 			TourFotos, AndarAtual, FPSBase, MsGPU, *NomeModoFSR(), GeradorLigado() ? 1 : 0));
 		++TourFotos;
 		TourEspera = 0.6f;
+		QuadrosDesdePausa = 0;
 	}
 
 	const float Comprimento = FMath::Max(50.f, FVector::Dist(P1, P2));
@@ -1349,6 +1366,36 @@ void APredioGameMode::SalvarResultadoTour()
 	const float P99 = F.Num() ? F[FMath::Clamp(FMath::FloorToInt(F.Num() * 0.99f), 0, F.Num() - 1)] : 0.f;
 	TourLinhas.Add(FString::Printf(TEXT("QUADROS %d  media %.2f ms (%.1f FPS base)  pior 1%% %.2f ms (%.1f FPS)"),
 		F.Num(), Media, Media > 0 ? 1000.f / Media : 0.f, P99, P99 > 0 ? 1000.f / P99 : 0.f));
+	// de onde vêm os quadros lentos (> 20 ms): logo depois de uma foto, numa troca de andar ou no meio do voo
+	{
+		int32 Lentos = 0, PosFoto = 0, Troca = 0;
+		TMap<int32, int32> PorAndar;
+		for (int32 i = 0; i < TourFrames.Num(); ++i)
+		{
+			if (TourFrames[i] <= 20.f) continue;
+			++Lentos;
+			if (TourDesdePausa.IsValidIndex(i) && TourDesdePausa[i] < 5) ++PosFoto;
+			bool bTroca = false;
+			for (int32 k = FMath::Max(0, i - 30); k <= FMath::Min(TourAndarQ.Num() - 1, i + 30); ++k)
+			{
+				if (TourAndarQ[k] != TourAndarQ[i]) { bTroca = true; break; }
+			}
+			if (bTroca) ++Troca;
+			PorAndar.FindOrAdd(TourAndarQ.IsValidIndex(i) ? TourAndarQ[i] : -1)++;
+		}
+		FString Txt;
+		for (const TPair<int32, int32>& P : PorAndar) Txt += FString::Printf(TEXT(" andar%d=%d"), P.Key, P.Value);
+		TourLinhas.Add(FString::Printf(TEXT("quadros > 20 ms: %d  (logo depois de foto %d, perto de troca de andar %d)%s"), Lentos, PosFoto, Troca, *Txt));
+		F.RemoveAll([](float V) { return false; });
+		TArray<float> SemFoto;
+		for (int32 i = 0; i < TourFrames.Num(); ++i) if (!TourDesdePausa.IsValidIndex(i) || TourDesdePausa[i] >= 5) SemFoto.Add(TourFrames[i]);
+		SemFoto.Sort();
+		if (SemFoto.Num())
+		{
+			const float P99b = SemFoto[FMath::Clamp(FMath::FloorToInt(SemFoto.Num() * 0.99f), 0, SemFoto.Num() - 1)];
+			TourLinhas.Add(FString::Printf(TEXT("pior 1%% sem os quadros logo depois das fotos: %.2f ms (%.1f FPS)"), P99b, P99b > 0 ? 1000.f / P99b : 0.f));
+		}
+	}
 	if (!DiagCampo.IsEmpty())
 	{
 		TArray<FString> L;

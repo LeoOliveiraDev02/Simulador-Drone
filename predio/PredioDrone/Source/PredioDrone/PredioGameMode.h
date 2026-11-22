@@ -307,6 +307,7 @@ private:
 	TMap<FName, FGrupoVisivel> Grupos;   // "Andar0", "Laje1", ...
 	TArray<FConexao> Conexoes;
 	TMap<int32, double> AndarPedido; // última vez que cada andar precisou aparecer (evita pisca-pisca)
+	TArray<TPair<TWeakObjectPtr<AActor>, bool>> FilaVisibilidade; // mostrar/esconder espalhado em vários quadros
 	TArray<TPair<int32, FTransform>> Rota; // pontos invisíveis do voo de teste (no campo: os aros)
 	float AlturaAndar = 300.f;
 	float CotaTerreo = 0.f;
@@ -338,6 +339,9 @@ private:
 	float TourEspera = 0.f;
 	int32 TourFotos = 0;
 	TArray<float> TourFrames;   // ms
+	TArray<int32> TourAndarQ;   // andar em cada quadro (diagnóstico dos picos)
+	TArray<int32> TourDesdePausa;
+	int32 QuadrosDesdePausa = 0;
 	TArray<FString> TourLinhas;
 	FString PastaTestes;
 	int32 UltimoPontoFoto = -1;

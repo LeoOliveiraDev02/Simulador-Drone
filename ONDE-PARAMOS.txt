@@ -24,7 +24,11 @@
       Mapa 5 = Plataforma de petróleo em alto-mar: vento forte, heliponto, queimador, guindastes, navio de apoio.
   [x] Revisão (REVISAO.bat, 02:00): fazenda ok (87 FPS, pior 1% 69); prédio ok (83 FPS, pior 1% 50 no voo curto —
       pico na troca de andar); usina 87 FPS (pior 1% 68); menu com os 3 cartões liberados.
-  [ ] Pendente: pico de FPS na troca de andar do prédio; rádio USB (RawInput); assets do Fab (Leonardo adicionar).
+  [x] Prédio: mostrar/esconder andares agora é espalhado em vários quadros (1,2 ms por quadro). O voo de teste ganhou
+      diagnóstico dos quadros lentos: no prédio são 0,5% dos quadros (~19 ms), nenhum na troca de andar; metade logo
+      depois das fotos do teste. Média 83 FPS, pior 1% ~53 FPS só no voo de teste rápido (provável compilação de
+      shader na 1ª vez que cada vista aparece). Fazenda: pior 1% 71 FPS.
+  [ ] Pendente: rádio USB (RawInput); assets do Fab (Leonardo adicionar); cache de PSO para tirar os picos do prédio.
 
 >>> 20/11/2026 À NOITE — FEEDBACK DA GRAVAÇÃO DO LEONARDO (tudo feito, jogo empacotado) <<<
   [x] Sombras: Lumen com "skylight leaking" (0,22 fazenda / 0,10 prédio) + exposição local; capim e flores sem
