@@ -102,7 +102,7 @@ vermelho = mat("Vermelho", (0.6, 0.06, 0.04), 0.5)
 escuro = mat("Escuro", (0.05, 0.05, 0.055), 0.6, 0.5)
 ferrugem = mat("Ferrugem", (0.32, 0.14, 0.06), 0.8, 0.3)
 janela = mat("Janela", (1.0, 0.85, 0.6), 0.3, emi=(1.0, 0.8, 0.5), forca=6.0)
-fogo = mat("Fogo", (1, 0.4, 0.05), 0.5, emi=(1.0, 0.26, 0.03), forca=7.0)
+fogo = mat("Fogo", (0.0, 0.0, 0.0), 0.5, emi=(1.0, 0.22, 0.015), forca=4.0)
 
 g = M("Plataforma")
 # pernas (jaqueta) saindo do mar com contraventamento
@@ -215,20 +215,20 @@ for k in range(4):
 nv.fim()
 
 # mar: modificador Ocean (ondas de verdade) + plano grande no fundo até o horizonte
-bpy.ops.mesh.primitive_plane_add(size=6000, location=(0, 0, -0.6))
+bpy.ops.mesh.primitive_plane_add(size=80000, location=(0, 0, -0.6))
 fundo = bpy.context.object
 bpy.ops.mesh.primitive_plane_add(size=10, location=(0, 0, 0))
 mar = bpy.context.object
 oc = mar.modifiers.new("Ocean", "OCEAN")
 oc.geometry_mode = "GENERATE"
-oc.resolution = 10
-oc.spatial_size = 220
-oc.repeat_x = 12
-oc.repeat_y = 12
+oc.resolution = 8
+oc.spatial_size = 300
+oc.repeat_x = 34
+oc.repeat_y = 34
 oc.wave_scale = 2.2
 oc.wind_velocity = 18.0
 oc.choppiness = 1.3
-mar.location = (-1320, -1320, 0)
+mar.location = (-5100, -5100, 0)
 mm = bpy.data.materials.new("Mar")
 mm.use_nodes = True
 nt = mm.node_tree
@@ -256,11 +256,14 @@ bp.inputs["Distance"].default_value = 0.4
 nt.links.new(mix.outputs["Value"], bp.inputs["Height"])
 nt.links.new(bp.outputs["Normal"], b.inputs["Normal"])
 mar.data.materials.append(mm)
-fundo.data.materials.append(mm)
+mf = mm.copy()
+mf.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.35
+mf.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.03, 0.07, 0.1, 1)
+fundo.data.materials.append(mf)
 
 # drone E88 em primeiro plano
 dr = M("Drone")
-dx, dy, dz = -93.4, 69.4, 48.25
+dx, dy, dz = -93.0, 67.2, 47.25
 caixa(dr, (dx, dy, dz), (0.32, 0.14, 0.07), escuro)
 for sx in (-1, 1):
     for sy in (-1, 1):

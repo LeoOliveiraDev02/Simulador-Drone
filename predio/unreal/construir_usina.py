@@ -271,7 +271,7 @@ def criar_terreno():
     """brita/terra batida (base), asfalto velho (R), fuligem e minério escuro (G), terra (B)."""
     brita = texturas("gravel_road")
     asf = texturas("worn_asphalt") or brita
-    terra = texturas("red_laterite_soil_stones") or texturas("brown_mud_dry") or brita
+    terra = texturas("brown_mud_dry") or texturas("red_laterite_soil_stones") or brita
     if not brita:
         return None
     m = novo_material("M_TerrenoUsina")
@@ -301,14 +301,17 @@ def criar_terreno():
     # fuligem (G) escurece; o pátio inteiro é sujo de pó de minério e carvão (bem mais escuro que a brita limpa)
     fuligem = lerp(m, const(m, 1.0, -700, 300), const(m, 0.16, -700, 360), vc, -550, 330, salfa="G")
     cor = mul(m, cor, fuligem, -400, 0)
-    tom = expr(m, unreal.MaterialExpressionConstant3Vector, -550, 420, constant=unreal.LinearColor(0.42, 0.36, 0.31, 1))
+    tom = expr(m, unreal.MaterialExpressionConstant3Vector, -550, 420, constant=unreal.LinearColor(0.5, 0.46, 0.41, 1))
     cor = mul(m, cor, tom, -350, 50)
     # variação larga
     var = lerp(m, const(m, 0.7, -700, 500), const(m, 1.2, -700, 560), larga, -550, 520, salfa="R")
     cor = mul(m, cor, var, -300, 100)
     mel.connect_material_property(cor, "", unreal.MaterialProperty.MP_BASE_COLOR)
     mel.connect_material_property(nrm, "", unreal.MaterialProperty.MP_NORMAL)
-    mel.connect_material_property(rug, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    # chão seco: rugosidade alta sempre (a textura de terra deixava o pátio brilhando como se estivesse molhado)
+    rug_final = lerp(m, const(m, 0.93, -500, 700), const(m, 0.82, -500, 760), vc, -350, 720, salfa="R")
+    mel.connect_material_property(rug_final, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.connect_material_property(const(m, 0.3, -350, 820), "", unreal.MaterialProperty.MP_SPECULAR)
     mel.recompile_material(m)
     log("material do terreno pronto")
     return m
@@ -329,7 +332,7 @@ SLOTS = {
     "PAREDE_VELHA": ("pbr", "concrete_wall_008", (0.62, 0.6, 0.55), 1.0, 1.0, 0.0),
     "MADEIRA": ("pbr", "fine_grained_wood", (0.45, 0.36, 0.27), 1.0, 1.2, 0.0),
     "BRITA": ("pbr", "gravel_road", (0.6, 0.58, 0.55), 1.0, 1.0, 0.0),
-    "BASE": ("pbr", "concrete_floor_worn_001", (0.7, 0.7, 0.68), 1.0, 1.0, 0.0),
+    "BASE": ("pbr", "concrete_floor_worn_001", (0.5, 0.5, 0.48), 1.0, 1.0, 0.0),
     "GUARDA_CORPO": ("cor", (0.62, 0.42, 0.06), 0.65, 0.3, 0.0, 0.5),
     "TRILHO": ("cor", (0.38, 0.33, 0.30), 0.35, 1.0, 0.0, 0.5),
     "CABO": ("cor", (0.06, 0.055, 0.05), 0.55, 0.8, 0.0, 0.5),
@@ -346,6 +349,7 @@ SLOTS = {
     "ARO_PRETO": ("cor", (0.02, 0.02, 0.02), 0.5, 0.0, 0.0, 0.5),
     "ARO": ("cor", (0.95, 0.30, 0.04), 0.45, 0.0, 0.6, 0.5),
     "OURO": ("cor", (1.0, 0.72, 0.18), 0.22, 1.0, 0.35, 0.5),
+    "POCA": ("cor", (0.015, 0.016, 0.018), 0.03, 0.0, 0.0, 1.0),
 }
 
 
@@ -449,7 +453,7 @@ def importar_malhas(mis):
             else:
                 log("  slot sem material:", nome, smat.get_editor_property("material_slot_name"))
         nanite(sm, nome not in SEM_NANITE)
-        if nome not in ("Marcador",) + MODELOS_JOGO:
+        if nome not in ("Marcador", "Pocas") + MODELOS_JOGO:
             colisao_complexa(sm)
         eal.save_loaded_asset(sm)
         malhas[nome] = sm
@@ -516,6 +520,8 @@ def montar_mapa(layout, malhas):
         a = eas.spawn_actor_from_object(sm, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
         a.set_actor_label(nome)
         tag(a, "Terreno" if nome == "Terreno" else nome)
+        if nome == "Pocas":
+            a.set_actor_enable_collision(False)
 
     # plantas (modelos da fazenda)
     n = 0
@@ -523,6 +529,9 @@ def montar_mapa(layout, malhas):
     for i, p in enumerate(layout.get("plantas", [])):
         if p["modelo"] not in cache:
             cache[p["modelo"]] = carregar_sm("/Game/Campo/Modelos/" + p["modelo"])
+            if not cache[p["modelo"]] and p["modelo"] == "grass_medium_01":
+                # a fazenda usa o próprio capim (touceira do Blender) no lugar do glTF
+                cache[p["modelo"]] = carregar_sm("/Game/Campo/Malhas/Capim") or carregar_sm("/Game/Campo/Malhas/Palha")
             if not cache[p["modelo"]]:
                 log("FALTA modelo de planta (rode a fazenda antes):", p["modelo"])
         for k, sm in enumerate(cache[p["modelo"]]):
@@ -530,6 +539,10 @@ def montar_mapa(layout, malhas):
             a.set_actor_scale3d(unreal.Vector(p["sx"], p["sy"], p["sz"]))
             a.set_actor_label("%s_%03d_%d" % (p["modelo"], i, k))
             tag(a, "Planta")
+            if p["modelo"] == "grass_medium_01":
+                a.set_actor_enable_collision(False)
+                c = a.get_component_by_class(unreal.StaticMeshComponent)
+                por(c, "cast_shadow", False)
             n += 1
     log("plantas:", n)
 

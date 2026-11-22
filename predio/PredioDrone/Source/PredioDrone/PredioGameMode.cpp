@@ -2200,7 +2200,7 @@ void APredioGameMode::TickFotosMenu(float Dt)
 	else if (FotoMenuFase == 2 && FotoMenuT > 10.f) { Foto(TEXT("menu_2_mapas.png")); FotoMenuFase = 3; }
 	else if (FotoMenuFase == 3 && FotoMenuT > 11.f) { MPCartao = (int32)ECartaoMapa::Usina; FotoMenuFase = 4; }
 	else if (FotoMenuFase == 4 && FotoMenuT > 12.5f) { Foto(TEXT("menu_3_usina.png")); FotoMenuFase = 5; }
-	else if (FotoMenuFase == 5 && FotoMenuT > 13.5f) { MPCartao = (int32)ECartaoMapa::Campo; IrParaTela(ETelaMP::Desafios); FotoMenuFase = 6; }
+	else if (FotoMenuFase == 5 && FotoMenuT > 13.5f) { MPCartao = (int32)ECartaoMapa::Usina; IrParaTela(ETelaMP::Desafios); FotoMenuFase = 6; }
 	else if (FotoMenuFase == 6 && FotoMenuT > 15.f) { Foto(TEXT("menu_4_desafios.png")); FotoMenuFase = 7; }
 	else if (FotoMenuFase == 7 && FotoMenuT > 16.f) { AbrirMenu(true); CategoriaSel = (int32)ECategoriaMenu::Video; FotoMenuFase = 8; }
 	else if (FotoMenuFase == 8 && FotoMenuT > 17.5f) { Foto(TEXT("menu_5_secoes.png")); FotoMenuFase = 9; }

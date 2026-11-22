@@ -363,7 +363,7 @@ def terreno():
             dd = math.hypot(x - cx, y - cy) / rr
             g = max(g, max(0.0, 1.0 - dd) ** 1.5)
         b = 0.5 + 0.5 * math.sin(x * 0.05 + 0.7) * math.sin(y * 0.043 + 1.9) + 0.25 * math.sin(x * 0.13 + y * 0.11)
-        b = max(0.0, min(1.0, (b - 0.3) * 1.8))
+        b = max(0.0, min(1.0, (b - 0.42) * 1.8))
         if max(abs(x) / 175.0, abs(y) / 125.0) > 1.05:
             b = 1.0
         return (r, g * 0.85, b, 1.0)
@@ -853,11 +853,14 @@ def chamines():
         cilindro(m, (x, y, 2.0), 4.0, 4.0 - 1.8 * (h / 56.0), h - 2.0, "TIJOLO", lados=32, tampas=False)
         rt = 4.0 - 1.8 * (h / 56.0)
         if quebrada:
-            # topo irregular (pedaços)
-            for i in range(12):
-                a = 2 * math.pi * i / 12
-                hh = random.uniform(0.0, 3.5)
-                caixa(m, (x + math.cos(a) * rt, y + math.sin(a) * rt, h + hh / 2), (1.2, 0.5, hh + 0.1), "TIJOLO", giro_z=math.degrees(a) + 90)
+            # topo quebrado: borda serrilhada (alturas que sobem e descem devagar, com dentes soltos), sem cara de castelo
+            n = 40
+            for i in range(n):
+                a = 2 * math.pi * i / n
+                hh = max(0.05, 1.6 + 1.4 * math.sin(a * 2 + 0.7) + 0.9 * math.sin(a * 5 + 2.0) + random.uniform(-0.5, 0.5))
+                larg = 2 * math.pi * rt / n + 0.05
+                caixa(m, (x + math.cos(a) * rt, y + math.sin(a) * rt, h + hh / 2 - 0.05), (larg, 0.42, hh), "TIJOLO",
+                      giro_z=math.degrees(a) + 90, giro_x=random.uniform(-4, 4))
             for i in range(14):
                 caixa(m, (x + random.uniform(-9, 9), y + random.uniform(-9, 9), 0.4), (random.uniform(0.6, 1.8), random.uniform(0.5, 1.4), 0.7), "TIJOLO",
                       giro_z=random.uniform(0, 180))
@@ -1082,6 +1085,63 @@ def sucata():
         tubo(m, (x, y, 10.0), (x + 1.5, y, 10.4), 0.08, "ACO_FERRUGEM", lados=8)
         caixa(m, (x + 1.6, y, 10.3), (0.6, 0.3, 0.2), "ACO_FERRUGEM")
     finalizar("Sucata", m, {})
+
+
+def pocas():
+    """poças d'água paradas no piso do galpão e no pátio (refletem o céu pelos buracos do telhado)."""
+    m = Malha()
+    rnd = random.Random(77)
+    k = m.mi("POCA")
+    bm = m.bm
+    lugares = [(-30.0, -3.0, 0.21, 5.0), (-28.0, 6.0, 0.21, 3.0), (26.0, 3.0, 0.21, 4.5), (-48.0, -6.0, 0.21, 3.5), (4.0, -4.0, 0.21, 2.5),
+               (44.0, 6.0, 0.21, 3.0), (-70.0, -30.0, 0.02, 4.0), (10.0, -48.0, 0.02, 5.0), (60.0, 24.0, 0.02, 3.0), (-95.0, -20.0, 0.02, 3.5)]
+    for (cx, cy, z, r) in lugares:
+        n = 28
+        centro = bm.verts.new((cx, cy, z + 0.012))
+        borda = []
+        for i in range(n):
+            a = 2 * math.pi * i / n
+            rr = r * (0.75 + 0.25 * math.sin(3 * a + cx) + rnd.uniform(-0.08, 0.08))
+            borda.append(bm.verts.new((cx + math.cos(a) * rr * 1.3, cy + math.sin(a) * rr, z + 0.012)))
+        for i in range(n):
+            f = bm.faces.new((centro, borda[i], borda[(i + 1) % n]))
+            f.material_index = k
+    finalizar("Pocas", m, {}, recalc=False)
+
+
+def entulho():
+    """chapas do telhado caídas no chão, vigas tortas e correntes penduradas da treliça."""
+    m = Malha()
+    rnd = random.Random(13)
+    for i in range(22):
+        x, y = rnd.uniform(AX0 + 3, AX1 - 3), rnd.uniform(AY0 + 3, AY1 - 3)
+        if abs(x + 10) < 7 and abs(y - 6) < 6:
+            continue
+        g = math.radians(rnd.uniform(0, 180))
+        U = Vector((math.cos(g), math.sin(g), 0))
+        V = Vector((-math.sin(g), math.cos(g), rnd.uniform(-0.05, 0.25))).normalized()
+        chapa_ondulada(m, (x, y, 0.23 + rnd.uniform(0, 0.05)), tuple(U), tuple(V), 1.0, rnd.uniform(2.0, 3.0), "CHAPA_ONDULADA", normal=(0, 0, 1))
+    # vigas caídas, uma apoiada na outra
+    viga_i(m, (-52.0, -10.0, 0.4), (-40.0, -12.0, 0.4), 0.5, 0.25, "ACO_FERRUGEM")
+    viga_i(m, (-50.0, -13.0, 0.3), (-44.0, -6.0, 2.6), 0.4, 0.2, "ACO_FERRUGEM")
+    viga_i(m, (36.0, 12.0, 0.35), (48.0, 9.0, 0.35), 0.5, 0.25, "ACO_FERRUGEM")
+    # correntes penduradas das treliças
+    for (x, y, comp) in ((-40.0, -8.0, 9.0), (-12.0, 10.0, 7.0), (14.0, -9.0, 10.0), (32.0, 8.0, 6.0), (50.0, -2.0, 8.0)):
+        z0 = BEIRAL - 2.2
+        for k in range(int(comp / 0.22)):
+            z = z0 - k * 0.22
+            g = 90 if k % 2 else 0
+            caixa(m, (x, y, z), (0.05 if g else 0.14, 0.14 if g else 0.05, 0.22), "CABO")
+    # paletes e caixotes
+    for i in range(14):
+        x, y = rnd.uniform(-58, 58), rnd.choice((rnd.uniform(-14.5, -11), rnd.uniform(11, 14.5)))
+        for k in range(3):
+            caixa(m, (x, y - 0.4 + k * 0.4, 0.26), (1.2, 0.1, 0.03), "MADEIRA")
+        for k in range(3):
+            caixa(m, (x - 0.5 + k * 0.5, y, 0.31), (0.1, 1.0, 0.08), "MADEIRA")
+        if rnd.random() < 0.6:
+            caixa(m, (x, y, 0.85), (1.0, 0.9, 1.0), rnd.choice(("MADEIRA", "CAIXA_PECAS")), giro_z=rnd.uniform(-10, 10))
+    finalizar("Entulho", m, {m.mi("MADEIRA"): 1.0}, recalc=False)
 
 
 # ----------------------------------------------------------------------------- base do drone e plataformas
@@ -1354,13 +1414,31 @@ def vegetacao():
         e = rnd.uniform(0.7, 1.4) if "tree" not in modelo else rnd.uniform(0.5, 0.8)
         pl.append({"modelo": modelo, "x": x, "y": y, "z": altura_terreno(x, y) - 0.05, "yaw": rnd.uniform(0, 360), "sx": e, "sy": e, "sz": e})
         n += 1
+    # capim nascendo nas frestas: junto das paredes do galpão, nos trilhos e no pátio
+    for i in range(170):
+        if i < 70:
+            lado = rnd.choice((AY0 - 1.2, AY1 + 1.2))
+            x, y = rnd.uniform(AX0, AX1), lado + rnd.uniform(-0.8, 0.8)
+        elif i < 110:
+            x, y = rnd.uniform(-150, 150), -35.0 + rnd.choice((-2.2, 2.2)) + rnd.uniform(-0.4, 0.4)
+        else:
+            x, y = rnd.uniform(-160, 160), rnd.uniform(-110, 95)
+            if not livre(x, y):
+                continue
+        e = rnd.uniform(0.8, 1.6)
+        pl.append({"modelo": "grass_medium_01", "x": x, "y": y, "z": altura_terreno(x, y) - 0.03, "yaw": rnd.uniform(0, 360), "sx": e, "sy": e, "sz": e})
     # árvores grandes do lado de fora da área
-    for i in range(40):
+    for i in range(110):
         a = rnd.uniform(0, 2 * math.pi)
-        r = rnd.uniform(1.1, 1.6)
+        r = rnd.uniform(1.08, 1.75)
         x, y = math.cos(a) * 185 * r, math.sin(a) * 135 * r
-        pl.append({"modelo": rnd.choice(("island_tree_01", "island_tree_02", "island_tree_03")), "x": x, "y": y, "z": altura_terreno(x, y) - 0.1,
+        pl.append({"modelo": rnd.choice(("island_tree_01", "island_tree_02", "island_tree_03", "tree_small_02")), "x": x, "y": y, "z": altura_terreno(x, y) - 0.1,
                    "yaw": rnd.uniform(0, 360), "sx": 1.0, "sy": 1.0, "sz": rnd.uniform(0.9, 1.2)})
+        for k in range(2):
+            x2, y2 = x + rnd.uniform(-9, 9), y + rnd.uniform(-9, 9)
+            e = rnd.uniform(0.9, 1.6)
+            pl.append({"modelo": rnd.choice(("shrub_02", "shrub_04")), "x": x2, "y": y2, "z": altura_terreno(x2, y2) - 0.05,
+                       "yaw": rnd.uniform(0, 360), "sx": e, "sy": e, "sz": e})
 
 
 def exportar(ob):
@@ -1390,6 +1468,8 @@ def main():
     escritorio()
     pilhas()
     sucata()
+    pocas()
+    entulho()
     base()
     missoes(a, b)
     plataformas_missao()

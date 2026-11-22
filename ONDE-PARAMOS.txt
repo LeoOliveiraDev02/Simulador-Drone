@@ -1,6 +1,28 @@
 ﻿SIMULADOR DE DRONE — ONDE PARAMOS
 =================================
 
+>>> NOITE DE 21 PARA 22/11/2026 — MAPA 3 (USINA) FEITO + CONCEITOS DOS MAPAS 4 E 5 <<<
+  [x] Mapa 3 — Usina siderúrgica abandonada (/Game/Mapas/Usina), feito por código:
+      blender/gerar_usina.py (FBX + layout_usina.json) -> unreal/construir_usina.py (texturas Poly Haven CC0 em
+      D:\DronePredio\recursos_usina\texturas, Nanite, colisão pela malha, fim de tarde com névoa volumétrica).
+      Aciaria 120 x 32 m com treliças, pontes rolantes, conversor, panelas, passarela, cabine; chapas onduladas com
+      buracos (feixes de luz); alto-forno com 3 plataformas e brasa pulsando; 3 regeneradores; galeria da esteira;
+      2 chaminés de 56 m + 1 quebrada; 4 silos com galeria; rack de tubos; ferrovia com locomotiva e vagões;
+      escritório em ruína; pilhas de minério/carvão; poças, entulho, correntes, capim nas frestas, árvores em volta.
+      Desafios: Cargas da usina (6 destinos difíceis: vagão, carro da ponte rolante, plataforma do alto-forno a 24 m,
+      dentro da galeria da esteira, galeria dos silos, topo da chaminé), Inspeção (7 fotos), 12 Engrenagens douradas,
+      Aros em ordem (20 aros por dentro do galpão e em volta do forno), Contra o relógio, Voo livre.
+      Recordes e medalhas separados por mapa (slots 8..15 = usina). Cartão do menu liberado com foto de verdade.
+      Teste: ~93 FPS de média, pior 1% ~73 FPS (FSR Qualidade + gerador).
+  [x] USINA.bat (compila, monta, empacota, atalho, voo de teste em testes\usina). Flags opcionais na pasta:
+      refazer_vitrine.flag e refazer_extras.flag (o .bat monta e apaga a flag). REVISAO.bat = voo de teste nos 3 mapas.
+  [x] rodar_editor.ps1: o editor às vezes não fechava depois do script (VITRINE travou assim) — agora fecha sozinho.
+      NUNCA trocar um .bat enquanto ele está rodando (o cmd continua lendo o arquivo novo do meio e repete coisas).
+  [x] Vitrine: material da árvore AAA não compilava (VC.a: cor de vértice sai como RGB) — corrigido, alfa entra separado.
+  [x] Conceitos (imagens em blender/conceito_mapa4.py e conceito_mapa5.py):
+      Mapa 4 = Centro histórico (ladeira colonial estilo Pelourinho): voo entre sobrados, sacadas, igreja, bandeirinhas.
+      Mapa 5 = Plataforma de petróleo em alto-mar: vento forte, heliponto, queimador, guindastes, navio de apoio.
+
 >>> 20/11/2026 À NOITE — FEEDBACK DA GRAVAÇÃO DO LEONARDO (tudo feito, jogo empacotado) <<<
   [x] Sombras: Lumen com "skylight leaking" (0,22 fazenda / 0,10 prédio) + exposição local; capim e flores sem
       sombra própria e com a normal para cima; luz do céu 1,25. Casa sede agora tem porta/janelas abertas,

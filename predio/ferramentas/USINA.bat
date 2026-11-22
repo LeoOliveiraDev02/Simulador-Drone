@@ -25,6 +25,11 @@ if exist "%~dp0refazer_vitrine.flag" (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0rodar_editor.ps1" -Script "D:/DronePredio/unreal/construir_vitrine.py" -Progresso "D:\DronePredio\logs\construir_vitrine_progresso.txt"
   del /q "%~dp0refazer_vitrine.flag"
 )
+if exist "%~dp0refazer_extras.flag" (
+  echo === extras: fotos dos cartoes, sons, drone do menu
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0rodar_editor.ps1" -Script "D:/DronePredio/unreal/construir_extras.py" -Progresso "D:\DronePredio\logs\construir_extras_progresso.txt"
+  del /q "%~dp0refazer_extras.flag"
+)
 :empacotar
 echo === empacotar (jogo unico: menu + fazenda + predio + usina)
 call "D:\JOGOS\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun -project="D:\DronePredio\PredioDrone\PredioDrone.uproject" -noP4 -platform=Win64 -clientconfig=Shipping -build -cook -stage -pak -iostore -compressed -prereqs -archive -archivedirectory="D:\DronePredio\jogo" -unattended -utf8output -NoCodeSign

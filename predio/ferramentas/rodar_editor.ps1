@@ -17,7 +17,8 @@ while ($true) {
     Start-Sleep -Seconds 5
     $texto = ""
     if (Test-Path $Progresso) { $texto = [IO.File]::ReadAllText($Progresso, [Text.Encoding]::UTF8) }
-    $acabou = ($texto -match "TUDO PRONTO") -or ($texto -match "ERRO")
+    # -cmatch: diferencia maiúsculas ("Ferrovia" tem "erro" dentro e não pode contar como fim)
+    $acabou = ($texto -cmatch "TUDO PRONTO") -or ($texto -cmatch "ERRO:") -or ($texto -cmatch "FALHA GERAL")
     if ($p.HasExited) { break }
     if ($acabou -and -not $fimVisto) { $fimVisto = Get-Date }
     if ($fimVisto -and ((Get-Date) - $fimVisto).TotalSeconds -gt 150) {
@@ -37,4 +38,4 @@ Get-Process UnrealEditor -ErrorAction SilentlyContinue | Stop-Process -Force -Er
 $texto = ""
 if (Test-Path $Progresso) { $texto = [IO.File]::ReadAllText($Progresso, [Text.Encoding]::UTF8) }
 Write-Output $texto
-if ($texto -match "TUDO PRONTO") { exit 0 } else { exit 1 }
+if ($texto -cmatch "TUDO PRONTO") { exit 0 } else { exit 1 }

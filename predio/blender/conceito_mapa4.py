@@ -216,7 +216,7 @@ for yy in (-6.5, 6.5):
     cone((ix + 1.5, yy, zi + 27.8), 2.6, 5.0, mat("Coruchéu", (0.85, 0.85, 0.82), 0.4), lados=8, rot=22.5)
     caixa((ix - 0.4, yy, zi + 19.5), (0.2, 1.6, 2.8), vidro)
 # frontão curvo e portas
-bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=4.5, depth=0.6, location=(ix - 0.2, 0, zi + 16), rotation=(0, math.radians(90), 0))
+bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=2.2, depth=0.6, location=(ix - 0.2, 0, zi + 17.5), rotation=(0, math.radians(90), 0))
 bpy.context.object.data.materials.append(branco)
 for yy in (-3, 0, 3):
     caixa((ix - 0.3, yy, zi + 2.0), (0.3, 1.8, 3.8), madeira_j2)
@@ -246,7 +246,7 @@ for x in range(-18, 50, 7):
 # drone E88 em primeiro plano (forma simples: corpo, braços, hélices)
 corpo = mat("Corpo", (0.03, 0.03, 0.035), 0.35)
 cinza = mat("Cinza", (0.25, 0.26, 0.28), 0.4)
-dx, dy, dz = -30.3, -2.75, 5.62
+dx, dy, dz = -29.2, -2.55, 6.35
 caixa((dx, dy, dz), (0.32, 0.14, 0.07), corpo)
 for sx in (-1, 1):
     for sy in (-1, 1):
@@ -258,12 +258,12 @@ cil((dx + 0.17, dy, dz - 0.01), 0.025, 0.04, vidro, lados=12)
 
 # ---- luz: sol baixo de fim de tarde vindo do fim da ladeira, céu
 sol = bpy.data.lights.new("sol", "SUN")
-sol.energy = 2.6
-sol.color = (1.0, 0.72, 0.45)
+sol.energy = 3.2
+sol.color = (1.0, 0.6, 0.32)
 sol.angle = math.radians(1.5)
 so = bpy.data.objects.new("sol", sol)
 cena.collection.objects.link(so)
-so.rotation_euler = (math.radians(80), 0, math.radians(-65))
+so.rotation_euler = (math.radians(74), 0, math.radians(-25))
 w = bpy.data.worlds.new("ceu")
 cena.world = w
 w.use_nodes = True
@@ -277,7 +277,7 @@ except Exception:
     except Exception:
         pass
 try:
-    sky.sun_elevation = math.radians(10)
+    sky.sun_elevation = math.radians(14)
     sky.sun_rotation = math.radians(170)
 except Exception:
     pass
