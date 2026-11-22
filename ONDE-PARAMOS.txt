@@ -22,6 +22,9 @@
   [x] Conceitos (imagens em blender/conceito_mapa4.py e conceito_mapa5.py):
       Mapa 4 = Centro histórico (ladeira colonial estilo Pelourinho): voo entre sobrados, sacadas, igreja, bandeirinhas.
       Mapa 5 = Plataforma de petróleo em alto-mar: vento forte, heliponto, queimador, guindastes, navio de apoio.
+  [x] Revisão (REVISAO.bat, 02:00): fazenda ok (87 FPS, pior 1% 69); prédio ok (83 FPS, pior 1% 50 no voo curto —
+      pico na troca de andar); usina 87 FPS (pior 1% 68); menu com os 3 cartões liberados.
+  [ ] Pendente: pico de FPS na troca de andar do prédio; rádio USB (RawInput); assets do Fab (Leonardo adicionar).
 
 >>> 20/11/2026 À NOITE — FEEDBACK DA GRAVAÇÃO DO LEONARDO (tudo feito, jogo empacotado) <<<
   [x] Sombras: Lumen com "skylight leaking" (0,22 fazenda / 0,10 prédio) + exposição local; capim e flores sem
