@@ -898,7 +898,7 @@ void ADroneHUD::DesenharObjetivo(APredioGameMode* GM, const ADronePawn* D, float
 	else if (GM->Objetivo == EObjetivo::Entregas)
 	{
 		Rodape = GM->bComCaixa ? FString::Printf(TEXT("Leve a caixa para: %s"), GM->NomesEntrega.IsValidIndex(GM->EntregaAtual) ? *GM->NomesEntrega[GM->EntregaAtual] : TEXT("o destino"))
-			: FString(TEXT("Pegue a caixa na plataforma do galpão (pare em cima dela)"));
+			: FString(GM->bEhUsina ? TEXT("Pegue a caixa na plataforma do pátio de cargas (pare em cima dela)") : TEXT("Pegue a caixa na plataforma do galpão (pare em cima dela)"));
 		CorRodape = AzulTexto;
 	}
 	else if (GM->Objetivo == EObjetivo::Ferraduras && GM->DistFerradura < 1e8f)
@@ -1298,15 +1298,15 @@ void ADroneHUD::DesenharMenuPrincipal(APredioGameMode* GM)
 				for (const EObjetivo O : APredioGameMode::ObjetivosDoCartao((ECartaoMapa)c))
 				{
 					if (O == EObjetivo::Livre) continue;
-					const int32 Md = GM->MedalhaDe(O);
+					const int32 Md = GM->MedalhaDe(O, c);
 					++NDesafios;
 					if (Md > 0) ++NComMedalha;
 					Disco(Pt(MX, cy + 428), 12 * e, CorMedalha(Md), 20);
 					if (Md > 0) Icone(IcEstrela, Pt(MX, cy + 428), 6.5f * e, Cor255(20, 24, 34));
 					if (APredioGameMode::ObjetivosDoCartao((ECartaoMapa)c).Num() <= 3)
 					{
-						T(APredioGameMode::NomeObjetivo(O), X(MX + 20), Y(cy + 419), 14 * e, TEXT("Regular"), Cor255(205, 218, 238));
-						MX += 30 + Medir(APredioGameMode::NomeObjetivo(O), Fonte(14 * e, TEXT("Regular"))).X / e + 18;
+						T(APredioGameMode::NomeObjetivo(O, c), X(MX + 20), Y(cy + 419), 14 * e, TEXT("Regular"), Cor255(205, 218, 238));
+						MX += 30 + Medir(APredioGameMode::NomeObjetivo(O, c), Fonte(14 * e, TEXT("Regular"))).X / e + 18;
 					}
 					else
 					{

@@ -200,7 +200,7 @@ void ADronePawn::ColocarNoChao()
 	Velocidade = FVector::ZeroVector;
 }
 
-void ADronePawn::AjustarLuz(bool bCampo)
+void ADronePawn::AjustarLuz(bool bCampo, bool bUsina)
 {
 	// Lumen deixava as sombras quase pretas (capim, dentro da casa, cantos do prédio).
 	// "Skylight leaking" devolve um pouco da luz do céu nas partes fechadas, e a exposição local
@@ -213,6 +213,14 @@ void ADronePawn::AjustarLuz(bool bCampo)
 	PP.bOverride_AutoExposureBias = true;
 	PP.AutoExposureBias = bCampo ? 0.1f : -0.15f;
 	FatorVentoMapa = bCampo ? 1.f : 0.25f;   // dentro do prédio o vento chega fraco
+	if (bUsina)
+	{
+		// galpões abertos e pátio: meio-termo; sombra dentro do galpão não pode ficar preta
+		PP.LumenSkylightLeaking = 0.18f;
+		PP.LocalExposureShadowContrastScale = 0.6f;
+		PP.AutoExposureBias = 0.0f;
+		FatorVentoMapa = 0.8f;
+	}
 }
 
 void ADronePawn::AtualizarVento(float Dt)

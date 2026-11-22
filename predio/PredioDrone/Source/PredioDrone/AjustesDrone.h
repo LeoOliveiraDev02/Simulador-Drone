@@ -28,7 +28,7 @@ struct FAjustesDrone
 	static const int32 NumMetas;
 	// recordes (segundos; 0 = ainda não tem) e melhor medalha (0 nenhuma, 1 bronze, 2 prata, 3 ouro)
 	// de cada objetivo, na ordem do EObjetivo (Livre, Topo, ArosOrdem, ArosRelogio, Entregas, Pulverizar, Fotos, Ferraduras)
-	static constexpr int32 NumObjetivos = 8;
+	static constexpr int32 NumObjetivos = 16;   // 0..7 fazenda/prédio, 8..15 usina (mesma ordem)
 	float Recordes[NumObjetivos] = {};
 	int32 Medalhas[NumObjetivos] = {};
 

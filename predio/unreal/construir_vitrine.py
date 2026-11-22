@@ -354,7 +354,7 @@ float nivel = PZ.y;
 float flex = VC.r;
 float fase = VC.g * 6.2832;
 float folha = VC.b;
-float faseF = VC.a * 6.2832;
+float faseF = VA * 6.2832;
 float2 d = normalize(DIR.xy + float2(1e-4, 0.0));
 float3 eixo = normalize(float3(-d.y, d.x, 0.0));
 float vento = F * (0.6 + 0.6 * R);
@@ -399,10 +399,11 @@ def mestre_aaa():
     pv = expr(m, unreal.MaterialExpressionTextureCoordinate, -1600, 1160, coordinate_index=1)
     pz = expr(m, unreal.MaterialExpressionTextureCoordinate, -1600, 1240, coordinate_index=2)
     alt = expr(m, unreal.MaterialExpressionScalarParameter, -1600, 1320, parameter_name="AlturaArvore", default_value=850.0)
-    c = custom(m, -900, 500, CODIGO_AAA, ["P", "O", "T", "F", "R", "DIR", "VC", "PV", "PZ", "ALT"])
+    c = custom(m, -900, 500, CODIGO_AAA, ["P", "O", "T", "F", "R", "DIR", "VC", "VA", "PV", "PZ", "ALT"])
     for fonte, entrada in ((wp, "P"), (op, "O"), (tempo, "T"), (p["VentoForca"], "F"), (p["VentoRajada"], "R"),
                            (p["VentoDir"], "DIR"), (vc, "VC"), (pv, "PV"), (pz, "PZ"), (alt, "ALT")):
         ligar(fonte, "", c, entrada)
+    ligar(vc, "A", c, "VA")    # a cor de vértice sai como RGB (float3): o alfa (fase da folha) entra separado
     mel.connect_material_property(c, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     mel.recompile_material(m)
     eal.save_loaded_asset(m)

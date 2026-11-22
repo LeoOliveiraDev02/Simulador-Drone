@@ -23,7 +23,7 @@ $s.TargetPath = $exe
 $s.Arguments = '-NotInstalled'
 $s.WorkingDirectory = 'D:\DronePredio\jogo\Windows'
 $s.IconLocation = "$exe,0"
-$s.Description = 'Simulador de Drone - Campo Baiano e Predio em Obra (Unreal 5.8 + AMD FSR 4)'
+$s.Description = 'Simulador de Drone - Fazenda, Predio em Obra e Usina (Unreal 5.8 + AMD FSR 4)'
 $s.Save()
 "atalho: $lnk"
 # vitrine de testes (assets novos, um de cada vez)

@@ -136,6 +136,11 @@ public:
 	// ---------------------------------------------------------------- mapa e objetivo
 	bool bEhCampo = false;
 	bool bEhVitrine = false;      // mapa de testes de assets novos (conta como fazenda para luz e limites)
+	bool bEhUsina = false;        // mapa 3: usina siderúrgica abandonada
+	bool bUsinaExiste = false;
+	static int32 CartaoDoMapa;    // cartão (ECartaoMapa) do mapa carregado — textos e recordes de cada mapa
+	int32 CartaoCtx() const { return bMenuPrincipal ? MPCartao : CartaoDoMapa; }
+	static int32 SlotRec(EObjetivo O, int32 Cartao) { return (int32)O + (Cartao == (int32)ECartaoMapa::Usina ? 8 : 0); }
 	EObjetivo Objetivo = EObjetivo::Livre;
 	EEstadoDesafio Estado = EEstadoDesafio::Pronto;
 	float TempoDesafio = 0.f;      // cronômetro (s), só corre com o jogo despausado
@@ -188,8 +193,8 @@ public:
 	float RecordeAtual() const;
 	TArray<EObjetivo> ObjetivosDoMapa() const;
 	static TArray<EObjetivo> ObjetivosDoCartao(ECartaoMapa C);
-	static FString NomeObjetivo(EObjetivo O);
-	static FString DescricaoObjetivo(EObjetivo O);
+	static FString NomeObjetivo(EObjetivo O, int32 Cartao = -1);
+	static FString DescricaoObjetivo(EObjetivo O, int32 Cartao = -1);
 	static FString TextoTempo(float Segundos, bool bDecimos = true);
 	static FString NomeMedalha(int32 M);
 	FString TextoLocal() const;    // canto de cima à direita do OSD
@@ -201,7 +206,7 @@ public:
 	float MPTelaDesde = 0.f;            // segundos desde que a tela atual abriu (animação de entrada)
 	TArray<FBox2D> AreaTitulo;
 	FBox2D AreaVoltarMP = FBox2D(ForceInit);
-	int32 MedalhaDe(EObjetivo O) const;
+	int32 MedalhaDe(EObjetivo O, int32 Cartao = -1) const;
 	float ProgressoMapa(int32 Cartao) const;     // 0..1 (medalhas conquistadas / possíveis)
 	int32 MedalhasMapa(int32 Cartao, int32& Possiveis) const;
 	static FString NomeMapa(int32 Cartao);

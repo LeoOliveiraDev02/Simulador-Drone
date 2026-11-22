@@ -77,6 +77,8 @@ FString APredioGameMode::TextoAndar(int32 Andar)
 	return FString::Printf(TEXT("%dº ANDAR"), Andar);
 }
 
+int32 APredioGameMode::CartaoDoMapa = (int32)ECartaoMapa::Predio;
+
 ADronePawn* APredioGameMode::Drone() const
 {
 	const UWorld* W = GetWorld();
@@ -92,11 +94,13 @@ void APredioGameMode::BeginPlay()
 	// -mapa=Campo na linha de comando (testes): o jogo sempre abre no prédio; daqui pula para a fazenda
 	FString MapaCmd;
 	if (FParse::Value(FCommandLine::Get(), TEXT("mapa="), MapaCmd) && !UGameplayStatics::HasOption(OptionsString, TEXT("jogo"))
-		&& (MapaCmd.Equals(TEXT("Campo"), ESearchCase::IgnoreCase) || MapaCmd.Equals(TEXT("Vitrine"), ESearchCase::IgnoreCase))
+		&& (MapaCmd.Equals(TEXT("Campo"), ESearchCase::IgnoreCase) || MapaCmd.Equals(TEXT("Vitrine"), ESearchCase::IgnoreCase)
+			|| MapaCmd.Equals(TEXT("Usina"), ESearchCase::IgnoreCase))
 		&& !GetWorld()->GetMapName().Contains(MapaCmd))
 	{
 		bTrocandoMapa = true;
-		const FString Destino = MapaCmd.Equals(TEXT("Vitrine"), ESearchCase::IgnoreCase) ? TEXT("/Game/Mapas/Vitrine") : TEXT("/Game/Mapas/Campo");
+		const FString Destino = MapaCmd.Equals(TEXT("Vitrine"), ESearchCase::IgnoreCase) ? TEXT("/Game/Mapas/Vitrine")
+			: (MapaCmd.Equals(TEXT("Usina"), ESearchCase::IgnoreCase) ? TEXT("/Game/Mapas/Usina") : TEXT("/Game/Mapas/Campo"));
 		UGameplayStatics::OpenLevel(this, FName(*Destino), true, TEXT("jogo"));
 		return;
 	}
@@ -120,14 +124,33 @@ void APredioGameMode::BeginPlay()
 	// não há parede — o limite segura do mesmo jeito). Teto: 15,9 m (a tela vai até 16,6 m).
 	bEhVitrine = GetWorld()->GetMapName().Contains(TEXT("Vitrine"));
 	bEhCampo = bEhVitrine || GetWorld()->GetMapName().Contains(TEXT("Campo"));
+	bEhUsina = GetWorld()->GetMapName().Contains(TEXT("Usina"));
+	FBox LimitesMapa(ForceInit);
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		for (const FName& Tag : It->Tags)
+		{
+			TArray<FString> V;
+			const FString T = Tag.ToString();
+			if (!T.StartsWith(TEXT("Limites_"))) continue;
+			T.RightChop(8).ParseIntoArray(V, TEXT("_"));
+			if (V.Num() == 5)
+			{
+				LimitesMapa = FBox(FVector(FCString::Atof(*V[0]), FCString::Atof(*V[1]), -5000.f), FVector(FCString::Atof(*V[2]), FCString::Atof(*V[3]), FCString::Atof(*V[4])));
+			}
+		}
+	}
+	CartaoDoMapa = (int32)(bEhUsina ? ECartaoMapa::Usina : (bEhCampo ? ECartaoMapa::Campo : ECartaoMapa::Predio));
 	LimitesVoo = bEhCampo
 		? FBox(FVector(-48000.f, -48000.f, -5000.f), FVector(48000.f, 48000.f, 9000.f)) // fazenda: 480 m para cada lado, 90 m de teto
 		: FBox(FVector(45.f, -1555.f, -500.f), FVector(2355.f, -45.f, 1590.f));
+	if (bEhUsina && LimitesMapa.IsValid) LimitesVoo = LimitesMapa;   // usina: tag Limites_ do mapa
+	else if (bEhUsina) LimitesVoo = FBox(FVector(-16000.f, -10000.f, -5000.f), FVector(16000.f, 11000.f, 7500.f));
 	if (ADronePawn* D = Drone())
 	{
 		D->Limites = LimitesVoo;
 		D->bUsarLimites = true;
-		D->AjustarLuz(bEhCampo);
+		D->AjustarLuz(bEhCampo, bEhUsina);
 	}
 	for (const TCHAR* Nome : { TEXT("/Game/UI/S_Coleta.S_Coleta"), TEXT("/Game/UI/S_Foto.S_Foto"), TEXT("/Game/UI/S_Blip.S_Blip"), TEXT("/Game/UI/S_Vitoria.S_Vitoria") })
 	{
@@ -161,6 +184,9 @@ void APredioGameMode::BeginPlay()
 	{
 		EspalharMilho();
 		EspalharGrama();
+	}
+	if (bEhCampo || bEhUsina)
+	{
 		CaixaAtor = CriarAtorMalha(MalhaCaixa, FTransform(FVector(0, 0, -100000)));
 	}
 
@@ -194,16 +220,17 @@ void APredioGameMode::BeginPlay()
 	// jogo único: o mapa do prédio sem "?jogo" abre o menu principal (escolha do mapa);
 	// "?jogo?modo=N" já começa voando com o objetivo N
 	bCampoExiste = FPackageName::DoesPackageExist(TEXT("/Game/Mapas/Campo"));
+	bUsinaExiste = FPackageName::DoesPackageExist(TEXT("/Game/Mapas/Usina"));
 	const bool bJogo = UGameplayStatics::HasOption(OptionsString, TEXT("jogo"));
 	const FString OpModo = UGameplayStatics::ParseOption(OptionsString, TEXT("modo"));
-	EObjetivo Inicial = (bEhCampo && !bEhVitrine) ? EObjetivo::ArosOrdem : EObjetivo::Livre;
+	EObjetivo Inicial = ((bEhCampo && !bEhVitrine) || bEhUsina) ? EObjetivo::ArosOrdem : EObjetivo::Livre;
 	if (!OpModo.IsEmpty())
 	{
-		Inicial = (EObjetivo)FMath::Clamp(FCString::Atoi(*OpModo), 0, (int32)EObjetivo::ArosRelogio);
+		Inicial = (EObjetivo)FMath::Clamp(FCString::Atoi(*OpModo), 0, (int32)EObjetivo::Ferraduras);
 		if (!ObjetivosDoMapa().Contains(Inicial)) Inicial = ObjetivosDoMapa()[0];
 	}
 	if (ADronePawn* D = Drone()) UltimosReinicios = D->Reinicios;
-	if (!bTour && !bJogo && !bEhCampo && !bTestePouso)
+	if (!bTour && !bJogo && !bEhCampo && !bEhUsina && !bTestePouso)
 	{
 		EntrarMenuPrincipal();
 	}
@@ -799,7 +826,7 @@ void APredioGameMode::MudarItem(int32 Dir, bool bConfirmar)
 		if (bConfirmar && !bMenuPrincipal)
 		{
 			C.Salvar();
-			if (bEhCampo)
+			if (bEhCampo || bEhUsina)
 			{
 				IrParaMapa(TEXT("/Game/Mapas/Predio"), FString());
 			}
@@ -1212,7 +1239,7 @@ void APredioGameMode::Tick(float DeltaSeconds)
 		if (!bMenuAberto && !bMenuPrincipal) TickObjetivo(DeltaSeconds);
 	}
 	if (bMenuPrincipal) MPRelogio += DtReal;
-	if (bEhCampo && !UGameplayStatics::IsGamePaused(this))
+	if ((bEhCampo || bEhUsina) && !UGameplayStatics::IsGamePaused(this))
 	{
 		for (const TPair<TWeakObjectPtr<AActor>, float>& G : Giratorios)
 		{
@@ -1385,6 +1412,7 @@ TArray<EObjetivo> APredioGameMode::ObjetivosDoCartao(ECartaoMapa C)
 	{
 	case ECartaoMapa::Campo: return { EObjetivo::Entregas, EObjetivo::Pulverizar, EObjetivo::Fotos, EObjetivo::Ferraduras, EObjetivo::ArosOrdem, EObjetivo::ArosRelogio, EObjetivo::Livre };
 	case ECartaoMapa::Predio: return { EObjetivo::Topo, EObjetivo::Livre };
+	case ECartaoMapa::Usina: return { EObjetivo::Entregas, EObjetivo::Fotos, EObjetivo::Ferraduras, EObjetivo::ArosOrdem, EObjetivo::ArosRelogio, EObjetivo::Livre };
 	default: return {};
 	}
 }
@@ -1392,11 +1420,22 @@ TArray<EObjetivo> APredioGameMode::ObjetivosDoCartao(ECartaoMapa C)
 TArray<EObjetivo> APredioGameMode::ObjetivosDoMapa() const
 {
 	if (bEhVitrine) return { EObjetivo::Livre };
-	return ObjetivosDoCartao(bEhCampo ? ECartaoMapa::Campo : ECartaoMapa::Predio);
+	return ObjetivosDoCartao((ECartaoMapa)CartaoDoMapa);
 }
 
-FString APredioGameMode::NomeObjetivo(EObjetivo O)
+FString APredioGameMode::NomeObjetivo(EObjetivo O, int32 Cartao)
 {
+	if (Cartao < 0) Cartao = CartaoDoMapa;
+	if (Cartao == (int32)ECartaoMapa::Usina)
+	{
+		switch (O)
+		{
+		case EObjetivo::Entregas: return TEXT("Cargas da usina");
+		case EObjetivo::Fotos: return TEXT("Inspeção da usina");
+		case EObjetivo::Ferraduras: return TEXT("Engrenagens douradas");
+		default: break;
+		}
+	}
 	switch (O)
 	{
 	case EObjetivo::Topo: return TEXT("Chegue ao topo");
@@ -1410,8 +1449,20 @@ FString APredioGameMode::NomeObjetivo(EObjetivo O)
 	}
 }
 
-FString APredioGameMode::DescricaoObjetivo(EObjetivo O)
+FString APredioGameMode::DescricaoObjetivo(EObjetivo O, int32 Cartao)
 {
+	if (Cartao < 0) Cartao = CartaoDoMapa;
+	if (Cartao == (int32)ECartaoMapa::Usina)
+	{
+		switch (O)
+		{
+		case EObjetivo::Entregas: return TEXT("Pegue a caixa no pátio e leve ao vagão, à ponte rolante, ao alto-forno, à esteira, aos silos e à chaminé");
+		case EObjetivo::Fotos: return TEXT("Mire de perto: chaminé rachada, gancho, conversor, válvula, bica, regenerador e locomotiva");
+		case EObjetivo::Ferraduras: return TEXT("12 engrenagens escondidas pela usina — algumas dentro das máquinas");
+		case EObjetivo::ArosOrdem: return TEXT("Por dentro do galpão, por baixo das pontes rolantes, em volta do alto-forno");
+		default: break;
+		}
+	}
 	switch (O)
 	{
 	case EObjetivo::Topo: return TEXT("Suba do térreo até a cobertura o mais rápido que puder");
@@ -1451,7 +1502,7 @@ FString APredioGameMode::NomeMedalha(int32 M)
 
 FString APredioGameMode::TextoLocal() const
 {
-	return bEhVitrine ? FString(TEXT("VITRINE")) : (bEhCampo ? FString(TEXT("FAZENDA")) : TextoAndar(AndarAtual));
+	return bEhUsina ? FString(TEXT("USINA")) : (bEhVitrine ? FString(TEXT("VITRINE")) : (bEhCampo ? FString(TEXT("FAZENDA")) : TextoAndar(AndarAtual)));
 }
 
 float APredioGameMode::AlturaTopo() const
@@ -1508,15 +1559,16 @@ float APredioGameMode::LimiteMedalha(int32 M) const
 		const float L = Roca.bIsValid ? Roca.GetArea() / TamCelula * CoberturaMeta : 60000.f;
 		return M >= 3 ? Arred5(L / 650.f + 20.f) : (M == 2 ? Arred5(L / 450.f + 40.f) : Arred5(L / 300.f + 60.f));
 	}
-	if (Objetivo == EObjetivo::Fotos) return M >= 3 ? 120.f : (M == 2 ? 180.f : 270.f);
-	if (Objetivo == EObjetivo::Ferraduras) return M >= 3 ? 240.f : (M == 2 ? 360.f : 540.f);
+	if (Objetivo == EObjetivo::Fotos) return bEhUsina ? (M >= 3 ? 150.f : (M == 2 ? 220.f : 330.f)) : (M >= 3 ? 120.f : (M == 2 ? 180.f : 270.f));
+	if (Objetivo == EObjetivo::Ferraduras) return bEhUsina ? (M >= 3 ? 300.f : (M == 2 ? 450.f : 660.f)) : (M >= 3 ? 240.f : (M == 2 ? 360.f : 540.f));
 	return 0.f;
 }
 
 float APredioGameMode::RecordeAtual() const
 {
 	const FAjustesDrone& C = FAjustesDrone::Get();
-	return (int32)Objetivo < FAjustesDrone::NumObjetivos ? C.Recordes[(int32)Objetivo] : 0.f;
+	const int32 S = SlotRec(Objetivo, CartaoDoMapa);
+	return S < FAjustesDrone::NumObjetivos ? C.Recordes[S] : 0.f;
 }
 
 void APredioGameMode::MontarAros()
@@ -1593,10 +1645,10 @@ void APredioGameMode::IniciarObjetivo(EObjetivo O, bool bRecolocar)
 		case EObjetivo::Topo: Dica = TEXT("CHEGUE AO TOPO — o cronômetro começa quando você decolar"); break;
 		case EObjetivo::ArosOrdem: Dica = TEXT("AROS EM ORDEM — siga a marca do próximo aro"); break;
 		case EObjetivo::ArosRelogio: Dica = TEXT("CONTRA O RELÓGIO — cada aro dá mais tempo"); break;
-		case EObjetivo::Entregas: Dica = TEXT("ENTREGAS — pegue a caixa na plataforma do galpão (siga a luz laranja)"); break;
+		case EObjetivo::Entregas: Dica = bEhUsina ? TEXT("CARGAS — pegue a caixa na plataforma do pátio (siga a luz laranja)") : TEXT("ENTREGAS — pegue a caixa na plataforma do galpão (siga a luz laranja)"); break;
 		case EObjetivo::Pulverizar: Dica = TEXT("PULVERIZAR — voe baixo por cima do milharal, em faixas"); break;
 		case EObjetivo::Fotos: Dica = TEXT("INSPEÇÃO — chegue perto e mire cada alvo até a foto sair"); break;
-		case EObjetivo::Ferraduras: Dica = TEXT("FERRADURAS — 12 escondidas; o painel diz quando está perto"); break;
+		case EObjetivo::Ferraduras: Dica = bEhUsina ? TEXT("ENGRENAGENS — 12 escondidas; o painel diz quando está perto") : TEXT("FERRADURAS — 12 escondidas; o painel diz quando está perto"); break;
 		default: Dica = TEXT("VOO LIVRE"); break;
 		}
 		D->MostrarMensagem(Dica, 4.f);
@@ -1625,9 +1677,10 @@ void APredioGameMode::ConcluirDesafio(bool bSucesso)
 				if (TempoDesafio <= LimiteMedalha(M)) { Medalha = M; break; }
 			}
 		}
-		int32* Med = &C.Medalhas[FMath::Clamp((int32)Objetivo, 0, FAjustesDrone::NumObjetivos - 1)];
+		const int32 Slot = FMath::Clamp(SlotRec(Objetivo, CartaoDoMapa), 0, FAjustesDrone::NumObjetivos - 1);
+		int32* Med = &C.Medalhas[Slot];
 		if (Medalha > *Med) { *Med = Medalha; C.Salvar(); }
-		float* Rec = &C.Recordes[FMath::Clamp((int32)Objetivo, 0, FAjustesDrone::NumObjetivos - 1)];
+		float* Rec = &C.Recordes[Slot];
 		if (*Rec <= 0.f || TempoDesafio < *Rec)
 		{
 			*Rec = TempoDesafio;
@@ -1751,7 +1804,8 @@ bool APredioGameMode::CartaoDisponivel(int32 C) const
 	{
 	case ECartaoMapa::Predio: return true;
 	case ECartaoMapa::Campo: return bCampoExiste;
-	default: return false; // usina: em construção
+	case ECartaoMapa::Usina: return bUsinaExiste;
+	default: return false;
 	}
 }
 
@@ -1765,10 +1819,11 @@ FString APredioGameMode::NomeMapa(int32 Cartao)
 	}
 }
 
-int32 APredioGameMode::MedalhaDe(EObjetivo O) const
+int32 APredioGameMode::MedalhaDe(EObjetivo O, int32 Cartao) const
 {
 	const FAjustesDrone& C = FAjustesDrone::Get();
-	return (O != EObjetivo::Livre && (int32)O < FAjustesDrone::NumObjetivos) ? C.Medalhas[(int32)O] : 0;
+	const int32 S = SlotRec(O, Cartao < 0 ? CartaoCtx() : Cartao);
+	return (O != EObjetivo::Livre && S < FAjustesDrone::NumObjetivos) ? C.Medalhas[S] : 0;
 }
 
 int32 APredioGameMode::MedalhasMapa(int32 Cartao, int32& Possiveis) const
@@ -1779,7 +1834,7 @@ int32 APredioGameMode::MedalhasMapa(int32 Cartao, int32& Possiveis) const
 	{
 		if (O == EObjetivo::Livre) continue;
 		Possiveis += 3;
-		Tem += MedalhaDe(O);
+		Tem += MedalhaDe(O, Cartao);
 	}
 	return Tem;
 }
@@ -1807,14 +1862,14 @@ bool APredioGameMode::LinhaEhObjetivo(int32 L, EObjetivo& Out) const
 FString APredioGameMode::NomeLinhaMP(int32 L) const
 {
 	EObjetivo O = EObjetivo::Livre;
-	if (LinhaEhObjetivo(L, O)) return NomeObjetivo(O);
+	if (LinhaEhObjetivo(L, O)) return NomeObjetivo(O, MPCartao);
 	return TEXT("Voltar aos mapas");
 }
 
 FString APredioGameMode::DescricaoLinhaMP(int32 L) const
 {
 	EObjetivo O = EObjetivo::Livre;
-	if (LinhaEhObjetivo(L, O)) return DescricaoObjetivo(O);
+	if (LinhaEhObjetivo(L, O)) return DescricaoObjetivo(O, MPCartao);
 	return TEXT("Escolher outro mapa");
 }
 
@@ -1824,7 +1879,8 @@ FString APredioGameMode::ExtraLinhaMP(int32 L) const
 	if (!LinhaEhObjetivo(L, O)) return FString();
 	if (O == EObjetivo::Livre) return TEXT("sem cronômetro");
 	const FAjustesDrone& C = FAjustesDrone::Get();
-	const float R = (int32)O < FAjustesDrone::NumObjetivos ? C.Recordes[(int32)O] : 0.f;
+	const int32 S = SlotRec(O, MPCartao);
+	const float R = S < FAjustesDrone::NumObjetivos ? C.Recordes[S] : 0.f;
 	return R > 0.f ? FString::Printf(TEXT("recorde %s"), *TextoTempo(R)) : FString(TEXT("sem recorde ainda"));
 }
 
@@ -1975,7 +2031,12 @@ void APredioGameMode::ConfirmarMenuPrincipal()
 		IrParaMapa(TEXT("/Game/Mapas/Campo"), FString::Printf(TEXT("jogo?modo=%d"), (int32)O));
 		return;
 	}
-	if (bEhCampo)
+	if ((ECartaoMapa)MPCartao == ECartaoMapa::Usina)
+	{
+		IrParaMapa(TEXT("/Game/Mapas/Usina"), FString::Printf(TEXT("jogo?modo=%d"), (int32)O));
+		return;
+	}
+	if (bEhCampo || bEhUsina)
 	{
 		IrParaMapa(TEXT("/Game/Mapas/Predio"), FString::Printf(TEXT("jogo?modo=%d"), (int32)O));
 		return;
@@ -2298,7 +2359,8 @@ void APredioGameMode::TickMissoes(float Dt, const FVector& P)
 					ConcluirDesafio(true);
 					return;
 				}
-				D->MostrarMensagem(FString::Printf(TEXT("Entregue! %d de %d — volte ao galpão"), EntregaAtual, PontosEntrega.Num()), 3.f);
+				D->MostrarMensagem(bEhUsina ? FString::Printf(TEXT("Entregue! %d de %d — volte ao pátio de cargas"), EntregaAtual, PontosEntrega.Num())
+					: FString::Printf(TEXT("Entregue! %d de %d — volte ao galpão"), EntregaAtual, PontosEntrega.Num()), 3.f);
 			}
 		}
 	}
@@ -2383,7 +2445,8 @@ void APredioGameMode::TickMissoes(float Dt, const FVector& P)
 				FerraduraPega[i] = true;
 				TocarSom(0);
 				F->SetActorHiddenInGame(true);
-				D->MostrarMensagem(FString::Printf(TEXT("Ferradura! %d de %d"), Progresso(), Ferraduras.Num()), 2.5f);
+				D->MostrarMensagem(bEhUsina ? FString::Printf(TEXT("Engrenagem! %d de %d"), Progresso(), Ferraduras.Num())
+					: FString::Printf(TEXT("Ferradura! %d de %d"), Progresso(), Ferraduras.Num()), 2.5f);
 				if (Progresso() >= Ferraduras.Num())
 				{
 					ConcluirDesafio(true);
